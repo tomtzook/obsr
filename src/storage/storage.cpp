@@ -5,44 +5,53 @@
 
 namespace obsr::storage {
 
-storage::storage()
-    : m_object_handles()
-    , m_entry_handles()
-    , m_root(empty_handle) {
-    m_root = create_new_object(nullptr, "");
+storage_entry::storage_entry(entry handle, const std::string_view& path)
+    : m_handle(handle)
+    , m_path(path)
+    , m_value() {
 }
 
-object storage::get_root() const {
-    return m_root;
+bool storage_entry::is_in(const std::string_view& path) const {
+    return m_path.find(path) >= 0;
 }
 
-object storage::get_or_create_child(object object, const std::string_view& name) {
-    auto data = m_object_handles[object];
+std::string_view storage_entry::get_path() const {
+    return m_path;
+}
 
-    auto it = data->children.find(name);
-    if (it == data->children.end()) {
-        return create_new_object(data, name);
+void storage_entry::get_value(value_t& value) const {
+    value = m_value;
+}
+
+value_t storage_entry::set_value(const value_t& value) {
+    const auto old_type = m_value.type;
+    const auto new_type = value.type;
+    if (old_type != value_type::empty && old_type != new_type) {
+        throw entry_type_mismatch_exception(m_handle, old_type, new_type);
     }
 
-    const auto child_handle = it->second;
-    if (m_object_handles.has(child_handle)) {
-        return child_handle;
-    }
-
-    // todo: better handling
-    throw no_such_handle_exception(child_handle);
+    auto old = m_value;
+    m_value = value;
+    return old;
 }
 
-entry storage::get_or_create_entry(object object, const std::string_view& name) {
-    auto data = m_object_handles[object];
+storage::storage(listener_storage_ref& listener_storage)
+    : m_listener_storage(listener_storage)
+    , m_mutex()
+    , m_entries()
+    , m_paths() {
+}
 
-    auto it = data->entries.find(name);
-    if (it == data->entries.end()) {
-        return create_new_object(data, name);
+entry storage::get_or_create_entry(const std::string_view& path) {
+    std::unique_lock guard(m_mutex);
+
+    auto it = m_paths.find(path);
+    if (it == m_paths.end()) {
+        return create_new_entry(path);
     }
 
     const auto entry_handle = it->second;
-    if (m_entry_handles.has(entry_handle)) {
+    if (m_entries.has(entry_handle)) {
         return entry_handle;
     }
 
@@ -50,67 +59,110 @@ entry storage::get_or_create_entry(object object, const std::string_view& name) 
     throw no_such_handle_exception(entry_handle);
 }
 
-void storage::get_entry_value(entry entry, value& value) {
-    auto data = m_entry_handles[entry];
-    value = data->value;
+void storage::delete_entry(entry entry) {
+    std::unique_lock guard(m_mutex);
+
+    auto data = m_entries.release(entry);
+    auto path = data->get_path();
+    report_path_delete(path);
 }
 
-void storage::set_entry_value(entry entry, const value& value) {
-    auto data = m_entry_handles[entry];
+void storage::delete_entries_in_path(const std::string_view& path) {
+    std::unique_lock guard(m_mutex);
 
-    const auto old_type = data->value.type;
-    const auto new_type = value.type;
-    if (old_type != value_type::empty && old_type != new_type) {
-        throw entry_type_mismatch_exception(entry, old_type, new_type);
+    std::vector<entry> handles;
+    for (auto [handle, data] : m_entries) {
+        if (data.is_in(path)) {
+            handles.push_back(handle);
+        }
     }
 
-    auto old_value = data->value;
-    data->value = value;
+    for (auto handle : handles) {
+        m_entries.release(handle);
+    }
+
+    report_path_delete(path);
+}
+
+uint32_t storage::probe(entry entry) {
+    std::unique_lock guard(m_mutex);
+
+    if (!m_entries.has(entry)) {
+        return entry_not_exists;
+    }
+
+    // TODO: GET ENTRY FLAGS
+    return 0;
+}
+
+void storage::get_entry_value(entry entry, value_t& value) {
+    std::unique_lock guard(m_mutex);
+
+    auto data = m_entries[entry];
+    data->get_value(value);
+}
+
+void storage::set_entry_value(entry entry, const value_t& value) {
+    std::unique_lock guard(m_mutex);
+
+    auto data = m_entries[entry];
+    auto old_value = data->set_value(value);
 
     report_entry_value_change(data, old_value, value);
 }
 
-object storage::create_new_object(object_data* parent, const std::string_view& name) {
-    auto handle = m_object_handles.allocate_new();
+listener storage::listen(entry entry, const listener_callback& callback) {
+    std::unique_lock guard(m_mutex);
 
-    auto data = m_object_handles[handle];
-    data->handle = handle;
-    data->name = name;
-
-    if (parent != nullptr) {
-        parent->children.emplace(name, handle);
-    }
-
-    report_new_object(data);
-
-    return handle;
+    auto data = m_entries[entry];
+    return m_listener_storage->create_listener(callback, data->get_path());
 }
 
-entry storage::create_new_child(object_data* parent, const std::string_view& name) {
-    auto handle = m_entry_handles.allocate_new();
+listener storage::listen(const std::string_view& prefix, const listener_callback& callback) {
+    std::unique_lock guard(m_mutex);
 
-    auto data = m_entry_handles[handle];
-    data->handle = handle;
-    data->name = name;
-    data->value.type = value_type::empty;
+    return m_listener_storage->create_listener(callback, prefix);
+}
 
-    parent->entries.emplace(name, handle);
+void storage::remove_listener(listener listener) {
+    std::unique_lock guard(m_mutex);
+
+    m_listener_storage->destroy_listener(listener);
+}
+
+entry storage::create_new_entry(const std::string_view& path) {
+    auto entry = m_entries.allocate_new_with_handle(path);
+    auto data = m_entries[entry];
+
+    m_paths.emplace(path, entry);
 
     report_new_entry(data);
 
-    return handle;
+    return entry;
 }
 
-void storage::report_new_object(const object_data* object) {
+void storage::report_new_entry(const storage_entry* entry) {
+    event event{};
+    event.type = event_type::created;
+    event.path = entry->get_path();
 
+    m_listener_storage->notify(event);
 }
 
-void storage::report_new_entry(const entry_data* entry) {
+void storage::report_path_delete(const std::string_view& path) {
+    event event{};
+    event.type = event_type::deleted;
+    event.path = path;
 
+    m_listener_storage->notify(event);
 }
 
-void storage::report_entry_value_change(const entry_data* entry, const value& old_value, const value& new_value) {
+void storage::report_entry_value_change(const storage_entry* entry, const value_t& old_value, const value_t& new_value) {
+    event event{};
+    event.type = event_type::value_change;
+    event.path = entry->get_path();
 
+    m_listener_storage->notify(event);
 }
 
 }

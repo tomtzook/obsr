@@ -1,34 +1,61 @@
 #pragma once
 
+#include <map>
+#include <vector>
+#include <string>
+#include <mutex>
+
 #include "obsr_types.h"
 #include "obsr_internal.h"
 #include "util/handles.h"
+#include "listener_storage.h"
 
 namespace obsr::storage {
 
-class storage {
-public:
-    storage();
+struct storage_entry {
+    storage_entry(entry handle, const std::string_view& path);
 
-    object get_root() const;
-    object get_or_create_child(object object, const std::string_view& name);
-    entry get_or_create_entry(object object, const std::string_view& name);
+    bool is_in(const std::string_view& path) const;
 
-    void get_entry_value(entry entry, value& value);
-    void set_entry_value(entry entry, const value& value);
+    std::string_view get_path() const;
+
+    void get_value(value_t& value) const;
+    value_t set_value(const value_t& value);
 
 private:
-    object create_new_object(object_data* parent, const std::string_view& name);
-    entry create_new_child(object_data* parent, const std::string_view& name);
+    entry m_handle;
+    std::string m_path;
+    value_t m_value;
+};
 
-    void report_new_object(const object_data* object);
-    void report_new_entry(const entry_data* entry);
-    void report_entry_value_change(const entry_data* entry, const value& old_value, const value& new_value);
+class storage {
+public:
+    explicit storage(listener_storage_ref& listener_storage);
 
-    handle_table<object_data, 256> m_object_handles;
-    handle_table<entry_data, 256> m_entry_handles;
+    entry get_or_create_entry(const std::string_view& path);
+    void delete_entry(entry entry);
+    void delete_entries_in_path(const std::string_view& path);
 
-    object m_root;
+    uint32_t probe(entry entry);
+    void get_entry_value(entry entry, value_t& value);
+    void set_entry_value(entry entry, const value_t& value);
+
+    listener listen(entry entry, const listener_callback& callback);
+    listener listen(const std::string_view& prefix, const listener_callback& callback);
+    void remove_listener(listener listener);
+
+private:
+    entry create_new_entry(const std::string_view& path);
+
+    void report_new_entry(const storage_entry* entry);
+    void report_path_delete(const std::string_view& path);
+    void report_entry_value_change(const storage_entry* entry, const value_t& old_value, const value_t& new_value);
+
+    listener_storage_ref m_listener_storage;
+
+    std::mutex m_mutex;
+    handle_table<storage_entry, 256> m_entries;
+    std::map<std::string, entry, std::less<>> m_paths;
 };
 
 }

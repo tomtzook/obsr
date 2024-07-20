@@ -50,4 +50,8 @@ private:
     value_type m_new_type;
 };
 
+class cannot_delete_root_exception : public exception {
+
+};
+
 }
