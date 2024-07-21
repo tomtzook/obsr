@@ -14,8 +14,8 @@ add_library(obsr STATIC
         include/obsr.h
         include/obsr_except.h
         include/obsr_types.h
-        src/obsr_internal.h
 
+        src/obsr_internal.h
         src/obsr.cpp
         src/obsr_except.cpp
         src/util/handles.h
@@ -23,7 +23,10 @@ add_library(obsr STATIC
         src/storage/storage.cpp
         src/storage/listener_storage.h
         src/storage/listener_storage.cpp
-        src/util/time.h)
+        src/instance.h
+        src/instance.cpp
+        src/util/time.h
+        src/util/time.cpp)
 target_include_directories(obsr
         PUBLIC ${INCLUDES}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src

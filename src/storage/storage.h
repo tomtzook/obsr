@@ -21,6 +21,7 @@ struct storage_entry {
 
     void get_value(value_t& value) const;
     value_t set_value(const value_t& value);
+    void clear();
 
 private:
     entry m_handle;
@@ -34,11 +35,12 @@ public:
 
     entry get_or_create_entry(const std::string_view& path);
     void delete_entry(entry entry);
-    void delete_entries_in_path(const std::string_view& path);
+    void delete_entries(const std::string_view& path);
 
     uint32_t probe(entry entry);
     void get_entry_value(entry entry, value_t& value);
     void set_entry_value(entry entry, const value_t& value);
+    void clear_entry(entry entry);
 
     listener listen(entry entry, const listener_callback& callback);
     listener listen(const std::string_view& prefix, const listener_callback& callback);
@@ -46,10 +48,6 @@ public:
 
 private:
     entry create_new_entry(const std::string_view& path);
-
-    void report_new_entry(const storage_entry* entry);
-    void report_path_delete(const std::string_view& path);
-    void report_entry_value_change(const storage_entry* entry, const value_t& old_value, const value_t& new_value);
 
     listener_storage_ref m_listener_storage;
 

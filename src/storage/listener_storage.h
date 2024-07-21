@@ -5,6 +5,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <deque>
+#include <atomic>
 
 #include "obsr_types.h"
 #include "obsr_internal.h"
@@ -28,18 +29,22 @@ private:
 class listener_storage {
 public:
     listener_storage();
+    ~listener_storage();
 
     listener create_listener(const listener_callback& callback, const std::string_view& prefix);
     void destroy_listener(listener listener);
-    void destroy_listeners_in_path(const std::string_view& path);
+    void destroy_listeners(const std::string_view& path);
 
-    void notify(const event& event);
+    void notify(event_type type, const std::string_view& path);
+    void notify(event_type type, const std::string_view& path, const value_t& old_value, const value_t& new_value);
 
 private:
+    void notify(const event& event);
     void thread_main();
 
     handle_table<listener_data, 16> m_listeners;
 
+    std::atomic<bool> m_thread_loop_run;
     std::mutex m_mutex;
     std::condition_variable m_has_events;
     std::deque<event> m_pending_events;

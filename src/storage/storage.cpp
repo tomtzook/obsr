@@ -35,6 +35,10 @@ value_t storage_entry::set_value(const value_t& value) {
     return old;
 }
 
+void storage_entry::clear() {
+    m_value = value_t{};
+}
+
 storage::storage(listener_storage_ref& listener_storage)
     : m_listener_storage(listener_storage)
     , m_mutex()
@@ -64,10 +68,13 @@ void storage::delete_entry(entry entry) {
 
     auto data = m_entries.release(entry);
     auto path = data->get_path();
-    report_path_delete(path);
+
+    m_listener_storage->notify(
+            event_type::deleted,
+            path);
 }
 
-void storage::delete_entries_in_path(const std::string_view& path) {
+void storage::delete_entries(const std::string_view& path) {
     std::unique_lock guard(m_mutex);
 
     std::vector<entry> handles;
@@ -81,7 +88,9 @@ void storage::delete_entries_in_path(const std::string_view& path) {
         m_entries.release(handle);
     }
 
-    report_path_delete(path);
+    m_listener_storage->notify(
+            event_type::deleted,
+            path);
 }
 
 uint32_t storage::probe(entry entry) {
@@ -108,7 +117,22 @@ void storage::set_entry_value(entry entry, const value_t& value) {
     auto data = m_entries[entry];
     auto old_value = data->set_value(value);
 
-    report_entry_value_change(data, old_value, value);
+    m_listener_storage->notify(
+            event_type::value_change,
+            data->get_path(),
+            old_value,
+            value);
+}
+
+void storage::clear_entry(entry entry) {
+    std::unique_lock guard(m_mutex);
+
+    auto data = m_entries[entry];
+    data->clear();
+
+    m_listener_storage->notify(
+            event_type::cleared,
+            data->get_path());
 }
 
 listener storage::listen(entry entry, const listener_callback& callback) {
@@ -136,33 +160,11 @@ entry storage::create_new_entry(const std::string_view& path) {
 
     m_paths.emplace(path, entry);
 
-    report_new_entry(data);
+    m_listener_storage->notify(
+            event_type::created,
+            data->get_path());
 
     return entry;
-}
-
-void storage::report_new_entry(const storage_entry* entry) {
-    event event{};
-    event.type = event_type::created;
-    event.path = entry->get_path();
-
-    m_listener_storage->notify(event);
-}
-
-void storage::report_path_delete(const std::string_view& path) {
-    event event{};
-    event.type = event_type::deleted;
-    event.path = path;
-
-    m_listener_storage->notify(event);
-}
-
-void storage::report_entry_value_change(const storage_entry* entry, const value_t& old_value, const value_t& new_value) {
-    event event{};
-    event.type = event_type::value_change;
-    event.path = entry->get_path();
-
-    m_listener_storage->notify(event);
 }
 
 }

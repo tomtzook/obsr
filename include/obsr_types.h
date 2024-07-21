@@ -8,9 +8,6 @@
 
 namespace obsr {
 
-struct _instance;
-
-using instance = _instance*;
 using handle = uint32_t;
 using object = handle;
 using entry = handle;
@@ -53,13 +50,18 @@ struct value_t {
 enum class event_type {
     created,
     deleted,
-    value_change
+    value_change,
+    cleared
 };
 
 struct event {
     std::chrono::milliseconds timestamp;
     event_type type;
     std::string path;
+
+    // available for value change events
+    value_t old_value;
+    value_t value;
 };
 
 using listener_callback = std::function<void(const event&)>;
