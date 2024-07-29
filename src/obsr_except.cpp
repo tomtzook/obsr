@@ -1,20 +1,9 @@
 
-#include <cerrno>
-
 #include "obsr_types.h"
 #include "obsr_except.h"
 
 
 namespace obsr {
-
-os_exception::os_exception()
-    : os_exception(errno) {
-
-}
-os_exception::os_exception(uint64_t code)
-    : m_code(code) {
-
-}
 
 invalid_handle_exception::invalid_handle_exception(handle handle)
     : m_handle(handle) {

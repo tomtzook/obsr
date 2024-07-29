@@ -11,15 +11,6 @@ class exception : public std::exception {
 
 };
 
-class os_exception : public exception {
-public:
-    explicit os_exception();
-    explicit os_exception(uint64_t code);
-
-private:
-    uint64_t m_code;
-};
-
 class invalid_handle_exception : public exception {
 public:
     explicit invalid_handle_exception(handle handle);
@@ -37,6 +28,10 @@ private:
 };
 
 class no_space_exception : public exception {
+
+};
+
+class duplicate_exception : public exception {
 
 };
 

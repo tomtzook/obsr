@@ -26,7 +26,15 @@ add_library(obsr STATIC
         src/instance.h
         src/instance.cpp
         src/util/time.h
-        src/util/time.cpp)
+        src/util/time.cpp
+        src/io/serialize.h
+        src/io/serialize.cpp
+        src/io/deserialize.cpp
+        src/os/socket.h
+        src/os/socket.cpp
+        src/internal_except.h
+        src/os/io.h
+        src/os/io.cpp)
 target_include_directories(obsr
         PUBLIC ${INCLUDES}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -36,3 +44,9 @@ target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt)
 
 add_executable(test test.cpp)
 target_link_libraries(test obsr)
+
+add_executable(test2 test2.cpp)
+target_include_directories(test2
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(test2 obsr)
