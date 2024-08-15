@@ -29,12 +29,19 @@ add_library(obsr STATIC
         src/util/time.cpp
         src/io/serialize.h
         src/io/serialize.cpp
-        src/io/deserialize.cpp
         src/os/socket.h
         src/os/socket.cpp
         src/internal_except.h
         src/os/io.h
-        src/os/io.cpp)
+        src/os/io.cpp
+        src/io/buffer.h
+        src/io/buffer.cpp
+        src/net/client.h
+        src/net/nio.h
+        src/net/nio.cpp
+        src/net/client.cpp
+        src/debug.h
+        src/debug.cpp)
 target_include_directories(obsr
         PUBLIC ${INCLUDES}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src

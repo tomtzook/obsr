@@ -3,7 +3,7 @@
 #include <poll.h>
 
 #include "internal_except.h"
-
+#include "util/time.h"
 #include "io.h"
 
 namespace obsr::os {
@@ -72,7 +72,8 @@ void resource::throw_if_closed() const {
 }
 
 selector::poll_result::poll_result()
-    : m_states() {
+    : m_states()
+    , m_last_update_time(0) {
 }
 
 bool selector::poll_result::has(obsr::handle handle) const {
@@ -99,14 +100,18 @@ uint32_t selector::poll_result::get(obsr::handle handle) const {
         return 0;
     }
 
+    if (state.update_time < m_last_update_time) {
+        return 0;
+    }
+
     return state.flags;
 }
 
 selector::selector()
     : m_handles()
-    , m_resource_count(0)
     , m_native_data(nullptr) {
     m_native_data = new pollfd[max_resources];
+    initialize_native_data();
 }
 
 selector::~selector() {
@@ -114,45 +119,75 @@ selector::~selector() {
 }
 
 handle selector::add(std::shared_ptr<resource> resource, uint32_t flags) {
-    if (m_resource_count >= max_resources) {
+    const auto index = find_empty_resource_index();
+    if (index < 0) {
         throw no_space_exception();
     }
 
     const auto fd = resource->fd();
-
     auto handle = m_handles.allocate_new(resource);
+    auto handle_data = m_handles[handle];
 
     auto fds = reinterpret_cast<pollfd*>(m_native_data);
-    auto& fd_data = fds[m_resource_count];
+    auto& fd_data = fds[index];
     fd_data.fd = fd;
     fd_data.events = events_to_native(flags);
-    m_resource_count++;
+    handle_data->r_index = index;
 
     return handle;
 }
 
-void selector::poll(poll_result& result, std::chrono::milliseconds timeout) {
+std::shared_ptr<resource> selector::remove(obsr::handle handle) {
+    auto handle_data = m_handles.release(handle);
+
     auto fds = reinterpret_cast<pollfd*>(m_native_data);
-    if (::poll(fds, m_resource_count, static_cast<int>(timeout.count())) < 0) {
-        // TODO: THROW
+    auto& fd_data = fds[handle_data->r_index];
+    fd_data.fd = -1;
+    fd_data.events = 0;
+
+    return handle_data->r_resource;
+}
+
+void selector::poll(poll_result& result, std::chrono::milliseconds timeout) {
+    // note: if all fds are empty, then we will simply wait until timeout
+    auto fds = reinterpret_cast<pollfd*>(m_native_data);
+    if (::poll(fds, max_resources, static_cast<int>(timeout.count())) < 0) {
+        throw io_exception(errno);
     }
 
-    for (int i = 0; i < max_resources; i++) {
-        auto& state = result.m_states[i];
-        state.handle = static_cast<handle>(i);
+    const auto now = time_now();
+    result.m_last_update_time = now;
 
-        if (i < m_resource_count) {
-            auto& fd_struct = fds[i];
+    for (auto [handle, data] : m_handles) {
+        auto& fd_struct = fds[data.r_index];
+        auto& state = result.m_states[handle];
 
-            if (fd_struct.revents != 0) {
-                const auto flags = native_to_events(fd_struct.revents);
-                state.flags = flags;
-            } else {
-                state.flags = 0;
-            }
-        } else {
-            state.flags = 0;
+        if (fd_struct.fd >= 0 && fd_struct.revents != 0) {
+            const auto flags = native_to_events(fd_struct.revents);
+            state.flags = flags;
+            state.update_time = now;
+            state.handle = handle;
         }
+    }
+}
+
+ssize_t selector::find_empty_resource_index() {
+    auto fds = reinterpret_cast<pollfd*>(m_native_data);
+    for (int i = 0; i < max_resources; i++) {
+        auto& fd_data = fds[i];
+        if (fd_data.fd < 0) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+void selector::initialize_native_data() {
+    auto fds = reinterpret_cast<pollfd*>(m_native_data);
+    for (int i = 0; i < max_resources; i++) {
+        auto& fd_data = fds[i];
+        fd_data.fd = -1;
     }
 }
 

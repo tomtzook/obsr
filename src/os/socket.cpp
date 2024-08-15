@@ -2,6 +2,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
 
 #include <cstring>
 
@@ -19,7 +20,9 @@ struct {
 };
 
 base_socket::base_socket()
-    : resource(open_socket()) {
+    : resource(open_socket())
+    , m_is_blocking(true) {
+    configure_blocking(true);
 }
 
 base_socket::base_socket(int fd)
@@ -34,6 +37,21 @@ void base_socket::setoption(sockopt_type opt, void* value, size_t size) {
     if (::setsockopt(fd(), sockopt.level, sockopt.opt, value, size)) {
         handle_error();
     }
+}
+
+void base_socket::configure_blocking(bool blocking) {
+    auto fd = this->fd();
+    auto flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) {
+        handle_error();
+    }
+
+    flags = blocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
+    if (fcntl(fd, F_SETFL, flags)) {
+        handle_error();
+    }
+
+    m_is_blocking = blocking;
 }
 
 void base_socket::bind(const std::string& ip, uint16_t port) {
@@ -67,6 +85,10 @@ void base_socket::handle_error() {
 
     if (error_code == ECONNRESET) { // TODO: maybe close not needed
         close();
+    } else if (error_code == EINPROGRESS && !m_is_blocking) {
+        // while in non-blocking mode, socket operations may return inprogress as a result
+        // to operations they have not yet finished. this is fine.
+        return;
     }
 
     throw io_exception(error_code);

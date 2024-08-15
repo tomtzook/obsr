@@ -50,6 +50,8 @@ public:
         }
     }
 
+    void configure_blocking(bool blocking);
+
     void bind(const std::string& ip, uint16_t port);
     void bind(uint16_t port);
 
@@ -58,6 +60,7 @@ protected:
 
 private:
     static int open_socket();
+    bool m_is_blocking;
 };
 
 class server_socket;
@@ -71,15 +74,15 @@ public:
     std::unique_ptr<socket> accept();
 };
 
-class socket : public base_socket {
+class socket : public base_socket, public readable, public writable {
 public:
     socket();
     explicit socket(int fd);
 
     void connect(const std::string& ip, uint16_t port);
 
-    size_t read(uint8_t* buffer, size_t buffer_size);
-    size_t write(const uint8_t* buffer, size_t size);
+    size_t read(uint8_t* buffer, size_t buffer_size) override;
+    size_t write(const uint8_t* buffer, size_t size) override;
 };
 
 }
