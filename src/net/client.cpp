@@ -1,5 +1,6 @@
 
 #include "io/serialize.h"
+#include "os/io.h"
 #include "internal_except.h"
 #include "debug.h"
 
@@ -162,6 +163,8 @@ void client_reader::process() {
         case read_state::end:
             m_read_state = read_state::start;
             break;
+        case read_state::start:
+            m_error_state = error_state::no_error;
         default:
             break;
     }
@@ -205,12 +208,15 @@ bool client_reader::process_once() {
 
             return finished();
         }
+        case read_state::end:
+        case read_state::error:
+            return false;
         default:
             return on_error(error_state::unknown_state);
     }
 }
 
-client_io::client_io(std::shared_ptr<nio_runner> nio_runner, listener* listener)
+client_io::client_io(std::shared_ptr<obsr::io::nio_runner> nio_runner, listener* listener)
     : m_nio_runner(std::move(nio_runner))
     , m_resource_handle(empty_handle)
     , m_socket()
@@ -247,8 +253,8 @@ void client_io::start(std::shared_ptr<obsr::os::socket> socket) {
 
         m_closed = false;
         m_resource_handle = m_nio_runner->add(m_socket,
-                                              obsr::os::selector::poll_in | obsr::os::selector::poll_out,
-                                              [this](uint32_t flags)->void { on_ready_resource(flags); });
+                                              obsr::os::selector::poll_in,
+                                              [this](obsr::os::resource& res, uint32_t flags)->void { on_ready_resource(flags); });
     } catch (...) {
         TRACE_DEBUG(LOG_MODULE, "start failed");
         stop();
@@ -283,6 +289,8 @@ void client_io::connect(connection_info info) {
 
     m_connecting = true;
     m_socket->connect(info.ip, info.port);
+
+    m_nio_runner->add_flags(m_resource_handle, obsr::os::selector::poll_out);
 }
 
 bool client_io::process() {
@@ -294,6 +302,7 @@ bool client_io::process() {
         // todo: handle
         TRACE_DEBUG(LOG_MODULE, "read process error");
     } else if (m_reader.has_full_result()) {
+        TRACE_DEBUG(LOG_MODULE, "new message processed");
         auto& state = m_reader.current_state();
         if (m_listener != nullptr) {
             m_listener->on_new_message(state.header, state.message_buffer, state.header.message_size);
@@ -313,6 +322,7 @@ bool client_io::write(uint8_t type, uint8_t* buffer, size_t size) {
     };
 
     if (!m_write_buffer.write(reinterpret_cast<uint8_t*>(&header), sizeof(header))) {
+        TRACE_DEBUG(LOG_MODULE, "write failed to buffer at start");
         return false;
     }
 
@@ -327,18 +337,20 @@ bool client_io::write(uint8_t type, uint8_t* buffer, size_t size) {
         }
     }
 
+    m_nio_runner->add_flags(m_resource_handle, obsr::os::selector::poll_out);
+
     return true;
 }
 
 void client_io::on_ready_resource(uint32_t flags) {
     std::unique_lock lock(m_mutex);
 
-    if ((flags & obsr::os::selector::poll_out) != 0) {
-        on_write_ready();
-    }
-
     if ((flags & obsr::os::selector::poll_in) != 0) {
         on_read_ready();
+    }
+
+    if ((flags & obsr::os::selector::poll_out) != 0) {
+        on_write_ready();
     }
 }
 
@@ -368,7 +380,12 @@ void client_io::on_write_ready() {
         }
     } else {
         try {
-            m_write_buffer.write_into(m_socket.get());
+            TRACE_DEBUG(LOG_MODULE, "writing to socket");
+            if (!m_write_buffer.write_into(m_socket.get())) {
+                TRACE_DEBUG(LOG_MODULE, "nothing more to write");
+                // nothing more to write
+                m_nio_runner->remove_flags(m_resource_handle, obsr::os::selector::poll_out);
+            }
         } catch (...) {
             TRACE_DEBUG(LOG_MODULE, "write error");
             stop();

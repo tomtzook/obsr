@@ -38,12 +38,12 @@ size_t buffer::write_available() const {
 
 bool buffer::can_read(size_t size) const {
     const auto available = read_available();
-    return available > size;
+    return available >= size;
 }
 
 bool buffer::can_write(size_t size) const {
     const auto available = write_available();
-    return available > size;
+    return available >= size;
 }
 
 void buffer::reset() {
@@ -143,13 +143,17 @@ void buffer::read_from(obsr::os::readable& readable) {
     }
 }
 
-void buffer::write_into(obsr::os::writable& writable) {
+bool buffer::write_into(obsr::os::writable& writable) {
     if (m_write_pos < m_read_pos) {
         auto space = (m_size - m_read_pos);
+        if (space < 1) {
+            return false;
+        }
+
         auto written = writable.write(m_buffer + m_read_pos, space);
         if (written < space) {
             m_read_pos += written;
-            return;
+            return true;
         }
 
         space = m_read_pos;
@@ -157,9 +161,15 @@ void buffer::write_into(obsr::os::writable& writable) {
         m_read_pos = written;
     } else {
         const auto space = (m_write_pos - m_read_pos);
+        if (space < 1) {
+            return false;
+        }
+
         auto written = writable.write(m_buffer + m_read_pos, space);
         m_read_pos += written;
     }
+
+    return true;
 }
 
 }

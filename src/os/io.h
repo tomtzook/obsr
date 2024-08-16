@@ -53,52 +53,33 @@ public:
         poll_error = (0x1 << 3),
         poll_hung = (0x1 << 4)
     };
-
-    struct poll_result {
+    class poll_resource {
     public:
-        poll_result();
+        virtual ~poll_resource() = default;
 
-        bool has(obsr::handle handle) const;
-        bool has(obsr::handle handle, poll_type type) const;
-        bool has(obsr::handle handle, uint32_t flags) const;
+        virtual bool valid() const = 0;
 
-        uint32_t get(obsr::handle handle) const;
+        virtual bool has_result() const = 0;
+        virtual uint32_t result_flags() const = 0;
 
-    private:
-        struct {
-            obsr::handle handle;
-            uint32_t flags;
-            std::chrono::milliseconds update_time;
-        } m_states[max_resources];
-        std::chrono::milliseconds m_last_update_time;
-
-        friend selector;
+        virtual uint32_t flags() const = 0;
+        virtual void flags(uint32_t flags) = 0;
     };
 
     selector();
     ~selector();
 
-    handle add(std::shared_ptr<resource> resource, uint32_t flags);
-    std::shared_ptr<resource> remove(obsr::handle handle);
+    poll_resource* add(std::shared_ptr<resource> resource, uint32_t flags);
+    void remove(poll_resource* resource);
 
-    void poll(poll_result& result, std::chrono::milliseconds timeout);
+    void poll(std::chrono::milliseconds timeout);
 
 private:
-    struct resource_data {
-        explicit resource_data(std::shared_ptr<resource>& resource)
-            : r_resource(resource)
-            , r_index(0)
-        {}
-
-        std::shared_ptr<resource> r_resource;
-        size_t r_index;
-    };
-
     ssize_t find_empty_resource_index();
     void initialize_native_data();
 
-    handle_table<resource_data, max_resources> m_handles;
     void* m_native_data;
+    poll_resource* m_resources[max_resources];
 };
 
 }

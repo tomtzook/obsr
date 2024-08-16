@@ -37,9 +37,9 @@ add_library(obsr STATIC
         src/io/buffer.h
         src/io/buffer.cpp
         src/net/client.h
-        src/net/nio.h
-        src/net/nio.cpp
         src/net/client.cpp
+        src/io/nio.h
+        src/io/nio.cpp
         src/debug.h
         src/debug.cpp)
 target_include_directories(obsr

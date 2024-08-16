@@ -71,103 +71,103 @@ void resource::throw_if_closed() const {
     }
 }
 
-selector::poll_result::poll_result()
-    : m_states()
-    , m_last_update_time(0) {
-}
+class linux_poll_resource : public selector::poll_resource {
+public:
+    linux_poll_resource(size_t index, pollfd& fd_data)
+        : m_index(index)
+        , m_pollfd(fd_data)
+    {}
+    ~linux_poll_resource() override = default;
 
-bool selector::poll_result::has(obsr::handle handle) const {
-    return has(handle, static_cast<uint32_t>(-1));
-}
-
-bool selector::poll_result::has(obsr::handle handle, poll_type type) const {
-    return has(handle, static_cast<uint32_t>(type));
-}
-
-bool selector::poll_result::has(obsr::handle handle, uint32_t flags) const {
-    const auto actual_flags = get(handle);
-    return (actual_flags & flags) != 0;
-}
-
-uint32_t selector::poll_result::get(obsr::handle handle) const {
-    const auto index = static_cast<size_t>(handle);
-    if (index >= max_resources) {
-        return 0;
+    bool valid() const override {
+        return m_pollfd.fd >= 0;
     }
 
-    const auto& state = m_states[index];
-    if (state.handle != handle) {
-        return 0;
+    bool has_result() const override {
+        return valid() && m_pollfd.revents != 0;
     }
 
-    if (state.update_time < m_last_update_time) {
-        return 0;
+    uint32_t result_flags() const override {
+        if (!has_result()) {
+            return 0;
+        }
+
+        return native_to_events(m_pollfd.revents);
     }
 
-    return state.flags;
-}
+    uint32_t flags() const override {
+        if (!valid()) {
+            return 0;
+        }
+
+        return native_to_events(m_pollfd.events);
+    }
+
+    void flags(uint32_t flags) override {
+        if (!valid()) {
+            return;
+        }
+
+        m_pollfd.events = events_to_native(flags);
+    }
+
+private:
+    size_t m_index;
+    pollfd& m_pollfd;
+
+    friend class selector;
+};
 
 selector::selector()
-    : m_handles()
-    , m_native_data(nullptr) {
+    : m_native_data(nullptr)
+    , m_resources() {
     m_native_data = new pollfd[max_resources];
     initialize_native_data();
 }
 
 selector::~selector() {
     delete[] reinterpret_cast<pollfd*>(m_native_data);
+
+    for (int i = 0; i < max_resources; ++i) {
+        delete m_resources[i];
+    }
 }
 
-handle selector::add(std::shared_ptr<resource> resource, uint32_t flags) {
+selector::poll_resource* selector::add(std::shared_ptr<resource> resource, uint32_t flags) {
     const auto index = find_empty_resource_index();
     if (index < 0) {
         throw no_space_exception();
     }
 
     const auto fd = resource->fd();
-    auto handle = m_handles.allocate_new(resource);
-    auto handle_data = m_handles[handle];
 
     auto fds = reinterpret_cast<pollfd*>(m_native_data);
     auto& fd_data = fds[index];
     fd_data.fd = fd;
     fd_data.events = events_to_native(flags);
-    handle_data->r_index = index;
 
-    return handle;
+    return m_resources[index];
 }
 
-std::shared_ptr<resource> selector::remove(obsr::handle handle) {
-    auto handle_data = m_handles.release(handle);
+void selector::remove(poll_resource* resource) {
+    if (resource == nullptr) {
+        return;
+    }
+
+    auto l_resource = reinterpret_cast<linux_poll_resource*>(resource);
+    auto index = l_resource->m_index;
 
     auto fds = reinterpret_cast<pollfd*>(m_native_data);
-    auto& fd_data = fds[handle_data->r_index];
+    auto& fd_data = fds[index];
     fd_data.fd = -1;
     fd_data.events = 0;
-
-    return handle_data->r_resource;
 }
 
-void selector::poll(poll_result& result, std::chrono::milliseconds timeout) {
+void selector::poll(std::chrono::milliseconds timeout) {
     // note: if all fds are empty, then we will simply wait until timeout
     auto fds = reinterpret_cast<pollfd*>(m_native_data);
     if (::poll(fds, max_resources, static_cast<int>(timeout.count())) < 0) {
         throw io_exception(errno);
-    }
-
-    const auto now = time_now();
-    result.m_last_update_time = now;
-
-    for (auto [handle, data] : m_handles) {
-        auto& fd_struct = fds[data.r_index];
-        auto& state = result.m_states[handle];
-
-        if (fd_struct.fd >= 0 && fd_struct.revents != 0) {
-            const auto flags = native_to_events(fd_struct.revents);
-            state.flags = flags;
-            state.update_time = now;
-            state.handle = handle;
-        }
     }
 }
 
@@ -188,6 +188,8 @@ void selector::initialize_native_data() {
     for (int i = 0; i < max_resources; i++) {
         auto& fd_data = fds[i];
         fd_data.fd = -1;
+
+        m_resources[i] = new linux_poll_resource(i, fd_data);
     }
 }
 

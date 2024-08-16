@@ -53,9 +53,9 @@ public:
         read_from(*readable);
     }
 
-    void write_into(obsr::os::writable& writable);
-    inline void write_into(obsr::os::writable* writable) {
-        write_into(*writable);
+    bool write_into(obsr::os::writable& writable);
+    inline bool write_into(obsr::os::writable* writable) {
+        return write_into(*writable);
     }
 
 private:

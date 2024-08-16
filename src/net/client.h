@@ -5,7 +5,7 @@
 
 #include "os/socket.h"
 #include "io/buffer.h"
-#include "net/nio.h"
+#include "io/nio.h"
 
 namespace obsr::net {
 
@@ -134,11 +134,12 @@ private:
 
     inline bool move_to_state(read_state state) {
         m_read_state = state;
+        m_error_state = error_state::no_error;
         return true;
     }
 
     inline bool finished() {
-        return move_to_state(read_state::end);
+        return move_to_state(read_state::end);;
     }
 
     inline bool try_later() {
@@ -167,7 +168,7 @@ public:
         virtual void on_close() = 0;
     };
 
-    client_io(std::shared_ptr<nio_runner> nio_runner, listener* listener);
+    client_io(std::shared_ptr<io::nio_runner> nio_runner, listener* listener);
     ~client_io();
 
     bool is_closed();
@@ -185,7 +186,7 @@ private:
     void on_read_ready();
     void on_write_ready();
 
-    std::shared_ptr<nio_runner> m_nio_runner;
+    std::shared_ptr<obsr::io::nio_runner> m_nio_runner;
     obsr::handle m_resource_handle;
 
     std::shared_ptr<obsr::os::socket> m_socket;
