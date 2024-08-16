@@ -41,7 +41,8 @@ add_library(obsr STATIC
         src/io/nio.h
         src/io/nio.cpp
         src/debug.h
-        src/debug.cpp)
+        src/debug.cpp
+        src/util/state.h)
 target_include_directories(obsr
         PUBLIC ${INCLUDES}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src

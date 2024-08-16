@@ -23,10 +23,16 @@ struct context {
 class client_listener : public obsr::net::client_io::listener {
 public:
     int i;
+    obsr::net::client_io* client = nullptr;
+
     client_listener(int i) : i(i) {}
 
     void on_new_message(const obsr::net::message_header& header, const uint8_t* buffer, size_t size) override {
         TRACE_DEBUG(LOG_MODULE, "[%d] new message received, type=%d, size=%lu", i, header.type, size);
+
+        if (client != nullptr && header.type != 3) {
+            client->write(3, (uint8_t*) "ping", sizeof("ping"));
+        }
     }
     void on_connected() override {
         TRACE_DEBUG(LOG_MODULE, "[%d] on connected", i);
@@ -50,9 +56,10 @@ void server_thread(context* context) {
 
         client_listener listener(1);
         obsr::net::client_io io(context->nio_runner, &listener);
+        listener.client = &io;
         io.start(socket);
 
-        while (io.process()) {
+        while (!io.is_closed()) {
             sleep(1);
         }
 
@@ -70,13 +77,15 @@ void client_thread(context* context) {
         auto socket = context->client_socket;
         client_listener listener(2);
         obsr::net::client_io io(context->nio_runner, &listener);
+        listener.client = &io;
         io.start(socket);
         io.connect({"127.0.0.1", 50001});
 
         TRACE_DEBUG(LOG_MODULE, "[%d] writing to socket", 2);
         io.write(0, (uint8_t*) "hello", sizeof("hello"));
+        io.write(1, (uint8_t*) "try", sizeof("try"));
 
-        while (io.process()) {
+        while (!io.is_closed()) {
             sleep(1);
         }
 

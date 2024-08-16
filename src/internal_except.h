@@ -32,4 +32,8 @@ public:
     {}
 };
 
+class illegal_state_exception : public exception {
+
+};
+
 }
