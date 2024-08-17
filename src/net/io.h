@@ -77,7 +77,7 @@ public:
 
     void connect(connection_info info);
 
-    bool write(uint8_t type, uint8_t* buffer, size_t size);
+    bool write(uint8_t type, const uint8_t* buffer, size_t size);
 
 private:
     enum class state {
@@ -92,6 +92,7 @@ private:
 
         void on_read_ready();
         void on_write_ready();
+        void on_hung_or_error();
 
     private:
         void process_new_data();
@@ -112,13 +113,88 @@ private:
     reader m_reader;
     obsr::io::buffer m_write_buffer;
     state m_state;
-    uint32_t m_message_index;
+    uint32_t m_next_message_index;
 
     listener* m_listener;
 };
 
-// todo: need base client to be shared by
-//  actual clients for client processes
+class server_io {
+public:
+    class listener {
+    public:
+        virtual void on_client_connected(uint32_t id) = 0;
+        virtual void on_client_disconnected(uint32_t id) = 0;
+        virtual void on_new_message(uint32_t id, const message_header& header, const uint8_t* buffer, size_t size) = 0;
+        virtual void on_close() = 0;
+    };
+
+    server_io(std::shared_ptr<obsr::io::nio_runner> nio_runner, listener* listener);
+    ~server_io();
+
+    bool is_stopped();
+
+    void start(int bind_port);
+    void stop();
+
+    void write_to(uint32_t id, uint8_t type, const uint8_t* buffer, size_t size);
+
+private:
+    class update_handler {
+    public:
+        explicit update_handler(server_io& io);
+
+        void on_read_ready();
+        void on_hung_or_error();
+
+    private:
+        server_io& m_io;
+        std::unique_lock<std::mutex> m_lock;
+    };
+    struct client_data : public socket_io::listener { // todo: hide these inner classes??
+    public:
+        client_data(server_io& parent, uint32_t id);
+
+        void attach(std::unique_ptr<os::socket>&& socket);
+        void write(uint8_t type, const uint8_t* buffer, size_t size);
+
+        // events from server
+        void on_new_message(const message_header& header, const uint8_t* buffer, size_t size) override;
+        void on_connected() override;
+        void on_close() override;
+
+    private:
+        server_io& m_parent;
+        uint32_t m_id;
+        socket_io m_io;
+    };
+    enum class state {
+        idle,
+        open
+    };
+
+    void on_ready_resource(uint32_t flags);
+    void stop_internal(std::unique_lock<std::mutex>& lock);
+
+    void on_client_connected(uint32_t id);
+    void on_client_disconnected(uint32_t id);
+    void on_new_client_data(uint32_t id, const message_header& header, const uint8_t* buffer, size_t size);
+
+    std::shared_ptr<obsr::io::nio_runner> m_nio_runner;
+    obsr::handle m_resource_handle;
+
+    std::shared_ptr<obsr::os::server_socket> m_socket;
+    std::mutex m_mutex; // todo: seperate mutex for read/write maybe
+
+    std::unordered_map<uint32_t, std::unique_ptr<client_data>> m_clients;
+    uint32_t m_next_client_id;
+    state m_state;
+
+    listener* m_listener;
+};
+
+
+// todo: need base server to be shared by
+//  actual clients for server processes
 //  server clients in server processes
 // todo: consider how to initialize new entry from name to id
 // todo: how to do handshake where server tells us of existing entries?

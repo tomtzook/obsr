@@ -15,6 +15,19 @@ namespace obsr::net {
 
 #define LOG_MODULE "netclient"
 
+template<typename listener_, typename... args_>
+static void invoke_listener(std::unique_lock<std::mutex>& lock, listener_* listener_ref, void(listener_::*func)(args_...), args_... args) {
+    if (listener_ref != nullptr) {
+        auto listener = listener_ref;
+        lock.unlock();
+        try {
+            (listener->*func)(args...);
+        } catch (...) {}
+        lock.lock();
+    }
+}
+
+
 reader::reader(size_t buffer_size)
     : state_machine()
     , m_read_buffer(buffer_size) {
@@ -71,7 +84,7 @@ socket_io::socket_io(std::shared_ptr<obsr::io::nio_runner> nio_runner, listener*
     , m_socket()
     , m_reader(1024)
     , m_write_buffer(1024)
-    , m_message_index(0)
+    , m_next_message_index(0)
     , m_state(state::idle)
     , m_listener(listener) {
 
@@ -99,17 +112,18 @@ void socket_io::start(std::shared_ptr<obsr::os::socket> socket, bool connected) 
 
     m_reader.reset();
     m_write_buffer.reset();
-    m_message_index = 0;
+    m_next_message_index = 0;
     m_resource_handle = empty_handle;
-    m_state = state::bound;
 
     try {
         m_socket = std::move(socket);
         m_socket->configure_blocking(false);
 
-        uint32_t flags = 0;
+        m_state = state::bound;
+
+        uint32_t flags = obsr::os::selector::poll_hung | obsr::os::selector::poll_error;
         if (connected) {
-            flags = obsr::os::selector::poll_in | obsr::os::selector::poll_out;
+            flags |= obsr::os::selector::poll_in | obsr::os::selector::poll_out;
             m_state = state::connected;
         }
 
@@ -156,10 +170,10 @@ void socket_io::connect(connection_info info) {
     m_nio_runner->add_flags(m_resource_handle, obsr::os::selector::poll_out);
 }
 
-bool socket_io::write(uint8_t type, uint8_t* buffer, size_t size) {
+bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
     std::unique_lock lock(m_mutex);
 
-    auto index = m_message_index++;
+    auto index = m_next_message_index++;
     message_header header {
             message_header::message_magic,
             message_header::current_version,
@@ -191,6 +205,10 @@ bool socket_io::write(uint8_t type, uint8_t* buffer, size_t size) {
 
 void socket_io::on_ready_resource(uint32_t flags) {
     update_handler handler(*this);
+
+    if ((flags & (obsr::os::selector::poll_hung | obsr::os::selector::poll_error)) != 0) {
+        handler.on_hung_or_error();
+    }
 
     if ((flags & obsr::os::selector::poll_in) != 0) {
         handler.on_read_ready();
@@ -225,14 +243,7 @@ void socket_io::stop_internal(std::unique_lock<std::mutex>& lock) {
 
     m_state = state::idle;
 
-    if (m_listener != nullptr) {
-        auto listener = m_listener;
-        lock.unlock();
-        try {
-            listener->on_close();
-        } catch (...) {}
-        lock.lock();
-    }
+    invoke_listener(lock, m_listener, &listener::on_close);
 }
 
 socket_io::update_handler::update_handler(socket_io& io)
@@ -286,14 +297,7 @@ void socket_io::update_handler::on_write_ready() {
         // we can start reading again
         m_io.m_nio_runner->add_flags(m_io.m_resource_handle, obsr::os::selector::poll_in);
 
-        if (m_io.m_listener != nullptr) {
-            auto listener = m_io.m_listener;
-            m_lock.unlock();
-            try {
-                listener->on_connected();
-            } catch (...) {}
-            m_lock.lock();
-        }
+        invoke_listener(m_lock, m_io.m_listener, &listener::on_connected);
     } else if (state == state::connected) {
         try {
             TRACE_DEBUG(LOG_MODULE, "writing to socket");
@@ -312,6 +316,10 @@ void socket_io::update_handler::on_write_ready() {
     }
 }
 
+void socket_io::update_handler::on_hung_or_error() {
+    m_io.stop_internal(m_lock);
+}
+
 void socket_io::update_handler::process_new_data() {
     bool run;
     do {
@@ -325,14 +333,13 @@ void socket_io::update_handler::process_new_data() {
             TRACE_DEBUG(LOG_MODULE, "new message processed");
             auto& state = m_io.m_reader.data();
 
-            if (m_io.m_listener != nullptr) {
-                auto listener = m_io.m_listener;
-                m_lock.unlock();
-                try {
-                    listener->on_new_message(state.header, state.message_buffer, state.header.message_size);
-                } catch (...) {}
-                m_lock.lock();
-            }
+            invoke_listener<socket_io::listener, const message_header&, const uint8_t*, size_t>(
+                    m_lock,
+                    m_io.m_listener,
+                    &listener::on_new_message,
+                    state.header,
+                    state.message_buffer,
+                    state.header.message_size);
 
             m_io.m_reader.reset();
 
@@ -340,6 +347,214 @@ void socket_io::update_handler::process_new_data() {
             run = true;
         }
     } while (run);
+}
+
+server_io::server_io(std::shared_ptr<obsr::io::nio_runner> nio_runner, listener* listener)
+    : m_nio_runner(std::move(nio_runner))
+    , m_resource_handle(empty_handle)
+    , m_socket()
+    , m_mutex()
+    , m_clients()
+    , m_next_client_id(0)
+    , m_state(state::idle)
+    , m_listener(listener) {
+
+}
+server_io::~server_io() {
+    std::unique_lock lock(m_mutex);
+    if (m_state != state::idle) {
+        stop_internal(lock);
+    }
+}
+
+bool server_io::is_stopped() {
+    std::unique_lock lock(m_mutex);
+
+    return m_state == state::idle;
+}
+
+void server_io::start(int bind_port) {
+    std::unique_lock lock(m_mutex);
+
+    if (m_state != state::idle) {
+        throw illegal_state_exception();
+    }
+
+    m_clients.clear();
+    m_next_client_id = 0;
+
+    try {
+        m_socket = std::make_shared<obsr::os::server_socket>();
+        m_socket->setoption<os::sockopt_reuseport>(true);
+        m_socket->configure_blocking(false);
+        m_socket->bind(bind_port);
+        m_socket->listen(2);
+
+        m_state = state::open;
+
+        uint32_t flags = obsr::os::selector::poll_hung | obsr::os::selector::poll_error | obsr::os::selector::poll_in;
+        m_resource_handle = m_nio_runner->add(m_socket,
+                                              flags,
+                                              [this](obsr::os::resource& res, uint32_t flags)->void { on_ready_resource(flags); });
+    } catch (...) {
+        TRACE_DEBUG(LOG_MODULE, "start failed");
+        stop_internal(lock);
+
+        throw;
+    }
+}
+
+void server_io::stop() {
+    std::unique_lock lock(m_mutex);
+
+    if (m_state == state::idle) {
+        throw illegal_state_exception();
+    }
+
+    stop_internal(lock);
+}
+
+void server_io::write_to(uint32_t id, uint8_t type, const uint8_t* buffer, size_t size) {
+    std::unique_lock lock(m_mutex);
+
+    if (m_state != state::open) {
+        throw illegal_state_exception();
+    }
+
+    auto it = m_clients.find(id);
+    if (it == m_clients.end()) {
+        throw illegal_state_exception(); // todo: throw no such server exception
+    }
+
+    it->second->write(type, buffer, size);
+}
+
+void server_io::on_ready_resource(uint32_t flags) {
+    update_handler handler(*this);
+
+    if ((flags & (obsr::os::selector::poll_hung | obsr::os::selector::poll_error)) != 0) {
+        handler.on_hung_or_error();
+    }
+
+    if ((flags & obsr::os::selector::poll_in) != 0) {
+        handler.on_read_ready();
+    }
+}
+
+void server_io::stop_internal(std::unique_lock<std::mutex>& lock) {
+    if (m_state == state::idle) {
+        return;
+    }
+
+    TRACE_DEBUG(LOG_MODULE, "stop called");
+
+    try {
+        if (m_resource_handle != empty_handle) {
+            m_nio_runner->remove(m_resource_handle);
+        }
+    } catch (...) {
+        TRACE_DEBUG(LOG_MODULE, "error while detaching from nio");
+    }
+
+    try {
+        m_socket->close();
+        m_socket.reset();
+    } catch (...) {
+        TRACE_DEBUG(LOG_MODULE, "error while closing socket");
+    }
+
+    m_state = state::idle;
+
+    invoke_listener(lock, m_listener, &listener::on_close);
+}
+
+void server_io::on_client_connected(uint32_t id) {
+    std::unique_lock lock(m_mutex);
+    invoke_listener(lock, m_listener, &server_io::listener::on_client_connected, id);
+}
+
+void server_io::on_client_disconnected(uint32_t id) {
+    std::unique_lock lock(m_mutex);
+    invoke_listener(lock, m_listener, &server_io::listener::on_client_disconnected, id);
+}
+
+void server_io::on_new_client_data(uint32_t id, const message_header& header, const uint8_t* buffer, size_t size) {
+    std::unique_lock lock(m_mutex);
+    invoke_listener<server_io::listener, uint32_t, const message_header&, const uint8_t*, size_t>(
+            lock,
+            m_listener,
+            &server_io::listener::on_new_message,
+            id,
+            header,
+            buffer,
+            size);
+}
+
+server_io::update_handler::update_handler(server_io& io)
+    : m_io(io)
+    , m_lock(io.m_mutex)
+{}
+
+void server_io::update_handler::on_read_ready() {
+    TRACE_DEBUG(LOG_MODULE, "on read ready");
+
+    uint32_t id = -1;
+    try {
+        auto socket = m_io.m_socket->accept();
+
+        id = m_io.m_next_client_id++;
+        TRACE_DEBUG(LOG_MODULE, "handling new server %d", id);
+
+        auto client = std::make_unique<client_data>(m_io, id);
+        auto [it, inserted] = m_io.m_clients.emplace(id, std::move(client));
+        if (!inserted) {
+            TRACE_DEBUG(LOG_MODULE, "failed to store new client");
+            socket->close();
+            return;
+        }
+
+        it->second->attach(std::move(socket));
+
+        TRACE_DEBUG(LOG_MODULE, "new server registered %d", id);
+    } catch (const io_exception&) {
+        TRACE_DEBUG(LOG_MODULE, "error with new server");
+
+        if (id != -1) {
+            m_io.m_clients.erase(id);
+        }
+    }
+}
+
+void server_io::update_handler::on_hung_or_error() {
+    m_io.stop_internal(m_lock);
+}
+
+server_io::client_data::client_data(server_io& parent, uint32_t id)
+    : m_parent(parent)
+    , m_id(id)
+    , m_io(std::move(m_parent.m_nio_runner), this) {
+}
+
+void server_io::client_data::attach(std::unique_ptr<os::socket>&& socket) {
+    std::shared_ptr<obsr::os::socket> socket_shared{std::move(socket)};
+
+    m_io.start(socket_shared, true);
+}
+
+void server_io::client_data::write(uint8_t type, const uint8_t* buffer, size_t size) {
+    m_io.write(type, buffer, size);
+}
+
+void server_io::client_data::on_new_message(const message_header& header, const uint8_t* buffer, size_t size)  {
+    m_parent.on_new_client_data(m_id, header, buffer, size);
+}
+
+void server_io::client_data::on_connected() {
+    m_parent.on_client_connected(m_id);
+}
+
+void server_io::client_data::on_close() {
+    m_parent.on_client_disconnected(m_id);
 }
 
 }
