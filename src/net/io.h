@@ -28,37 +28,37 @@ struct connection_info {
     uint16_t port;
 };
 
-struct client_read_data {
+struct read_data {
     static constexpr size_t message_buffer_size = 1024;
     message_header header;
     uint8_t message_buffer[message_buffer_size];
 };
 
-enum class client_read_state {
+enum class read_state {
     header,
     message
 };
 
-enum client_read_error {
+enum read_error {
     read_unsupported_size = 1,
     read_unknown_state = 2,
     read_failed = 3
 };
 
-class client_reader : public state_machine<client_read_state, client_read_state::header, client_read_data> {
+class reader : public state_machine<read_state, read_state::header, read_data> {
 public:
-    explicit client_reader(size_t buffer_size);
+    explicit reader(size_t buffer_size);
 
     void update(obsr::os::readable* readable);
 
 protected:
-    bool process_state(client_read_state current_state, client_read_data& data) override;
+    bool process_state(read_state current_state, read_data& data) override;
 
 private:
     obsr::io::buffer m_read_buffer;
 };
 
-class client_io {
+class socket_io {
 public:
     class listener {
     public:
@@ -67,12 +67,12 @@ public:
         virtual void on_close() = 0;
     };
 
-    client_io(std::shared_ptr<io::nio_runner> nio_runner, listener* listener);
-    ~client_io();
+    socket_io(std::shared_ptr<io::nio_runner> nio_runner, listener* listener);
+    ~socket_io();
 
-    bool is_closed();
+    bool is_stopped();
 
-    void start(std::shared_ptr<obsr::os::socket> socket);
+    void start(std::shared_ptr<obsr::os::socket> socket, bool connected = false);
     void stop();
 
     void connect(connection_info info);
@@ -80,9 +80,15 @@ public:
     bool write(uint8_t type, uint8_t* buffer, size_t size);
 
 private:
+    enum class state {
+        idle,
+        bound,
+        connecting,
+        connected
+    };
     class update_handler {
     public:
-        explicit update_handler(client_io& io);
+        explicit update_handler(socket_io& io);
 
         void on_read_ready();
         void on_write_ready();
@@ -90,7 +96,7 @@ private:
     private:
         void process_new_data();
 
-        client_io& m_io;
+        socket_io& m_io;
         std::unique_lock<std::mutex> m_lock;
     };
 
@@ -103,15 +109,19 @@ private:
     std::shared_ptr<obsr::os::socket> m_socket;
     std::mutex m_mutex; // todo: seperate mutex for read/write maybe
 
-    client_reader m_reader;
+    reader m_reader;
     obsr::io::buffer m_write_buffer;
-    bool m_connecting;
-    bool m_closed;
+    state m_state;
     uint32_t m_message_index;
 
     listener* m_listener;
-
-    friend class update_handler;
 };
+
+// todo: need base client to be shared by
+//  actual clients for client processes
+//  server clients in server processes
+// todo: consider how to initialize new entry from name to id
+// todo: how to do handshake where server tells us of existing entries?
+// todo: comm-storage data transfer
 
 }

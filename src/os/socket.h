@@ -11,7 +11,8 @@ namespace obsr::os {
 // TODO: BASE FLAGS WANTED FOR SOCKETS?
 
 enum class sockopt_type : size_t {
-    reuse_port
+    reuse_port,
+    keep_alive
 };
 
 template<sockopt_type opt_, typename type_>
@@ -28,6 +29,7 @@ struct _sockopt_hack : public std::false_type {};
     template<> struct _sockopt_hack<sockopt_ ##name> : public std::true_type {};
 
 define_sockopt(reuseport, sockopt_type::reuse_port, bool);
+define_sockopt(keepalive, sockopt_type::keep_alive, bool);
 
 class base_socket : public resource {
 public:
@@ -56,11 +58,34 @@ public:
     void bind(uint16_t port);
 
 protected:
-    void handle_error();
+    using error_code_t = int;
 
+    inline bool is_blocking() const {
+        return m_is_blocking;
+    }
+    inline bool is_disabled() const {
+        return m_disabled;
+    }
+
+    inline void enable() {
+        m_disabled = false;
+    }
+
+    inline void disable() {
+        m_disabled = true;
+    }
+
+    error_code_t get_call_error() const;
+    error_code_t get_internal_error();
+
+    void handle_call_error(error_code_t code=0);
+    void check_internal_error(error_code_t code=0);
+
+    void throw_if_disabled();
 private:
     static int open_socket();
     bool m_is_blocking;
+    bool m_disabled;
 };
 
 class server_socket;
@@ -80,9 +105,13 @@ public:
     explicit socket(int fd);
 
     void connect(const std::string& ip, uint16_t port);
+    void finalize_connect();
 
     size_t read(uint8_t* buffer, size_t buffer_size) override;
     size_t write(const uint8_t* buffer, size_t size) override;
+
+private:
+    bool m_waiting_connection;
 };
 
 }

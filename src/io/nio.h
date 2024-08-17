@@ -10,8 +10,6 @@
 
 namespace obsr::io {
 
-// todo: simplify selected without its complext state
-//      pass to it structs with params from here
 // todo: integrate poll into resources where they can tell us which poll type to use and meaning
 
 class nio_runner {
