@@ -9,7 +9,26 @@
 
 namespace obsr::io {
 
-class buffer {
+class readable_buffer {
+public:
+    virtual bool read(uint8_t* buffer, size_t size) = 0;
+};
+
+class readonly_buffer : public readable_buffer {
+public:
+    readonly_buffer();
+
+    void reset(const uint8_t* buffer, size_t size);
+
+    bool read(uint8_t* buffer, size_t size) override;
+
+private:
+    const uint8_t* m_buffer;
+    size_t m_read_pos;
+    size_t m_size;
+};
+
+class buffer : public readable_buffer {
 public:
     buffer(size_t size);
     ~buffer();
@@ -24,7 +43,7 @@ public:
 
     void seek_read(size_t offset);
 
-    bool read(uint8_t* buffer, size_t size);
+    bool read(uint8_t* buffer, size_t size) override;
     bool write(const uint8_t* buffer, size_t size);
 
     template<typename t_>

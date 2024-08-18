@@ -3,6 +3,7 @@
 #include "os/io.h"
 #include "internal_except.h"
 #include "debug.h"
+#include "util/general.h"
 
 #include "io.h"
 
@@ -14,19 +15,6 @@ namespace obsr::net {
 
 
 #define LOG_MODULE "netclient"
-
-template<typename listener_, typename... args_>
-static void invoke_listener(std::unique_lock<std::mutex>& lock, listener_* listener_ref, void(listener_::*func)(args_...), args_... args) {
-    if (listener_ref != nullptr) {
-        auto listener = listener_ref;
-        lock.unlock();
-        try {
-            (listener->*func)(args...);
-        } catch (...) {}
-        lock.lock();
-    }
-}
-
 
 reader::reader(size_t buffer_size)
     : state_machine()
@@ -243,7 +231,7 @@ void socket_io::stop_internal(std::unique_lock<std::mutex>& lock) {
 
     m_state = state::idle;
 
-    invoke_listener(lock, m_listener, &listener::on_close);
+    invoke_ptr(lock, m_listener, &listener::on_close);
 }
 
 socket_io::update_handler::update_handler(socket_io& io)
@@ -297,7 +285,7 @@ void socket_io::update_handler::on_write_ready() {
         // we can start reading again
         m_io.m_nio_runner->add_flags(m_io.m_resource_handle, obsr::os::selector::poll_in);
 
-        invoke_listener(m_lock, m_io.m_listener, &listener::on_connected);
+        invoke_ptr(m_lock, m_io.m_listener, &listener::on_connected);
     } else if (state == state::connected) {
         try {
             TRACE_DEBUG(LOG_MODULE, "writing to socket");
@@ -333,7 +321,7 @@ void socket_io::update_handler::process_new_data() {
             TRACE_DEBUG(LOG_MODULE, "new message processed");
             auto& state = m_io.m_reader.data();
 
-            invoke_listener<socket_io::listener, const message_header&, const uint8_t*, size_t>(
+            invoke_ptr<socket_io::listener, const message_header&, const uint8_t*, size_t>(
                     m_lock,
                     m_io.m_listener,
                     &listener::on_new_message,
@@ -465,22 +453,22 @@ void server_io::stop_internal(std::unique_lock<std::mutex>& lock) {
 
     m_state = state::idle;
 
-    invoke_listener(lock, m_listener, &listener::on_close);
+    invoke_ptr(lock, m_listener, &listener::on_close);
 }
 
 void server_io::on_client_connected(uint32_t id) {
     std::unique_lock lock(m_mutex);
-    invoke_listener(lock, m_listener, &server_io::listener::on_client_connected, id);
+    invoke_ptr(lock, m_listener, &server_io::listener::on_client_connected, id);
 }
 
 void server_io::on_client_disconnected(uint32_t id) {
     std::unique_lock lock(m_mutex);
-    invoke_listener(lock, m_listener, &server_io::listener::on_client_disconnected, id);
+    invoke_ptr(lock, m_listener, &server_io::listener::on_client_disconnected, id);
 }
 
 void server_io::on_new_client_data(uint32_t id, const message_header& header, const uint8_t* buffer, size_t size) {
     std::unique_lock lock(m_mutex);
-    invoke_listener<server_io::listener, uint32_t, const message_header&, const uint8_t*, size_t>(
+    invoke_ptr<server_io::listener, uint32_t, const message_header&, const uint8_t*, size_t>(
             lock,
             m_listener,
             &server_io::listener::on_new_message,

@@ -6,6 +6,31 @@
 
 namespace obsr::io {
 
+readonly_buffer::readonly_buffer()
+    : m_buffer(nullptr)
+    , m_read_pos(0)
+    , m_size(0)
+{}
+
+void readonly_buffer::reset(const uint8_t* buffer, size_t size) {
+    m_buffer = buffer;
+    m_read_pos = 0;
+    m_size = size;
+}
+
+bool readonly_buffer::read(uint8_t* buffer, size_t size) {
+    const auto space_to_max = (m_size - m_read_pos);
+    if (size > space_to_max) {
+        return false;
+    }
+
+    memcpy(buffer, m_buffer + m_read_pos, size);
+    m_read_pos += size;
+
+    return true;
+}
+
+
 buffer::buffer(size_t size)
     : m_buffer(new uint8_t[size])
     , m_read_pos(0)

@@ -8,14 +8,14 @@
 
 namespace obsr::io {
 
-bool read8(buffer& buf, uint8_t& value);
-bool read16(buffer& buf, uint16_t& value);
-bool read32(buffer& buf, uint32_t& value);
-bool readf32(buffer& buf, float& value);
-bool read64(buffer& buf, uint64_t& value);
-bool readf64(buffer& buf, double& value);
-bool readraw(buffer& buf, uint8_t* ptr, size_t& size);
-bool read(buffer& buf, value_type type, value_t& value);
+bool read8(readable_buffer& buf, uint8_t& value);
+bool read16(readable_buffer& buf, uint16_t& value);
+bool read32(readable_buffer& buf, uint32_t& value);
+bool readf32(readable_buffer& buf, float& value);
+bool read64(readable_buffer& buf, uint64_t& value);
+bool readf64(readable_buffer& buf, double& value);
+bool readraw(readable_buffer& buf, uint8_t* ptr, size_t& size);
+bool read(readable_buffer& buf, value_type type, value_t& value);
 
 bool write8(buffer& buf, uint8_t value);
 bool write16(buffer& buf, uint16_t value);

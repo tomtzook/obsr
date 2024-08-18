@@ -25,7 +25,7 @@ static size_t calc_required_size(const value_t& value) {
 }
 
 template<typename t_>
-bool read(buffer& buf, t_& value_out) {
+bool read(readable_buffer& buf, t_& value_out) {
     t_ value;
     bool res = buf.read(value);
     if (!res) {
@@ -36,31 +36,31 @@ bool read(buffer& buf, t_& value_out) {
     return true;
 }
 
-bool read8(buffer& buf, uint8_t& value_out) {
+bool read8(readable_buffer& buf, uint8_t& value_out) {
     return read(buf, value_out);
 }
 
-bool read16(buffer& buf, uint16_t& value_out) {
+bool read16(readable_buffer& buf, uint16_t& value_out) {
     return read(buf, value_out);
 }
 
-bool read32(buffer& buf, uint32_t& value_out) {
+bool read32(readable_buffer& buf, uint32_t& value_out) {
     return read(buf, value_out);
 }
 
-bool readf32(buffer& buf, float& value_out) {
+bool readf32(readable_buffer& buf, float& value_out) {
     return read(buf, value_out);
 }
 
-bool read64(buffer& buf, uint64_t& value_out) {
+bool read64(readable_buffer& buf, uint64_t& value_out) {
     return read(buf, value_out);
 }
 
-bool readf64(buffer& buf, double& value_out) {
+bool readf64(readable_buffer& buf, double& value_out) {
     return read(buf, value_out);
 }
 
-bool readraw(buffer& buf, uint8_t* ptr, size_t& size) {
+bool readraw(readable_buffer& buf, uint8_t* ptr, size_t& size) {
     if (!buf.can_read(sizeof(uint64_t))) {
         return false;
     }
@@ -84,7 +84,7 @@ bool readraw(buffer& buf, uint8_t* ptr, size_t& size) {
     return true;
 }
 
-bool read(buffer& buf, value_type type, value_t& value) {
+bool read(readable_buffer& buf, value_type type, value_t& value) {
     switch (type) {
         case value_type::raw: {
             // todo: who owns the raw value? do we receive it with a prepared buffer

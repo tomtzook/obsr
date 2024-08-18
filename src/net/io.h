@@ -192,12 +192,4 @@ private:
     listener* m_listener;
 };
 
-
-// todo: need base server to be shared by
-//  actual clients for server processes
-//  server clients in server processes
-// todo: consider how to initialize new entry from name to id
-// todo: how to do handshake where server tells us of existing entries?
-// todo: comm-storage data transfer
-
 }
