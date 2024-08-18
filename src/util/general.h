@@ -7,8 +7,20 @@ namespace obsr {
 
 template<typename obj_, typename... args_>
 static void invoke_ptr(std::unique_lock<std::mutex>& lock, obj_* ref, void(obj_::*func)(args_...), args_... args) {
-    if (ref != nullptr) {
-        auto ptr = ref;
+    auto ptr = ref;
+    if (ptr != nullptr) {
+        lock.unlock();
+        try {
+            (ptr->*func)(args...);
+        } catch (...) {}
+        lock.lock();
+    }
+}
+
+template<typename obj_, typename... args_>
+static void invoke_shared_ptr(std::unique_lock<std::mutex>& lock, const std::shared_ptr<obj_>& ref, void(obj_::*func)(args_...), args_... args) {
+    auto ptr = ref.get();
+    if (ptr != nullptr) {
         lock.unlock();
         try {
             (ptr->*func)(args...);

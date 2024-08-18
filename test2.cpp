@@ -8,7 +8,7 @@
 #include "src/internal_except.h"
 #include "src/io/buffer.h"
 #include "src/io/serialize.h"
-#include "src/net/client.h"
+#include "src/net/io.h"
 #include "src/io/nio.h"
 #include "src/debug.h"
 
@@ -20,18 +20,23 @@ struct context {
 
 #define LOG_MODULE "main"
 
-class client_listener : public obsr::net::client_io::listener {
+class client_listener : public obsr::net::socket_io::listener {
 public:
     int i;
-    obsr::net::client_io* client = nullptr;
+    obsr::net::socket_io* client = nullptr;
+    bool stop = false;
 
     client_listener(int i) : i(i) {}
 
     void on_new_message(const obsr::net::message_header& header, const uint8_t* buffer, size_t size) override {
         TRACE_DEBUG(LOG_MODULE, "[%d] new message received, type=%d, size=%lu", i, header.type, size);
 
-        if (client != nullptr && header.type != 3) {
+        if (client != nullptr && header.type == 1) {
             client->write(3, (uint8_t*) "ping", sizeof("ping"));
+        }
+
+        if (header.type == 3) {
+            stop = true;
         }
     }
     void on_connected() override {
@@ -55,15 +60,15 @@ void server_thread(context* context) {
         TRACE_DEBUG(LOG_MODULE, "[%d] new socket", 1);
 
         client_listener listener(1);
-        obsr::net::client_io io(context->nio_runner, &listener);
+        obsr::net::socket_io io(context->nio_runner, &listener);
         listener.client = &io;
-        io.start(socket);
+        io.start(socket, true);
 
-        while (!io.is_closed()) {
+        while (!io.is_stopped()) {
             sleep(1);
         }
 
-        sleep(5);
+        TRACE_DEBUG(LOG_MODULE, "[%d]: done", 1);
     } catch (obsr::io_exception& e) {
         TRACE_DEBUG(LOG_MODULE, "[%d]: exception: %d, %s", 1, e.get_code(), strerror(e.get_code()));
 
@@ -76,7 +81,7 @@ void client_thread(context* context) {
     try {
         auto socket = context->client_socket;
         client_listener listener(2);
-        obsr::net::client_io io(context->nio_runner, &listener);
+        obsr::net::socket_io io(context->nio_runner, &listener);
         listener.client = &io;
         io.start(socket);
         io.connect({"127.0.0.1", 50001});
@@ -85,10 +90,15 @@ void client_thread(context* context) {
         io.write(0, (uint8_t*) "hello", sizeof("hello"));
         io.write(1, (uint8_t*) "try", sizeof("try"));
 
-        while (!io.is_closed()) {
+        while (!io.is_stopped()) {
             sleep(1);
+
+            if (listener.stop) {
+                break;
+            }
         }
 
+        io.stop();
     } catch (obsr::io_exception& e) {
         TRACE_DEBUG(LOG_MODULE, "[%d]: exception: %d, %s", 2, e.get_code(), strerror(e.get_code()));
     }

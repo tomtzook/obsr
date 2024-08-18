@@ -4,6 +4,7 @@
 
 #include "io/buffer.h"
 #include "util/state.h"
+#include "storage/storage.h"
 
 namespace obsr::net {
 
@@ -27,7 +28,7 @@ enum parse_error {
 };
 
 struct parse_data {
-    entry_id id;
+    storage::entry_id id;
     std::string name;
     value_type type;
     value_t value;

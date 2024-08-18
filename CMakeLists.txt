@@ -36,13 +36,20 @@ add_library(obsr STATIC
         src/os/io.cpp
         src/io/buffer.h
         src/io/buffer.cpp
-        src/net/client.h
-        src/net/client.cpp
+        src/net/io.h
+        src/net/io.cpp
         src/io/nio.h
         src/io/nio.cpp
         src/debug.h
         src/debug.cpp
-        src/util/state.h)
+        src/util/state.h
+        src/net/client.h
+        src/net/client.cpp
+        src/net/interface.h
+        src/net/interface.cpp
+        src/net/serialize.h
+        src/net/serialize.cpp
+        src/util/general.h)
 target_include_directories(obsr
         PUBLIC ${INCLUDES}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -58,3 +65,9 @@ target_include_directories(test2
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 target_link_libraries(test2 obsr)
+
+add_executable(test3 test3.cpp)
+target_include_directories(test3
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(test3 obsr)

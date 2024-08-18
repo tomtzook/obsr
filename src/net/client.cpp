@@ -3,6 +3,7 @@
 
 #include "debug.h"
 #include "internal_except.h"
+#include "util/general.h"
 #include "client.h"
 
 namespace obsr::net {
@@ -18,9 +19,8 @@ client::client(std::shared_ptr<io::nio_runner> nio_runner)
     , m_storage()
 {}
 
-void client::attach_to_storage(storage_link* storage_link) {
-    m_storage.set_storage(storage_link);
-    storage_link->attach_net_link(&m_storage);
+void client::attach_storage(std::shared_ptr<storage::storage> storage) {
+    m_storage = std::move(storage);
 }
 
 void client::start(connection_info info) {
@@ -59,6 +59,7 @@ void client::process() {
         case state::in_handshake:
             break;
         case state::in_use:
+            // todo: iterate over dirty entries and send
             break;
 
         case state::connecting:
@@ -86,13 +87,28 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
     auto parse_data = m_parser.data();
     switch (type) {
         case message_type::entry_create:
-            m_storage.on_entry_created(parse_data.id, parse_data.name, parse_data.value);
+            invoke_shared_ptr<storage::storage, storage::entry_id, const std::string&, const value_t&>(
+                    lock,
+                    m_storage,
+                    &storage::storage::on_entry_created,
+                    parse_data.id,
+                    parse_data.name,
+                    parse_data.value);
             break;
         case message_type::entry_update:
-            m_storage.on_entry_updated(parse_data.id, parse_data.value);
+            invoke_shared_ptr<storage::storage, storage::entry_id, const value_t&>(
+                    lock,
+                    m_storage,
+                    &storage::storage::on_entry_updated,
+                    parse_data.id,
+                    parse_data.value);
             break;
         case message_type::entry_delete:
-            m_storage.on_entry_deleted(parse_data.id);
+            invoke_shared_ptr<storage::storage, storage::entry_id>(
+                    lock,
+                    m_storage,
+                    &storage::storage::on_entry_deleted,
+                    parse_data.id);
             break;
     }
 }

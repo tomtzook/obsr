@@ -1,12 +1,8 @@
 #pragma once
 
-#include <unordered_map>
-#include <vector>
-
+#include "storage/storage.h"
 #include "net/io.h"
-#include "net/interface.h"
 #include "net/serialize.h"
-
 
 namespace obsr::net {
 
@@ -35,7 +31,7 @@ class client : public socket_io::listener {
 public:
     client(std::shared_ptr<io::nio_runner> nio_runner);
 
-    void attach_to_storage(storage_link* storage_link);
+    void attach_storage(std::shared_ptr<storage::storage> storage);
 
     void start(connection_info info);
     void stop();
@@ -64,7 +60,7 @@ private:
     socket_io m_io;
     connection_info m_conn_info;
     message_parser m_parser;
-    net_storage m_storage;
+    std::shared_ptr<storage::storage> m_storage;
 };
 
 }
