@@ -9,9 +9,10 @@
 namespace obsr::net {
 
 enum class message_type {
-    entry_create,
-    entry_update,
-    entry_delete
+    entry_create = 1,
+    entry_update = 2,
+    entry_delete = 3,
+    entry_id_assign = 4
 };
 
 enum class parse_state {
@@ -50,6 +51,23 @@ private:
 
     message_type m_type;
     io::readonly_buffer m_buffer;
+};
+
+class message_writer {
+public:
+    message_writer();
+
+    const uint8_t* data() const;
+    size_t size() const;
+
+    void reset();
+
+    bool entry_id_assign(storage::entry_id id, const std::string& name);
+    bool entry_created(storage::entry_id id, std::string_view name, const value_t& value);
+    bool entry_updated(storage::entry_id id, const value_t& value);
+    bool entry_deleted(storage::entry_id id);
+private:
+    io::linear_buffer m_buffer;
 };
 
 }

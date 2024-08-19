@@ -49,4 +49,8 @@ class cannot_delete_root_exception : public exception {
 
 };
 
+class entry_deleted_exception : public exception {
+
+};
+
 }

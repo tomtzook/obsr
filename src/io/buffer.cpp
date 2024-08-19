@@ -30,6 +30,36 @@ bool readonly_buffer::read(uint8_t* buffer, size_t size) {
     return true;
 }
 
+linear_buffer::linear_buffer()
+    : m_buffer()
+    , m_write_pos(0)
+    , m_size(sizeof(m_buffer))
+{}
+
+const uint8_t* linear_buffer::data() const {
+    return m_buffer;
+}
+
+size_t linear_buffer::size() const {
+    return m_size;
+}
+
+void linear_buffer::reset() {
+    m_write_pos = 0;
+}
+
+bool linear_buffer::write(const uint8_t* buffer, size_t size) {
+    const auto space_to_max = (m_size - m_write_pos);
+    if (size > space_to_max) {
+        return false;
+    }
+
+    memcpy(m_buffer + m_write_pos, buffer, size);
+    m_write_pos += size;
+
+    return true;
+}
+
 
 buffer::buffer(size_t size)
     : m_buffer(new uint8_t[size])

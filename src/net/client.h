@@ -54,12 +54,17 @@ private:
 
     bool open_socket_and_start_connection();
 
+    bool write_entry_created(const storage::storage_entry& entry);
+    bool write_entry_updated(const storage::storage_entry& entry);
+    bool write_entry_deleted(const storage::storage_entry& entry);
+
     state m_state;
     std::mutex m_mutex;
 
     socket_io m_io;
     connection_info m_conn_info;
     message_parser m_parser;
+    message_writer m_writer;
     std::shared_ptr<storage::storage> m_storage;
 };
 

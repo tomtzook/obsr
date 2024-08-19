@@ -30,6 +30,10 @@ void client::start(connection_info info) {
         throw illegal_state_exception();
     }
 
+    if (!m_storage) {
+        throw illegal_state_exception();
+    }
+
     m_conn_info = std::move(info);
     m_state = state::opening;
 }
@@ -45,8 +49,12 @@ void client::stop() {
 void client::process() {
     std::unique_lock lock(m_mutex);
 
+    // todo: add sending keep alive?
+
     switch (m_state) {
         case state::opening: {
+            m_storage->clear_net_ids();
+
             // todo: we may want a delay before trying again
             //  our caller is delayed, but we may want more
             if (open_socket_and_start_connection()) {
@@ -56,12 +64,38 @@ void client::process() {
 
             break;
         }
-        case state::in_handshake:
-            break;
-        case state::in_use:
+        case state::in_use: {
+            m_storage->act_on_dirty_entries([this](const storage::storage_entry& entry)->bool {
+                // todo: may need to use timestamps to properly check if we already sent about this or not
+
+                bool continue_run = false;
+                if (entry.has_flags(storage::flag_internal_deleted)) {
+                    // entry was deleted
+
+                    if (entry.get_net_id() == storage::id_not_assigned) {
+                        continue_run = true;
+                    } else {
+                        continue_run = write_entry_deleted(entry);
+                    }
+                } else {
+                    // entry value was updated
+                    if (entry.get_net_id() == storage::id_not_assigned) {
+                        continue_run = write_entry_created(entry);
+                    } else {
+                        continue_run = write_entry_updated(entry);
+                    }
+                }
+
+                // we want to mark un-dirty and resume if we succeeded
+                return continue_run;
+            });
+
             // todo: iterate over dirty entries and send
             break;
+        }
 
+        case state::in_handshake:
+            // in this phase we do not send anything to the server, just receive data
         case state::connecting:
         case state::idle:
         default:
@@ -110,6 +144,14 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
                     &storage::storage::on_entry_deleted,
                     parse_data.id);
             break;
+        case message_type::entry_id_assign:
+            invoke_shared_ptr<storage::storage, storage::entry_id, const std::string&>(
+                    lock,
+                    m_storage,
+                    &storage::storage::on_entry_id_assigned,
+                    parse_data.id,
+                    parse_data.name);
+            break;
     }
 }
 
@@ -122,7 +164,6 @@ void client::on_connected() {
 void client::on_close() {
     std::unique_lock lock(m_mutex);
 
-    // todo: clean up resources
     m_state = state::opening;
 }
 
@@ -142,6 +183,52 @@ bool client::open_socket_and_start_connection() {
 
         return false;
     }
+}
+
+bool client::write_entry_created(const storage::storage_entry& entry) {
+    m_writer.reset();
+
+    value_t value{};
+    entry.get_value(value);
+    if (!m_writer.entry_created(entry.get_net_id(), entry.get_path(), value)) {
+        return false;
+    }
+
+    if (!m_io.write(static_cast<uint8_t>(message_type::entry_create), m_writer.data(), m_writer.size())) {
+        return false;
+    }
+
+    return true;
+}
+
+bool client::write_entry_updated(const storage::storage_entry& entry) {
+    m_writer.reset();
+
+    value_t value{};
+    entry.get_value(value);
+    if (!m_writer.entry_updated(entry.get_net_id(), value)) {
+        return false;
+    }
+
+    if (!m_io.write(static_cast<uint8_t>(message_type::entry_update), m_writer.data(), m_writer.size())) {
+        return false;
+    }
+
+    return true;
+}
+
+bool client::write_entry_deleted(const storage::storage_entry& entry) {
+    m_writer.reset();
+
+    if (!m_writer.entry_deleted(entry.get_net_id())) {
+        return false;
+    }
+
+    if (!m_io.write(static_cast<uint8_t>(message_type::entry_delete), m_writer.data(), m_writer.size())) {
+        return false;
+    }
+
+    return true;
 }
 
 }

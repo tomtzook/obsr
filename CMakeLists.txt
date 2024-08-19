@@ -45,11 +45,11 @@ add_library(obsr STATIC
         src/util/state.h
         src/net/client.h
         src/net/client.cpp
-        src/net/interface.h
-        src/net/interface.cpp
         src/net/serialize.h
         src/net/serialize.cpp
-        src/util/general.h)
+        src/util/general.h
+        src/net/server.h
+        src/net/server.cpp)
 target_include_directories(obsr
         PUBLIC ${INCLUDES}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src

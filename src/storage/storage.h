@@ -20,7 +20,8 @@ using entry_id = uint16_t;
 constexpr entry_id id_not_assigned = static_cast<entry_id>(-1);
 
 enum entry_internal_flag : uint16_t {
-    flag_internal_dirty = (1 << flag_internal_shift_start)
+    flag_internal_dirty = (1 << flag_internal_shift_start),
+    flag_internal_deleted = (1 << (flag_internal_shift_start + 1))
 };
 
 struct storage_entry {
@@ -34,11 +35,22 @@ struct storage_entry {
     void clear_net_id();
 
     uint16_t get_flags() const;
+    bool has_flags(uint16_t flags) const;
     void add_flags(uint16_t flags);
     void remove_flags(uint16_t flags);
 
+    inline bool is_dirty() const {
+        return has_flags(flag_internal_dirty);
+    }
+    inline void mark_dirty() {
+        add_flags(flag_internal_dirty);
+    }
+    void clear_dirty() {
+        remove_flags(flag_internal_dirty);
+    }
+
     void get_value(value_t& value) const;
-    value_t set_value(const value_t& value, bool clear_dirty = false);
+    value_t set_value(const value_t& value);
     void clear();
 
 private:
@@ -52,26 +64,7 @@ private:
 
 class storage {
 public:
-    struct iterator {
-    public:
-        using iterator_category = std::forward_iterator_tag;
-        using difference_type   = std::ptrdiff_t;
-        using value_type        = storage_entry;
-        using pointer           = value_type*;
-        using reference         = value_type&;
-
-        iterator();
-
-        pointer operator*() const;
-        reference operator->() const;
-
-        iterator& operator++();
-
-        friend bool operator==(const iterator& a, const iterator& b);
-        friend bool operator!= (const iterator& a, const iterator& b);
-
-    private:
-    };
+    using entry_action = std::function<bool(storage_entry&)>;
 
     explicit storage(listener_storage_ref& listener_storage);
 
@@ -84,6 +77,9 @@ public:
     void set_entry_value(entry entry, const value_t& value);
     void clear_entry(entry entry);
 
+    void act_on_dirty_entries(const entry_action& action);
+    void clear_net_ids();
+
     listener listen(entry entry, const listener_callback& callback);
     listener listen(const std::string_view& prefix, const listener_callback& callback);
     void remove_listener(listener listener);
@@ -92,13 +88,20 @@ public:
     void on_entry_created(entry_id id, const std::string& path, const value_t& value);
     void on_entry_updated(entry_id id, const value_t& value);
     void on_entry_deleted(entry_id id);
+    void on_entry_id_assigned(entry_id id, const std::string& path);
 
 private:
     entry create_new_entry(const std::string_view& path);
+    storage_entry* get_entry_internal(entry entry, bool mark_dirty = true);
+
     void set_entry_internal(entry entry,
                             const value_t& value,
+                            bool clear = false,
                             entry_id id = id_not_assigned,
-                            bool clear_dirty = false);
+                            bool mark_dirty = true);
+    void delete_entry_internal(entry entry,
+                               bool mark_dirty = true,
+                               bool notify = true);
 
     listener_storage_ref m_listener_storage;
 

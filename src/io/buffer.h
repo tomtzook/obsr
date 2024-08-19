@@ -14,6 +14,11 @@ public:
     virtual bool read(uint8_t* buffer, size_t size) = 0;
 };
 
+class writable_buffer {
+public:
+    virtual bool write(const uint8_t* buffer, size_t size) = 0;
+};
+
 class readonly_buffer : public readable_buffer {
 public:
     readonly_buffer();
@@ -28,7 +33,23 @@ private:
     size_t m_size;
 };
 
-class buffer : public readable_buffer {
+class linear_buffer : public writable_buffer {
+public:
+    linear_buffer();
+
+    const uint8_t* data() const;
+    size_t size() const;
+
+    void reset();
+    bool write(const uint8_t* buffer, size_t size) override;
+
+private:
+    uint8_t m_buffer[1024]; // todo: find something better for this
+    size_t m_write_pos;
+    size_t m_size;
+};
+
+class buffer : public readable_buffer, public writable_buffer {
 public:
     buffer(size_t size);
     ~buffer();
@@ -44,7 +65,7 @@ public:
     void seek_read(size_t offset);
 
     bool read(uint8_t* buffer, size_t size) override;
-    bool write(const uint8_t* buffer, size_t size);
+    bool write(const uint8_t* buffer, size_t size) override;
 
     template<typename t_>
     bool read(t_& t_out) {

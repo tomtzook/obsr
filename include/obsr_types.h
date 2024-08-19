@@ -22,7 +22,6 @@ enum class entry_flag : uint8_t {
 
 enum class value_type : uint8_t {
     empty,
-    raw,
     boolean,
     integer32,
     integer64,
@@ -34,12 +33,6 @@ struct value_t {
     value_type type;
 
     union {
-        struct {
-            // todo: will require freeing on some occasion. Who owns this?
-            uint8_t* ptr;
-            size_t size;
-        } raw;
-
         bool boolean;
         int32_t integer;
         int64_t integer64;

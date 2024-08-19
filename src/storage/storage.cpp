@@ -37,6 +37,10 @@ uint16_t storage_entry::get_flags() const {
     return m_flags;
 }
 
+bool storage_entry::has_flags(uint16_t flags) const {
+    return (m_flags & flags) == flags;
+}
+
 void storage_entry::add_flags(uint16_t flags) {
     m_flags |= flags;
 }
@@ -49,7 +53,7 @@ void storage_entry::get_value(value_t& value) const {
     value = m_value;
 }
 
-value_t storage_entry::set_value(const value_t& value, bool clear_dirty) {
+value_t storage_entry::set_value(const value_t& value) {
     const auto old_type = m_value.type;
     const auto new_type = value.type;
     if (old_type != value_type::empty && old_type != new_type) {
@@ -58,12 +62,6 @@ value_t storage_entry::set_value(const value_t& value, bool clear_dirty) {
 
     auto old = m_value;
     m_value = value;
-
-    if (clear_dirty) {
-        remove_flags(flag_internal_dirty);
-    } else {
-        add_flags(flag_internal_dirty);
-    }
 
     return old;
 }
@@ -92,6 +90,8 @@ entry storage::get_or_create_entry(const std::string_view& path) {
 
     const auto entry_handle = it->second;
     if (m_entries.has(entry_handle)) {
+        // will initialize entry properly
+        get_entry_internal(entry_handle);
         return entry_handle;
     }
 
@@ -102,12 +102,7 @@ entry storage::get_or_create_entry(const std::string_view& path) {
 void storage::delete_entry(entry entry) {
     std::unique_lock guard(m_mutex);
 
-    auto data = m_entries.release(entry);
-    auto path = data->get_path();
-
-    m_listener_storage->notify(
-            event_type::deleted,
-            path);
+    delete_entry_internal(entry);
 }
 
 void storage::delete_entries(const std::string_view& path) {
@@ -116,12 +111,8 @@ void storage::delete_entries(const std::string_view& path) {
     std::vector<entry> handles;
     for (auto [handle, data] : m_entries) {
         if (data.is_in(path)) {
-            handles.push_back(handle);
+            delete_entry_internal(handle, true, false);
         }
-    }
-
-    for (auto handle : handles) {
-        m_entries.release(handle);
     }
 
     m_listener_storage->notify(
@@ -136,14 +127,18 @@ uint32_t storage::probe(entry entry) {
         return entry_not_exists;
     }
 
-    // TODO: GET ENTRY FLAGS
-    return 0;
+    auto data = m_entries[entry];
+    return data->get_flags() & ~flag_internal_mask;
 }
 
 void storage::get_entry_value(entry entry, value_t& value) {
     std::unique_lock guard(m_mutex);
 
     auto data = m_entries[entry];
+    if (data->has_flags(flag_internal_deleted)) {
+        throw entry_deleted_exception();
+    }
+
     data->get_value(value);
 }
 
@@ -156,12 +151,36 @@ void storage::set_entry_value(entry entry, const value_t& value) {
 void storage::clear_entry(entry entry) {
     std::unique_lock guard(m_mutex);
 
-    auto data = m_entries[entry];
-    data->clear();
+    set_entry_internal(entry, {}, true);
+}
 
-    m_listener_storage->notify(
-            event_type::cleared,
-            data->get_path());
+void storage::act_on_dirty_entries(const entry_action& action) {
+    std::unique_lock guard(m_mutex);
+
+    for (auto [handle, data] : m_entries) {
+        if (!data.is_dirty()) {
+            continue;
+        }
+
+        guard.unlock();
+        const auto resume = action(data);
+        guard.lock();
+
+        if (resume) {
+            data.clear_dirty();
+            continue;
+        } else {
+            break;
+        }
+    }
+}
+
+void storage::clear_net_ids() {
+    std::unique_lock guard(m_mutex);
+
+    for (auto [handle, data] : m_entries) {
+        data.clear_net_id();
+    }
 }
 
 listener storage::listen(entry entry, const listener_callback& callback) {
@@ -197,7 +216,7 @@ void storage::on_entry_created(entry_id id, const std::string& path, const value
     }
 
     m_ids.emplace(id, entry);
-    set_entry_internal(entry, value, id, true);
+    set_entry_internal(entry, value, false, id, false);
 }
 
 void storage::on_entry_updated(entry_id id, const value_t& value) {
@@ -209,7 +228,7 @@ void storage::on_entry_updated(entry_id id, const value_t& value) {
         return;
     }
 
-    set_entry_internal(it->second, value, id, true);
+    set_entry_internal(it->second, value, false, id, false);
 }
 
 void storage::on_entry_deleted(entry_id id) {
@@ -221,12 +240,29 @@ void storage::on_entry_deleted(entry_id id) {
         return;
     }
 
-    // todo: how to handle delete?
+    delete_entry_internal(it->second, false);
+}
+
+void storage::on_entry_id_assigned(entry_id id, const std::string& path) {
+    std::unique_lock guard(m_mutex);
+
+    entry entry;
+    auto it = m_paths.find(path);
+    if (it != m_paths.end()) {
+        // entry exists
+        entry = it->second;
+    } else {
+        // entry does not exist
+        entry = create_new_entry(path);
+    }
+
+    m_ids.emplace(id, entry);
 }
 
 entry storage::create_new_entry(const std::string_view& path) {
     auto entry = m_entries.allocate_new_with_handle(path);
     auto data = m_entries[entry];
+    data->mark_dirty();
 
     m_paths.emplace(path, entry);
 
@@ -237,24 +273,74 @@ entry storage::create_new_entry(const std::string_view& path) {
     return entry;
 }
 
+storage_entry* storage::get_entry_internal(entry entry, bool mark_dirty) {
+    auto data = m_entries[entry];
+    if (data->has_flags(flag_internal_deleted)) {
+        data->remove_flags(flag_internal_deleted);
+
+        if (mark_dirty) {
+            data->mark_dirty();
+        }
+    }
+
+    return data;
+}
+
 void storage::set_entry_internal(entry entry,
                                  const value_t& value,
+                                 bool clear,
                                  entry_id id,
-                                 bool clear_dirty) {
+                                 bool mark_dirty) {
     // todo: don't set always, base it on timestamp of receive value vs now value
 
-    auto data = m_entries[entry];
-    auto old_value = data->set_value(value, clear_dirty);
+    auto data = get_entry_internal(entry, mark_dirty);
+
+    if (mark_dirty) {
+        data->mark_dirty();
+    } else {
+        data->clear_dirty();
+    }
 
     if (id != id_not_assigned) {
         data->set_net_id(id);
     }
 
-    m_listener_storage->notify(
-            event_type::value_change,
-            data->get_path(),
-            old_value,
-            value);
+    if (clear) {
+        data->clear();
+        m_listener_storage->notify(
+                event_type::cleared,
+                data->get_path());
+    } else {
+        auto old_value = data->set_value(value);
+        m_listener_storage->notify(
+                event_type::value_change,
+                data->get_path(),
+                old_value,
+                value);
+    }
+}
+
+void storage::delete_entry_internal(entry entry, bool mark_dirty, bool notify) {
+    // todo: don't set always, base it on timestamp of receive value vs now value
+
+    auto data = get_entry_internal(entry, mark_dirty);
+
+    data->clear();
+    data->add_flags(flag_internal_deleted);
+
+    if (mark_dirty) {
+        data->mark_dirty();
+    } else {
+        // deletion overrides anything else, so if server deleted this,
+        // clear dirty flag
+        data->clear_dirty();
+    }
+
+    if (notify) {
+        m_listener_storage->notify(
+                event_type::deleted,
+                data->get_path());
+    }
 }
 
 }

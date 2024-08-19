@@ -17,14 +17,13 @@ bool readf64(readable_buffer& buf, double& value);
 bool readraw(readable_buffer& buf, uint8_t* ptr, size_t& size);
 bool read(readable_buffer& buf, value_type type, value_t& value);
 
-bool write8(buffer& buf, uint8_t value);
-bool write16(buffer& buf, uint16_t value);
-bool write32(buffer& buf, uint32_t value);
-bool writef32(buffer& buf, float value);
-bool write64(buffer& buf, uint64_t value);
-bool writef64(buffer& buf, double value);
-bool writestr(buffer& buf, const std::string_view& str);
-bool writeraw(buffer& buf, const uint8_t* ptr, size_t size);
-bool write(buffer& buf, const value_t& value);
+bool write8(writable_buffer& buf, uint8_t value);
+bool write16(writable_buffer& buf, uint16_t value);
+bool write32(writable_buffer& buf, uint32_t value);
+bool writef32(writable_buffer& buf, float value);
+bool write64(writable_buffer& buf, uint64_t value);
+bool writef64(writable_buffer& buf, double value);
+bool writeraw(writable_buffer& buf, const uint8_t* ptr, size_t size);
+bool write(writable_buffer& buf, value_type type, const value_t& value);
 
 }

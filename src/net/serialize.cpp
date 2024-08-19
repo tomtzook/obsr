@@ -66,6 +66,8 @@ bool message_parser::select_next_state(parse_state current_state) {
                     return move_to_state(parse_state::read_type);
                 case message_type::entry_delete:
                     return finished();
+                case message_type::entry_id_assign:
+                    return move_to_state(parse_state::read_name);
                 default:
                     return error(error_unknown_type);
             }
@@ -74,6 +76,8 @@ bool message_parser::select_next_state(parse_state current_state) {
             switch (m_type) {
                 case message_type::entry_create:
                     return move_to_state(parse_state::read_type);
+                case message_type::entry_id_assign:
+                    return finished();
                 default:
                     return error(error_unknown_type);
             }
@@ -97,6 +101,78 @@ bool message_parser::select_next_state(parse_state current_state) {
             }
         }
     }
+}
+
+message_writer::message_writer()
+    : m_buffer()
+{}
+
+const uint8_t* message_writer::data() const {
+    return m_buffer.data();
+}
+
+size_t message_writer::size() const {
+    return m_buffer.size();
+}
+
+void message_writer::reset() {
+    m_buffer.reset();
+}
+
+bool message_writer::entry_id_assign(storage::entry_id id, const std::string& name) {
+    if (!io::write16(m_buffer, id)) {
+        return false;
+    }
+
+    if (!io::writeraw(m_buffer, reinterpret_cast<const uint8_t*>(name.data()), name.size())) {
+        return false;
+    }
+
+    return true;
+}
+
+bool message_writer::entry_created(storage::entry_id id, std::string_view name, const value_t& value) {
+    if (!io::write16(m_buffer, id)) {
+        return false;
+    }
+
+    if (!io::writeraw(m_buffer, reinterpret_cast<const uint8_t*>(name.data()), name.size())) {
+        return false;
+    }
+
+    if (!io::write8(m_buffer, static_cast<uint8_t>(value.type))) {
+        return false;
+    }
+
+    if (!io::write(m_buffer, value.type, value)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool message_writer::entry_updated(storage::entry_id id, const value_t& value) {
+    if (!io::write16(m_buffer, id)) {
+        return false;
+    }
+
+    if (!io::write8(m_buffer, static_cast<uint8_t>(value.type))) {
+        return false;
+    }
+
+    if (!io::write(m_buffer, value.type, value)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool message_writer::entry_deleted(storage::entry_id id) {
+    if (!io::write16(m_buffer, id)) {
+        return false;
+    }
+
+    return true;
 }
 
 }
