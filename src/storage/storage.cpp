@@ -1,5 +1,7 @@
 
 #include "obsr_except.h"
+#include "util/time.h"
+
 #include "storage.h"
 
 
@@ -154,11 +156,11 @@ void storage::clear_entry(entry entry) {
     set_entry_internal(entry, {}, true);
 }
 
-void storage::act_on_dirty_entries(const entry_action& action) {
+void storage::act_on_entries(const entry_action& action, uint16_t required_flags) {
     std::unique_lock guard(m_mutex);
 
     for (auto [handle, data] : m_entries) {
-        if (!data.is_dirty()) {
+        if (required_flags != 0 && !data.has_flags(required_flags)) {
             continue;
         }
 
@@ -202,7 +204,9 @@ void storage::remove_listener(listener listener) {
     m_listener_storage->destroy_listener(listener);
 }
 
-void storage::on_entry_created(entry_id id, const std::string& path, const value_t& value) {
+void storage::on_entry_created(entry_id id,
+                               std::string_view path,
+                               const value_t& value) {
     std::unique_lock guard(m_mutex);
 
     entry entry;
@@ -216,10 +220,12 @@ void storage::on_entry_created(entry_id id, const std::string& path, const value
     }
 
     m_ids.emplace(id, entry);
+
     set_entry_internal(entry, value, false, id, false);
 }
 
-void storage::on_entry_updated(entry_id id, const value_t& value) {
+void storage::on_entry_updated(entry_id id,
+                               const value_t& value) {
     std::unique_lock guard(m_mutex);
 
     auto it = m_ids.find(id);
@@ -240,10 +246,11 @@ void storage::on_entry_deleted(entry_id id) {
         return;
     }
 
-    delete_entry_internal(it->second, false);
+    delete_entry_internal(it->second, false, true);
 }
 
-void storage::on_entry_id_assigned(entry_id id, const std::string& path) {
+void storage::on_entry_id_assigned(entry_id id,
+                                   std::string_view path) {
     std::unique_lock guard(m_mutex);
 
     entry entry;
@@ -255,6 +262,9 @@ void storage::on_entry_id_assigned(entry_id id, const std::string& path) {
         // entry does not exist
         entry = create_new_entry(path);
     }
+
+    auto data = m_entries[entry];
+    data->mark_dirty();
 
     m_ids.emplace(id, entry);
 }
@@ -320,7 +330,9 @@ void storage::set_entry_internal(entry entry,
     }
 }
 
-void storage::delete_entry_internal(entry entry, bool mark_dirty, bool notify) {
+void storage::delete_entry_internal(entry entry,
+                                    bool mark_dirty,
+                                    bool notify) {
     // todo: don't set always, base it on timestamp of receive value vs now value
 
     auto data = get_entry_internal(entry, mark_dirty);

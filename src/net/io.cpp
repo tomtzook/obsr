@@ -402,7 +402,7 @@ void server_io::stop() {
     stop_internal(lock);
 }
 
-void server_io::write_to(uint32_t id, uint8_t type, const uint8_t* buffer, size_t size) {
+bool server_io::write_to(client_id id, uint8_t type, const uint8_t* buffer, size_t size) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::open) {
@@ -414,7 +414,7 @@ void server_io::write_to(uint32_t id, uint8_t type, const uint8_t* buffer, size_
         throw illegal_state_exception(); // todo: throw no such server exception
     }
 
-    it->second->write(type, buffer, size);
+    return it->second->write(type, buffer, size);
 }
 
 void server_io::on_ready_resource(uint32_t flags) {
@@ -456,19 +456,19 @@ void server_io::stop_internal(std::unique_lock<std::mutex>& lock) {
     invoke_ptr(lock, m_listener, &listener::on_close);
 }
 
-void server_io::on_client_connected(uint32_t id) {
+void server_io::on_client_connected(client_id id) {
     std::unique_lock lock(m_mutex);
     invoke_ptr(lock, m_listener, &server_io::listener::on_client_connected, id);
 }
 
-void server_io::on_client_disconnected(uint32_t id) {
+void server_io::on_client_disconnected(client_id id) {
     std::unique_lock lock(m_mutex);
     invoke_ptr(lock, m_listener, &server_io::listener::on_client_disconnected, id);
 }
 
-void server_io::on_new_client_data(uint32_t id, const message_header& header, const uint8_t* buffer, size_t size) {
+void server_io::on_new_client_data(client_id id, const message_header& header, const uint8_t* buffer, size_t size) {
     std::unique_lock lock(m_mutex);
-    invoke_ptr<server_io::listener, uint32_t, const message_header&, const uint8_t*, size_t>(
+    invoke_ptr<server_io::listener, client_id, const message_header&, const uint8_t*, size_t>(
             lock,
             m_listener,
             &server_io::listener::on_new_message,

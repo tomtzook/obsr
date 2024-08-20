@@ -119,7 +119,7 @@ void message_writer::reset() {
     m_buffer.reset();
 }
 
-bool message_writer::entry_id_assign(storage::entry_id id, const std::string& name) {
+bool message_writer::entry_id_assign(storage::entry_id id, std::string_view name) {
     if (!io::write16(m_buffer, id)) {
         return false;
     }

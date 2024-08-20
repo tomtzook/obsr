@@ -9,6 +9,7 @@
 namespace obsr::net {
 
 enum class message_type {
+    no_type,
     entry_create = 1,
     entry_update = 2,
     entry_delete = 3,
@@ -62,7 +63,7 @@ public:
 
     void reset();
 
-    bool entry_id_assign(storage::entry_id id, const std::string& name);
+    bool entry_id_assign(storage::entry_id id, std::string_view name);
     bool entry_created(storage::entry_id id, std::string_view name, const value_t& value);
     bool entry_updated(storage::entry_id id, const value_t& value);
     bool entry_deleted(storage::entry_id id);

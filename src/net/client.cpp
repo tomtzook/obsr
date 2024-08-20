@@ -16,6 +16,7 @@ client::client(std::shared_ptr<io::nio_runner> nio_runner)
     , m_io(std::move(nio_runner), this)
     , m_conn_info()
     , m_parser()
+    , m_writer()
     , m_storage()
 {}
 
@@ -65,7 +66,7 @@ void client::process() {
             break;
         }
         case state::in_use: {
-            m_storage->act_on_dirty_entries([this](const storage::storage_entry& entry)->bool {
+            m_storage->act_on_entries([this](const storage::storage_entry& entry) -> bool {
                 // todo: may need to use timestamps to properly check if we already sent about this or not
 
                 bool continue_run = false;
@@ -88,7 +89,7 @@ void client::process() {
 
                 // we want to mark un-dirty and resume if we succeeded
                 return continue_run;
-            });
+            }, storage::flag_internal_dirty);
 
             // todo: iterate over dirty entries and send
             break;
@@ -121,36 +122,42 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
     auto parse_data = m_parser.data();
     switch (type) {
         case message_type::entry_create:
-            invoke_shared_ptr<storage::storage, storage::entry_id, const std::string&, const value_t&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value_t&, storage::change_source_id>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_created,
                     parse_data.id,
                     parse_data.name,
-                    parse_data.value);
+                    parse_data.value,
+                    storage::source_local_change);
             break;
         case message_type::entry_update:
-            invoke_shared_ptr<storage::storage, storage::entry_id, const value_t&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, const value_t&, storage::change_source_id>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_updated,
                     parse_data.id,
-                    parse_data.value);
+                    parse_data.value,
+                    storage::source_local_change);
             break;
         case message_type::entry_delete:
-            invoke_shared_ptr<storage::storage, storage::entry_id>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, storage::change_source_id>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_deleted,
-                    parse_data.id);
+                    parse_data.id,
+                    storage::source_local_change);
             break;
         case message_type::entry_id_assign:
-            invoke_shared_ptr<storage::storage, storage::entry_id, const std::string&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_id_assigned,
                     parse_data.id,
                     parse_data.name);
+            break;
+        case message_type::no_type:
+        default:
             break;
     }
 }

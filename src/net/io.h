@@ -120,11 +120,14 @@ private:
 
 class server_io {
 public:
+    using client_id = uint16_t;
+    static constexpr client_id invalid_client_id = static_cast<client_id>(-1);
+
     class listener {
     public:
-        virtual void on_client_connected(uint32_t id) = 0;
-        virtual void on_client_disconnected(uint32_t id) = 0;
-        virtual void on_new_message(uint32_t id, const message_header& header, const uint8_t* buffer, size_t size) = 0;
+        virtual void on_client_connected(client_id id) = 0;
+        virtual void on_client_disconnected(client_id id) = 0;
+        virtual void on_new_message(client_id id, const message_header& header, const uint8_t* buffer, size_t size) = 0;
         virtual void on_close() = 0;
     };
 
@@ -136,7 +139,7 @@ public:
     void start(int bind_port);
     void stop();
 
-    void write_to(uint32_t id, uint8_t type, const uint8_t* buffer, size_t size);
+    bool write_to(client_id id, uint8_t type, const uint8_t* buffer, size_t size);
 
 private:
     class update_handler {
@@ -152,7 +155,7 @@ private:
     };
     struct client_data : public socket_io::listener { // todo: hide these inner classes??
     public:
-        client_data(server_io& parent, uint32_t id);
+        client_data(server_io& parent, client_id id);
 
         void attach(std::unique_ptr<os::socket>&& socket);
         void write(uint8_t type, const uint8_t* buffer, size_t size);
@@ -164,7 +167,7 @@ private:
 
     private:
         server_io& m_parent;
-        uint32_t m_id;
+        client_id m_id;
         socket_io m_io;
     };
     enum class state {
@@ -175,9 +178,9 @@ private:
     void on_ready_resource(uint32_t flags);
     void stop_internal(std::unique_lock<std::mutex>& lock);
 
-    void on_client_connected(uint32_t id);
-    void on_client_disconnected(uint32_t id);
-    void on_new_client_data(uint32_t id, const message_header& header, const uint8_t* buffer, size_t size);
+    void on_client_connected(client_id id);
+    void on_client_disconnected(client_id id);
+    void on_new_client_data(client_id id, const message_header& header, const uint8_t* buffer, size_t size);
 
     std::shared_ptr<obsr::io::nio_runner> m_nio_runner;
     obsr::handle m_resource_handle;

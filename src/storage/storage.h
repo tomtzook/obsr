@@ -77,7 +77,7 @@ public:
     void set_entry_value(entry entry, const value_t& value);
     void clear_entry(entry entry);
 
-    void act_on_dirty_entries(const entry_action& action);
+    void act_on_entries(const entry_action& action, uint16_t required_flags = 0);
     void clear_net_ids();
 
     listener listen(entry entry, const listener_callback& callback);
@@ -85,10 +85,14 @@ public:
     void remove_listener(listener listener);
 
     // should be used from network code
-    void on_entry_created(entry_id id, const std::string& path, const value_t& value);
-    void on_entry_updated(entry_id id, const value_t& value);
+    void on_entry_created(entry_id id,
+                          std::string_view path,
+                          const value_t& value);
+    void on_entry_updated(entry_id id,
+                          const value_t& value);
     void on_entry_deleted(entry_id id);
-    void on_entry_id_assigned(entry_id id, const std::string& path);
+    void on_entry_id_assigned(entry_id id,
+                              std::string_view path);
 
 private:
     entry create_new_entry(const std::string_view& path);
