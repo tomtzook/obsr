@@ -21,6 +21,7 @@ struct object_data {
 struct instance {
 public:
     instance();
+    ~instance();
 
     object get_root();
 
@@ -44,6 +45,9 @@ public:
     void stop_network();
 
 private:
+    void configure_net(std::shared_ptr<net::network_interface> network_interface);
+    void unconfigure_net(std::shared_ptr<net::network_interface> network_interface);
+
     std::mutex m_mutex;
     updater m_updater;
     std::shared_ptr<io::nio_runner> m_nio_runner;
@@ -51,6 +55,7 @@ private:
     std::shared_ptr<storage::storage> m_storage;
 
     std::shared_ptr<net::network_interface> m_net_interface;
+    obsr::handle m_net_update_handle;
 
     handle_table<object_data, 256> m_objects;
     std::map<std::string, object, std::less<>> m_object_paths;

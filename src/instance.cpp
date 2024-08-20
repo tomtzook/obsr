@@ -3,6 +3,8 @@
 
 namespace obsr {
 
+static constexpr auto net_update_period = std::chrono::milliseconds(100);
+
 object_data::object_data(const std::string_view& path)
     : path(path) {
 }
@@ -13,9 +15,15 @@ instance::instance()
     , m_nio_runner(std::make_shared<io::nio_runner>())
     , m_listener_storage(std::make_shared<storage::listener_storage>())
     , m_storage(std::make_shared<storage::storage>(m_listener_storage))
+    , m_net_interface()
+    , m_net_update_handle(empty_handle)
     , m_objects()
     , m_object_paths()
     , m_root(m_objects.allocate_new("")) {
+}
+
+instance::~instance() {
+    stop_network();
 }
 
 object instance::get_root() {
@@ -114,16 +122,26 @@ void instance::delete_listener(listener listener) {
 
 void instance::start_server(uint16_t bind_port) {
     auto server = std::make_shared<net::server>(m_nio_runner);
-    server->attach_storage(m_storage);
-    server->start(bind_port);
+    try {
+        configure_net(server);
+        server->start(bind_port);
+    } catch (...) {
+        unconfigure_net(server);
+        throw;
+    }
 
     m_net_interface = server;
 }
 
 void instance::start_client(std::string_view address, uint16_t server_port) {
     auto client = std::make_shared<net::client>(m_nio_runner);
-    client->attach_storage(m_storage);
-    client->start({address, server_port});
+    try {
+        configure_net(client);
+        client->start({address, server_port});
+    } catch (...) {
+        unconfigure_net(client);
+        throw;
+    }
 
     m_net_interface = client;
 }
@@ -131,7 +149,20 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
 void instance::stop_network() {
     if (m_net_interface) {
         m_net_interface->stop();
+        unconfigure_net(m_net_interface);
         m_net_interface.reset();
+    }
+}
+
+void instance::configure_net(std::shared_ptr<net::network_interface> network_interface) {
+    m_updater.attach(network_interface, net_update_period);
+    network_interface->attach_storage(m_storage);
+}
+
+void instance::unconfigure_net(std::shared_ptr<net::network_interface> network_interface) {
+    if (m_net_update_handle != empty_handle) {
+        m_updater.remove(m_net_update_handle);
+        m_net_update_handle = empty_handle;
     }
 }
 
