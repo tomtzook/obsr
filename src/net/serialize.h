@@ -13,10 +13,12 @@ enum class message_type {
     entry_create = 1,
     entry_update = 2,
     entry_delete = 3,
-    entry_id_assign = 4
+    entry_id_assign = 4,
+    handshake_finished = 5
 };
 
 enum class parse_state {
+    check_type,
     read_id,
     read_name,
     read_type,
@@ -38,7 +40,7 @@ struct parse_data {
     uint8_t name_buffer[1024];
 };
 
-class message_parser : public state_machine<parse_state, parse_state::read_id, parse_data> {
+class message_parser : public state_machine<parse_state, parse_state::check_type, parse_data> {
 public:
     message_parser();
 

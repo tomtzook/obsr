@@ -14,10 +14,14 @@ message_parser::message_parser()
 void message_parser::set_data(message_type type, const uint8_t* buffer, size_t size) {
     m_type = type;
     m_buffer.reset(buffer, size);
+    reset();
 }
 
 bool message_parser::process_state(parse_state current_state, parse_data& data) {
     switch (current_state) {
+        case parse_state::check_type: {
+            return select_next_state(current_state);
+        }
         case parse_state::read_id: {
             if (!io::read16(m_buffer, data.id)) {
                 return error(error_read_data);
@@ -58,6 +62,19 @@ bool message_parser::process_state(parse_state current_state, parse_data& data) 
 
 bool message_parser::select_next_state(parse_state current_state) {
     switch (current_state) {
+        case parse_state::check_type: {
+            switch (m_type) {
+                case message_type::entry_create:
+                case message_type::entry_update:
+                case message_type::entry_delete:
+                case message_type::entry_id_assign:
+                    return move_to_state(parse_state::read_id);
+                case message_type::handshake_finished:
+                    return finished();
+                default:
+                    return error(error_unknown_type);
+            }
+        }
         case parse_state::read_id: {
             switch (m_type) {
                 case message_type::entry_create:
@@ -100,6 +117,8 @@ bool message_parser::select_next_state(parse_state current_state) {
                     return error(error_unknown_type);
             }
         }
+        default:
+            return error(error_unknown_state);
     }
 }
 
@@ -112,7 +131,7 @@ const uint8_t* message_writer::data() const {
 }
 
 size_t message_writer::size() const {
-    return m_buffer.size();
+    return m_buffer.pos();
 }
 
 void message_writer::reset() {

@@ -10,6 +10,27 @@ namespace obsr::net {
 
 #define LOG_MODULE "server"
 
+server_client::server_client(server_io::client_id id, server_io& io)
+    : m_id(id)
+    , m_io(io)
+    , m_state(state::connected)
+    , m_writer()
+    , m_outgoing()
+    , m_published_entries()
+{}
+
+server_client::~server_client() {
+    m_outgoing.clear();
+}
+
+server_client::state server_client::get_state() const {
+    return m_state;
+}
+
+void server_client::set_state(state state) {
+    m_state = state;
+}
+
 bool server_client::is_known(storage::entry_id id) const {
     return m_published_entries.find(id) != m_published_entries.end();
 }
@@ -26,35 +47,17 @@ void server_client::publish(storage::entry_id id, std::string_view name) {
 }
 
 void server_client::enqueue(const out_message& message) {
-    auto it = m_outgoing.find(message.id);
-    if (it == m_outgoing.end()) {
-        auto [it2, _] = m_outgoing.emplace(message.id, std::deque<out_message>());
-        it2->second.push_back(message);
-    } else {
-        it->second.push_back(message);
-    }
+    TRACE_DEBUG(LOG_MODULE, "enqueuing message for server client %d, size=%d", m_id, m_outgoing.size() + 1);
+    m_outgoing.push_back(message);
 }
 
-void server_client::process() {
-    for (auto& [id, queue] : m_outgoing) {
-        if (queue.empty()) {
-            continue;
-        }
-
-        bool exit = false;
-        auto it = queue.begin();
-        while (it != queue.end()) {
-            const auto success = write_message(*it);
-
-            if (success) {
-                it = queue.erase(it);
-            } else {
-                exit = true;
-                break;
-            }
-        }
-
-        if (exit) {
+void server_client::update() {
+    auto it = m_outgoing.begin();
+    while (it != m_outgoing.end()) {
+        const auto success = write_message(*it);
+        if (success) {
+            it = m_outgoing.erase(it);
+        } else {
             break;
         }
     }
@@ -70,6 +73,8 @@ bool server_client::write_message(const out_message& message) {
             return write_entry_deleted(message);
         case message_type::entry_id_assign:
             return write_entry_id_assigned(message);
+        case message_type::handshake_finished:
+            return write_basic(message);
         case message_type::no_type:
         default:
             return true;
@@ -148,10 +153,22 @@ bool server_client::write_entry_id_assigned(const out_message& message) {
     return true;
 }
 
+bool server_client::write_basic(const out_message& message) {
+    if (!m_io.write_to(
+            m_id,
+            static_cast<uint8_t>(message.type),
+            nullptr,
+            0)) {
+        return false;
+    }
 
-server::server(std::shared_ptr<io::nio_runner> nio_runner)
+    return true;
+}
+
+
+server::server(const std::shared_ptr<io::nio_runner>& nio_runner)
     : m_mutex()
-    , m_io(std::move(nio_runner), this)
+    , m_io(nio_runner, this)
     , m_parser()
     , m_storage()
     , m_next_entry_id(0)
@@ -171,6 +188,7 @@ void server::start(int bind_port) {
 
     m_next_entry_id = 0;
     m_clients.clear();
+    m_storage->clear_net_ids();
 
     m_io.start(bind_port);
 }
@@ -181,8 +199,8 @@ void server::stop() {
     m_io.stop();
 }
 
-void server::process() {
-
+void server::update() {
+    std::unique_lock lock(m_mutex);
     // todo: we will not be able to send all entry changes to all clients
     //      need to save for later and iterate
     //      there could also be starvation if there are too many entries
@@ -190,8 +208,13 @@ void server::process() {
 
     // todo: this iteration does accesses that are not safe!
 
+    if (m_io.is_stopped()) {
+        // not running even
+        return;
+    }
+
     if (m_clients.empty()) {
-        // no clients, no need to process the information
+        // no clients, no need to update the information
         return;
     }
 
@@ -211,49 +234,55 @@ void server::process() {
                 // entry deleted
                 out_message.id = id;
                 out_message.type = message_type::entry_delete;
+                TRACE_DEBUG(LOG_MODULE, "TEST: entry deleted %d", id);
             } else {
                 // entry updated
                 out_message.id = id;
                 out_message.type = message_type::entry_update;
                 entry.get_value(out_message.value);
+                TRACE_DEBUG(LOG_MODULE, "TEST: entry updated %d", id);
             }
         }
 
         for (auto& [client_id, client] : m_clients) {
-            if (!client.is_known(id)) {
-                client.publish(id, path);
+            if (!client->is_known(id)) {
+                TRACE_DEBUG(LOG_MODULE, "TEST: publish entry %d", id);
+                client->publish(id, path);
             }
 
             if (out_message.type != message_type::no_type) {
-                client.enqueue(out_message);
+                TRACE_DEBUG(LOG_MODULE, "TEST: message enqueue %d", id);
+                client->enqueue(out_message);
             }
         }
 
         return true;
     });
+
+    for (auto& [client_id, client] : m_clients) {
+        client->update();
+    }
 }
 
 void server::on_client_connected(server_io::client_id id) {
     std::unique_lock lock(m_mutex);
 
-    auto [it, _] = m_clients.emplace(id, server_client{});
+    auto client_u = std::make_unique<server_client>(id, m_io);
+    auto [it, _] = m_clients.emplace(id, std::move(client_u));
 
     auto& client = it->second;
-    for (auto& [entry_id, name] : m_id_assignments) {
-        if (client.is_known(entry_id)) {
-            continue;
-        }
+    client->set_state(server_client::state::in_handshake);
 
-        client.publish(entry_id, name);
-    }
-
-    // todo: how to notify the client out of handshake mode?
+    handle_do_handshake_for_client(client.get());
 }
 
 void server::on_client_disconnected(server_io::client_id id) {
     std::unique_lock lock(m_mutex);
 
-    m_clients.erase(id);
+    auto it = m_clients.find(id);
+    if (it != m_clients.end()) {
+        m_clients.erase(it);
+    }
 }
 
 void server::on_new_message(server_io::client_id id, const message_header& header, const uint8_t* buffer, size_t size) {
@@ -270,6 +299,8 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
         TRACE_DEBUG(LOG_MODULE, "failed to parse incoming data, parser did not finish");
         return;
     }
+
+    TRACE_DEBUG(LOG_MODULE, "received new message from client=%d of type=%d", id, type);
 
     out_message message_to_others;
 
@@ -316,6 +347,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                     parse_data.id);
             break;
         case message_type::entry_id_assign:
+        case message_type::handshake_finished:
             // clients should not send this
         case message_type::no_type:
         default:
@@ -346,8 +378,21 @@ void server::enqueue_message_for_clients(const out_message& message, server_io::
             continue;
         }
 
-        client.enqueue(message);
+        client->enqueue(message);
     }
+}
+
+void server::handle_do_handshake_for_client(server_client* client) {
+    for (auto& [entry_id, name] : m_id_assignments) {
+        if (client->is_known(entry_id)) {
+            continue;
+        }
+
+        client->publish(entry_id, name);
+    }
+
+    client->enqueue({.type = message_type::handshake_finished});
+    client->set_state(server_client::state::in_use);
 }
 
 }

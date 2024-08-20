@@ -14,7 +14,8 @@ namespace obsr::net {
 // todo: handle errors better by actually getting error info and passing it forward and such
 
 
-#define LOG_MODULE "netclient"
+#define LOG_MODULE_CLIENT "socketio"
+#define LOG_MODULE_SERVER "serverio"
 
 reader::reader(size_t buffer_size)
     : state_machine()
@@ -66,8 +67,8 @@ bool reader::process_state(read_state current_state, read_data& data) {
     }
 }
 
-socket_io::socket_io(std::shared_ptr<obsr::io::nio_runner> nio_runner, listener* listener)
-    : m_nio_runner(std::move(nio_runner))
+socket_io::socket_io(const std::shared_ptr<io::nio_runner>& nio_runner, listener* listener)
+    : m_nio_runner(nio_runner)
     , m_resource_handle(empty_handle)
     , m_socket()
     , m_reader(1024)
@@ -81,7 +82,7 @@ socket_io::socket_io(std::shared_ptr<obsr::io::nio_runner> nio_runner, listener*
 socket_io::~socket_io() {
     std::unique_lock lock(m_mutex);
     if (m_state != state::idle) {
-        stop_internal(lock);
+        stop_internal(lock, false);
     }
 }
 
@@ -119,7 +120,7 @@ void socket_io::start(std::shared_ptr<obsr::os::socket> socket, bool connected) 
                                               flags,
                                               [this](obsr::os::resource& res, uint32_t flags)->void { on_ready_resource(flags); });
     } catch (...) {
-        TRACE_DEBUG(LOG_MODULE, "start failed");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "start failed");
         stop_internal(lock);
 
         throw;
@@ -149,7 +150,7 @@ void socket_io::connect(connection_info info) {
         m_state = state::connecting;
         m_socket->connect(info.ip, info.port);
     } catch (const io_exception&) {
-        TRACE_DEBUG(LOG_MODULE, "connect failed");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "connect failed");
         stop_internal(lock); // todo: maybe don't close socket
 
         throw;
@@ -170,8 +171,13 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
             static_cast<uint32_t>(size) //todo: return error if size too great
     };
 
+    if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "write buffer does not have enough space");
+        return false;
+    }
+
     if (!m_write_buffer.write(reinterpret_cast<uint8_t*>(&header), sizeof(header))) {
-        TRACE_DEBUG(LOG_MODULE, "write failed to buffer at start");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "write failed to buffer at start");
         return false;
     }
 
@@ -180,7 +186,7 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
             // this means we have probably sent a message with an header but no data. this will seriously
             // break down communication. as such, we will terminate connection here.
             // todo: add ability for remote to deal with this safely.
-            TRACE_DEBUG(LOG_MODULE, "write attempt failed halfway, stopping");
+            TRACE_DEBUG(LOG_MODULE_CLIENT, "write attempt failed halfway, stopping");
             stop_internal(lock);
             return false;
         }
@@ -207,31 +213,33 @@ void socket_io::on_ready_resource(uint32_t flags) {
     }
 }
 
-void socket_io::stop_internal(std::unique_lock<std::mutex>& lock) {
+void socket_io::stop_internal(std::unique_lock<std::mutex>& lock, bool report) {
     if (m_state == state::idle) {
         return;
     }
 
-    TRACE_DEBUG(LOG_MODULE, "stop called");
+    TRACE_DEBUG(LOG_MODULE_CLIENT, "stop called");
 
     try {
         if (m_resource_handle != empty_handle) {
             m_nio_runner->remove(m_resource_handle);
         }
     } catch (...) {
-        TRACE_DEBUG(LOG_MODULE, "error while detaching from nio");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "error while detaching from nio");
     }
 
     try {
         m_socket->close();
         m_socket.reset();
     } catch (...) {
-        TRACE_DEBUG(LOG_MODULE, "error while closing socket");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "error while closing socket");
     }
 
     m_state = state::idle;
 
-    invoke_ptr(lock, m_listener, &listener::on_close);
+    if (report) {
+        invoke_ptr(lock, m_listener, &listener::on_close);
+    }
 }
 
 socket_io::update_handler::update_handler(socket_io& io)
@@ -240,7 +248,7 @@ socket_io::update_handler::update_handler(socket_io& io)
 {}
 
 void socket_io::update_handler::on_read_ready() {
-    TRACE_DEBUG(LOG_MODULE, "on read update");
+    TRACE_DEBUG(LOG_MODULE_CLIENT, "on read update");
 
     const auto state = m_io.m_state;
     if (state == state::connected) {
@@ -248,11 +256,11 @@ void socket_io::update_handler::on_read_ready() {
             m_io.m_reader.update(m_io.m_socket.get());
         } catch (const eof_exception&) {
             // socket was closed
-            TRACE_DEBUG(LOG_MODULE, "read eof");
+            TRACE_DEBUG(LOG_MODULE_CLIENT, "read eof");
             m_io.stop_internal(m_lock); // todo: need more info on why we closed
         } catch (...) {
             // any other error
-            TRACE_DEBUG(LOG_MODULE, "read error");
+            TRACE_DEBUG(LOG_MODULE_CLIENT, "read error");
             m_io.stop_internal(m_lock);
         }
 
@@ -265,17 +273,17 @@ void socket_io::update_handler::on_read_ready() {
 }
 
 void socket_io::update_handler::on_write_ready() {
-    TRACE_DEBUG(LOG_MODULE, "on write update");
+    TRACE_DEBUG(LOG_MODULE_CLIENT, "on write update");
 
     const auto state = m_io.m_state;
     if (state == state::connecting) {
-        TRACE_DEBUG(LOG_MODULE, "connect finished");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "connect finished");
 
         try {
             m_io.m_socket->finalize_connect();
         } catch (const io_exception&) {
             // connect failed
-            TRACE_DEBUG(LOG_MODULE, "connect failed");
+            TRACE_DEBUG(LOG_MODULE_CLIENT, "connect failed");
             m_io.stop_internal(m_lock);
 
             return;
@@ -288,14 +296,14 @@ void socket_io::update_handler::on_write_ready() {
         invoke_ptr(m_lock, m_io.m_listener, &listener::on_connected);
     } else if (state == state::connected) {
         try {
-            TRACE_DEBUG(LOG_MODULE, "writing to socket");
+            TRACE_DEBUG(LOG_MODULE_CLIENT, "writing to socket");
             if (!m_io.m_write_buffer.write_into(m_io.m_socket.get())) {
-                TRACE_DEBUG(LOG_MODULE, "nothing more to write");
+                TRACE_DEBUG(LOG_MODULE_CLIENT, "nothing more to write");
                 // nothing more to write
                 m_io.m_nio_runner->remove_flags(m_io.m_resource_handle, obsr::os::selector::poll_out);
             }
         } catch (const io_exception&) {
-            TRACE_DEBUG(LOG_MODULE, "write error");
+            TRACE_DEBUG(LOG_MODULE_CLIENT, "write error");
             m_io.stop_internal(m_lock);
         }
     } else {
@@ -315,10 +323,10 @@ void socket_io::update_handler::process_new_data() {
         m_io.m_reader.process();
 
         if (m_io.m_reader.is_errored()) {
-            TRACE_DEBUG(LOG_MODULE, "read process error %d", m_io.m_reader.error_code());
+            TRACE_DEBUG(LOG_MODULE_CLIENT, "read update error %d", m_io.m_reader.error_code());
             m_io.stop_internal(m_lock);
         } else if (m_io.m_reader.is_finished()) {
-            TRACE_DEBUG(LOG_MODULE, "new message processed");
+            TRACE_DEBUG(LOG_MODULE_CLIENT, "new message processed");
             auto& state = m_io.m_reader.data();
 
             invoke_ptr<socket_io::listener, const message_header&, const uint8_t*, size_t>(
@@ -337,8 +345,8 @@ void socket_io::update_handler::process_new_data() {
     } while (run);
 }
 
-server_io::server_io(std::shared_ptr<obsr::io::nio_runner> nio_runner, listener* listener)
-    : m_nio_runner(std::move(nio_runner))
+server_io::server_io(const std::shared_ptr<obsr::io::nio_runner>& nio_runner, listener* listener)
+    : m_nio_runner(nio_runner)
     , m_resource_handle(empty_handle)
     , m_socket()
     , m_mutex()
@@ -351,7 +359,7 @@ server_io::server_io(std::shared_ptr<obsr::io::nio_runner> nio_runner, listener*
 server_io::~server_io() {
     std::unique_lock lock(m_mutex);
     if (m_state != state::idle) {
-        stop_internal(lock);
+        stop_internal(lock, false);
     }
 }
 
@@ -385,7 +393,7 @@ void server_io::start(int bind_port) {
                                               flags,
                                               [this](obsr::os::resource& res, uint32_t flags)->void { on_ready_resource(flags); });
     } catch (...) {
-        TRACE_DEBUG(LOG_MODULE, "start failed");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "start failed");
         stop_internal(lock);
 
         throw;
@@ -429,53 +437,33 @@ void server_io::on_ready_resource(uint32_t flags) {
     }
 }
 
-void server_io::stop_internal(std::unique_lock<std::mutex>& lock) {
+void server_io::stop_internal(std::unique_lock<std::mutex>& lock, bool report) {
     if (m_state == state::idle) {
         return;
     }
 
-    TRACE_DEBUG(LOG_MODULE, "stop called");
+    TRACE_DEBUG(LOG_MODULE_SERVER, "stop called");
 
     try {
         if (m_resource_handle != empty_handle) {
             m_nio_runner->remove(m_resource_handle);
         }
     } catch (...) {
-        TRACE_DEBUG(LOG_MODULE, "error while detaching from nio");
+        TRACE_DEBUG(LOG_MODULE_SERVER, "error while detaching from nio");
     }
 
     try {
         m_socket->close();
         m_socket.reset();
     } catch (...) {
-        TRACE_DEBUG(LOG_MODULE, "error while closing socket");
+        TRACE_DEBUG(LOG_MODULE_SERVER, "error while closing socket");
     }
 
     m_state = state::idle;
 
-    invoke_ptr(lock, m_listener, &listener::on_close);
-}
-
-void server_io::on_client_connected(client_id id) {
-    std::unique_lock lock(m_mutex);
-    invoke_ptr(lock, m_listener, &server_io::listener::on_client_connected, id);
-}
-
-void server_io::on_client_disconnected(client_id id) {
-    std::unique_lock lock(m_mutex);
-    invoke_ptr(lock, m_listener, &server_io::listener::on_client_disconnected, id);
-}
-
-void server_io::on_new_client_data(client_id id, const message_header& header, const uint8_t* buffer, size_t size) {
-    std::unique_lock lock(m_mutex);
-    invoke_ptr<server_io::listener, client_id, const message_header&, const uint8_t*, size_t>(
-            lock,
-            m_listener,
-            &server_io::listener::on_new_message,
-            id,
-            header,
-            buffer,
-            size);
+    if (report) {
+        invoke_ptr(lock, m_listener, &listener::on_close);
+    }
 }
 
 server_io::update_handler::update_handler(server_io& io)
@@ -484,28 +472,29 @@ server_io::update_handler::update_handler(server_io& io)
 {}
 
 void server_io::update_handler::on_read_ready() {
-    TRACE_DEBUG(LOG_MODULE, "on read ready");
+    TRACE_DEBUG(LOG_MODULE_SERVER, "on read ready");
 
-    uint32_t id = -1;
+    client_id id = -1;
     try {
         auto socket = m_io.m_socket->accept();
 
         id = m_io.m_next_client_id++;
-        TRACE_DEBUG(LOG_MODULE, "handling new server %d", id);
+        TRACE_DEBUG(LOG_MODULE_SERVER, "handling new server %d", id);
 
         auto client = std::make_unique<client_data>(m_io, id);
         auto [it, inserted] = m_io.m_clients.emplace(id, std::move(client));
         if (!inserted) {
-            TRACE_DEBUG(LOG_MODULE, "failed to store new client");
+            TRACE_DEBUG(LOG_MODULE_SERVER, "failed to store new client");
             socket->close();
             return;
         }
 
         it->second->attach(std::move(socket));
+        invoke_ptr(m_lock, m_io.m_listener, &server_io::listener::on_client_connected, id);
 
-        TRACE_DEBUG(LOG_MODULE, "new server registered %d", id);
+        TRACE_DEBUG(LOG_MODULE_SERVER, "new server registered %d", id);
     } catch (const io_exception&) {
-        TRACE_DEBUG(LOG_MODULE, "error with new server");
+        TRACE_DEBUG(LOG_MODULE_SERVER, "error with new server");
 
         if (id != -1) {
             m_io.m_clients.erase(id);
@@ -517,10 +506,10 @@ void server_io::update_handler::on_hung_or_error() {
     m_io.stop_internal(m_lock);
 }
 
-server_io::client_data::client_data(server_io& parent, uint32_t id)
+server_io::client_data::client_data(server_io& parent, client_id id)
     : m_parent(parent)
     , m_id(id)
-    , m_io(std::move(m_parent.m_nio_runner), this) {
+    , m_io(m_parent.m_nio_runner, this) {
 }
 
 void server_io::client_data::attach(std::unique_ptr<os::socket>&& socket) {
@@ -529,20 +518,29 @@ void server_io::client_data::attach(std::unique_ptr<os::socket>&& socket) {
     m_io.start(socket_shared, true);
 }
 
-void server_io::client_data::write(uint8_t type, const uint8_t* buffer, size_t size) {
-    m_io.write(type, buffer, size);
+bool server_io::client_data::write(uint8_t type, const uint8_t* buffer, size_t size) {
+    return m_io.write(type, buffer, size);
 }
 
 void server_io::client_data::on_new_message(const message_header& header, const uint8_t* buffer, size_t size)  {
-    m_parent.on_new_client_data(m_id, header, buffer, size);
+    std::unique_lock lock(m_parent.m_mutex);
+    invoke_ptr<server_io::listener, client_id, const message_header&, const uint8_t*, size_t>(
+            lock,
+            m_parent.m_listener,
+            &server_io::listener::on_new_message,
+            m_id,
+            header,
+            buffer,
+            size);
 }
 
 void server_io::client_data::on_connected() {
-    m_parent.on_client_connected(m_id);
+    // not used as we already initialize it as connected
 }
 
 void server_io::client_data::on_close() {
-    m_parent.on_client_disconnected(m_id);
+    std::unique_lock lock(m_parent.m_mutex);
+    invoke_ptr(lock, m_parent.m_listener, &server_io::listener::on_client_disconnected, m_id);
 }
 
 }

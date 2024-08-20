@@ -102,10 +102,10 @@ void listener_storage::thread_main() {
         std::unique_lock lock(m_mutex);
 
         m_has_events.wait(lock, [&]()->bool {
-            return !m_pending_events.empty() || m_thread_loop_run.load();
+            return !m_pending_events.empty() || !m_thread_loop_run.load();
         });
 
-        if (m_thread_loop_run.load()) {
+        if (!m_thread_loop_run.load()) {
             break;
         }
 

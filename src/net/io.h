@@ -67,7 +67,7 @@ public:
         virtual void on_close() = 0;
     };
 
-    socket_io(std::shared_ptr<io::nio_runner> nio_runner, listener* listener);
+    socket_io(const std::shared_ptr<io::nio_runner>& nio_runner, listener* listener);
     ~socket_io();
 
     bool is_stopped();
@@ -102,7 +102,7 @@ private:
     };
 
     void on_ready_resource(uint32_t flags);
-    void stop_internal(std::unique_lock<std::mutex>& lock);
+    void stop_internal(std::unique_lock<std::mutex>& lock, bool report = true);
 
     std::shared_ptr<obsr::io::nio_runner> m_nio_runner;
     obsr::handle m_resource_handle;
@@ -121,7 +121,6 @@ private:
 class server_io {
 public:
     using client_id = uint16_t;
-    static constexpr client_id invalid_client_id = static_cast<client_id>(-1);
 
     class listener {
     public:
@@ -131,7 +130,7 @@ public:
         virtual void on_close() = 0;
     };
 
-    server_io(std::shared_ptr<obsr::io::nio_runner> nio_runner, listener* listener);
+    server_io(const std::shared_ptr<obsr::io::nio_runner>& nio_runner, listener* listener);
     ~server_io();
 
     bool is_stopped();
@@ -158,7 +157,7 @@ private:
         client_data(server_io& parent, client_id id);
 
         void attach(std::unique_ptr<os::socket>&& socket);
-        void write(uint8_t type, const uint8_t* buffer, size_t size);
+        bool write(uint8_t type, const uint8_t* buffer, size_t size);
 
         // events from server
         void on_new_message(const message_header& header, const uint8_t* buffer, size_t size) override;
@@ -176,11 +175,7 @@ private:
     };
 
     void on_ready_resource(uint32_t flags);
-    void stop_internal(std::unique_lock<std::mutex>& lock);
-
-    void on_client_connected(client_id id);
-    void on_client_disconnected(client_id id);
-    void on_new_client_data(client_id id, const message_header& header, const uint8_t* buffer, size_t size);
+    void stop_internal(std::unique_lock<std::mutex>& lock, bool report = true);
 
     std::shared_ptr<obsr::io::nio_runner> m_nio_runner;
     obsr::handle m_resource_handle;
@@ -189,7 +184,7 @@ private:
     std::mutex m_mutex; // todo: seperate mutex for read/write maybe
 
     std::unordered_map<uint32_t, std::unique_ptr<client_data>> m_clients;
-    uint32_t m_next_client_id;
+    client_id m_next_client_id;
     state m_state;
 
     listener* m_listener;

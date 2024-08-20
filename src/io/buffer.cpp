@@ -40,6 +40,10 @@ const uint8_t* linear_buffer::data() const {
     return m_buffer;
 }
 
+size_t linear_buffer::pos() const {
+    return m_write_pos;
+}
+
 size_t linear_buffer::size() const {
     return m_size;
 }

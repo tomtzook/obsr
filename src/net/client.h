@@ -3,6 +3,7 @@
 #include "storage/storage.h"
 #include "net/io.h"
 #include "net/serialize.h"
+#include "updater.h"
 
 namespace obsr::net {
 
@@ -27,16 +28,16 @@ namespace obsr::net {
 //      problem: must attach storage to client before use!
 //      must store net related stuff in storage
 
-class client : public socket_io::listener {
+class client : public socket_io::listener, public updatable {
 public:
-    client(std::shared_ptr<io::nio_runner> nio_runner);
+    client(const std::shared_ptr<io::nio_runner>& nio_runner);
 
     void attach_storage(std::shared_ptr<storage::storage> storage);
 
     void start(connection_info info);
     void stop();
 
-    void process();
+    void update() override;
 
     // events
     void on_new_message(const message_header& header, const uint8_t* buffer, size_t size) override;

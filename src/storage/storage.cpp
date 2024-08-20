@@ -264,7 +264,7 @@ void storage::on_entry_id_assigned(entry_id id,
     }
 
     auto data = m_entries[entry];
-    data->mark_dirty();
+    data->set_net_id(id);
 
     m_ids.emplace(id, entry);
 }
@@ -272,7 +272,6 @@ void storage::on_entry_id_assigned(entry_id id,
 entry storage::create_new_entry(const std::string_view& path) {
     auto entry = m_entries.allocate_new_with_handle(path);
     auto data = m_entries[entry];
-    data->mark_dirty();
 
     m_paths.emplace(path, entry);
 

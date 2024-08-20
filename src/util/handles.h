@@ -63,7 +63,14 @@ public:
         size_t m_index;
     };
 
-    handle_table() = default;
+    handle_table()
+        : m_data()
+        , m_count(0)
+    {}
+
+    bool empty() const {
+        return m_count < 1;
+    }
 
     const type_* operator[](handle handle) const {
         if (!has(handle)) {
@@ -103,9 +110,14 @@ public:
     template<typename... arg_>
     handle allocate_new(arg_&&... args) {
         auto index = find_next_available_spot();
+        if (index < 0) {
+            throw no_space_exception();
+        }
+
         auto handle = static_cast<obsr::handle>(index);
 
         m_data[index] = std::make_unique<type_>(args...);
+        m_count++;
 
         return handle;
     }
@@ -113,9 +125,14 @@ public:
     template<typename... arg_>
     handle allocate_new_with_handle(arg_&&... args) {
         auto index = find_next_available_spot();
+        if (index < 0) {
+            throw no_space_exception();
+        }
+
         auto handle = static_cast<obsr::handle>(index);
 
         m_data[index] = std::make_unique<type_>(handle, args...);
+        m_count++;
 
         return handle;
     }
@@ -129,6 +146,7 @@ public:
 
         std::unique_ptr<type_> data;
         m_data[index].swap(data);
+        m_count--;
 
         return std::move(data);
     }
@@ -141,17 +159,18 @@ public:
     }
 
 private:
-    size_t find_next_available_spot() const {
+    ssize_t find_next_available_spot() const {
         for (int i = 0; i < capacity_; ++i) {
             if (!m_data[i]) {
                 return i;
             }
         }
 
-        throw no_space_exception();
+        return -1;
     }
 
     std::unique_ptr<type_> m_data[capacity_];
+    size_t m_count;
 };
 
 }

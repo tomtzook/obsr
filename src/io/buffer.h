@@ -38,6 +38,7 @@ public:
     linear_buffer();
 
     const uint8_t* data() const;
+    size_t pos() const;
     size_t size() const;
 
     void reset();

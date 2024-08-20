@@ -10,10 +10,10 @@ namespace obsr::net {
 
 #define LOG_MODULE "client"
 
-client::client(std::shared_ptr<io::nio_runner> nio_runner)
+client::client(const std::shared_ptr<io::nio_runner>& nio_runner)
     : m_state(state::idle)
     , m_mutex()
-    , m_io(std::move(nio_runner), this)
+    , m_io(nio_runner, this)
     , m_conn_info()
     , m_parser()
     , m_writer()
@@ -35,6 +35,8 @@ void client::start(connection_info info) {
         throw illegal_state_exception();
     }
 
+    m_storage->clear_net_ids();
+
     m_conn_info = std::move(info);
     m_state = state::opening;
 }
@@ -45,17 +47,22 @@ void client::stop() {
     if (m_state == state::idle) {
         throw illegal_state_exception();
     }
+
+    m_io.stop();
 }
 
-void client::process() {
+void client::update() {
     std::unique_lock lock(m_mutex);
+
+    if (m_state == state::idle) {
+        // we aren't running even
+        return;
+    }
 
     // todo: add sending keep alive?
 
     switch (m_state) {
         case state::opening: {
-            m_storage->clear_net_ids();
-
             // todo: we may want a delay before trying again
             //  our caller is delayed, but we may want more
             if (open_socket_and_start_connection()) {
@@ -67,20 +74,20 @@ void client::process() {
         }
         case state::in_use: {
             m_storage->act_on_entries([this](const storage::storage_entry& entry) -> bool {
-                // todo: may need to use timestamps to properly check if we already sent about this or not
+                const auto id = entry.get_net_id();
 
                 bool continue_run = false;
                 if (entry.has_flags(storage::flag_internal_deleted)) {
                     // entry was deleted
 
-                    if (entry.get_net_id() == storage::id_not_assigned) {
+                    if (id == storage::id_not_assigned) {
                         continue_run = true;
                     } else {
                         continue_run = write_entry_deleted(entry);
                     }
                 } else {
                     // entry value was updated
-                    if (entry.get_net_id() == storage::id_not_assigned) {
+                    if (id == storage::id_not_assigned) {
                         continue_run = write_entry_created(entry);
                     } else {
                         continue_run = write_entry_updated(entry);
@@ -90,8 +97,6 @@ void client::process() {
                 // we want to mark un-dirty and resume if we succeeded
                 return continue_run;
             }, storage::flag_internal_dirty);
-
-            // todo: iterate over dirty entries and send
             break;
         }
 
@@ -122,31 +127,28 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
     auto parse_data = m_parser.data();
     switch (type) {
         case message_type::entry_create:
-            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value_t&, storage::change_source_id>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value_t&>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_created,
                     parse_data.id,
                     parse_data.name,
-                    parse_data.value,
-                    storage::source_local_change);
+                    parse_data.value);
             break;
         case message_type::entry_update:
-            invoke_shared_ptr<storage::storage, storage::entry_id, const value_t&, storage::change_source_id>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, const value_t&>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_updated,
                     parse_data.id,
-                    parse_data.value,
-                    storage::source_local_change);
+                    parse_data.value);
             break;
         case message_type::entry_delete:
-            invoke_shared_ptr<storage::storage, storage::entry_id, storage::change_source_id>(
+            invoke_shared_ptr<storage::storage, storage::entry_id>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_deleted,
-                    parse_data.id,
-                    storage::source_local_change);
+                    parse_data.id);
             break;
         case message_type::entry_id_assign:
             invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view>(
@@ -155,6 +157,9 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
                     &storage::storage::on_entry_id_assigned,
                     parse_data.id,
                     parse_data.name);
+            break;
+        case message_type::handshake_finished:
+            m_state = state::in_use;
             break;
         case message_type::no_type:
         default:
@@ -193,6 +198,8 @@ bool client::open_socket_and_start_connection() {
 }
 
 bool client::write_entry_created(const storage::storage_entry& entry) {
+    TRACE_DEBUG(LOG_MODULE, "writing entry created %d", entry.get_net_id());
+
     m_writer.reset();
 
     value_t value{};
@@ -209,6 +216,8 @@ bool client::write_entry_created(const storage::storage_entry& entry) {
 }
 
 bool client::write_entry_updated(const storage::storage_entry& entry) {
+    TRACE_DEBUG(LOG_MODULE, "writing entry updated %d", entry.get_net_id());
+
     m_writer.reset();
 
     value_t value{};
@@ -225,6 +234,8 @@ bool client::write_entry_updated(const storage::storage_entry& entry) {
 }
 
 bool client::write_entry_deleted(const storage::storage_entry& entry) {
+    TRACE_DEBUG(LOG_MODULE, "writing entry deleted %d", entry.get_net_id());
+
     m_writer.reset();
 
     if (!m_writer.entry_deleted(entry.get_net_id())) {
