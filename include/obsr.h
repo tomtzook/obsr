@@ -23,4 +23,8 @@ listener listen_object(object obj, const listener_callback&& callback);
 listener listen_entry(entry entry, const listener_callback&& callback);
 void delete_listener(listener listener);
 
+void start_server(uint16_t bind_port);
+void start_client(std::string_view address, uint16_t server_port);
+void stop_network();
+
 }

@@ -5,6 +5,10 @@
 
 #include "obsr_internal.h"
 #include "storage/storage.h"
+#include "net/client.h"
+#include "net/server.h"
+#include "io/nio.h"
+#include "updater.h"
 
 namespace obsr {
 
@@ -35,10 +39,18 @@ public:
     listener listen_entry(entry entry, const listener_callback& callback);
     void delete_listener(listener listener);
 
+    void start_server(uint16_t bind_port);
+    void start_client(std::string_view address, uint16_t server_port);
+    void stop_network();
+
 private:
     std::mutex m_mutex;
+    updater m_updater;
+    std::shared_ptr<io::nio_runner> m_nio_runner;
     storage::listener_storage_ref m_listener_storage;
-    storage::storage m_storage;
+    std::shared_ptr<storage::storage> m_storage;
+
+    std::shared_ptr<net::network_interface> m_net_interface;
 
     handle_table<object_data, 256> m_objects;
     std::map<std::string, object, std::less<>> m_object_paths;

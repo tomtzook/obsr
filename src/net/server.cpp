@@ -179,7 +179,7 @@ void server::attach_storage(std::shared_ptr<storage::storage> storage) {
     m_storage = std::move(storage);
 }
 
-void server::start(int bind_port) {
+void server::start(uint16_t bind_port) {
     std::unique_lock lock(m_mutex);
 
     if (!m_storage) {
@@ -234,24 +234,20 @@ void server::update() {
                 // entry deleted
                 out_message.id = id;
                 out_message.type = message_type::entry_delete;
-                TRACE_DEBUG(LOG_MODULE, "TEST: entry deleted %d", id);
             } else {
                 // entry updated
                 out_message.id = id;
                 out_message.type = message_type::entry_update;
                 entry.get_value(out_message.value);
-                TRACE_DEBUG(LOG_MODULE, "TEST: entry updated %d", id);
             }
         }
 
         for (auto& [client_id, client] : m_clients) {
             if (!client->is_known(id)) {
-                TRACE_DEBUG(LOG_MODULE, "TEST: publish entry %d", id);
                 client->publish(id, path);
             }
 
             if (out_message.type != message_type::no_type) {
-                TRACE_DEBUG(LOG_MODULE, "TEST: message enqueue %d", id);
                 client->enqueue(out_message);
             }
         }

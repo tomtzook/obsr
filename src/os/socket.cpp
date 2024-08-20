@@ -175,14 +175,16 @@ socket::socket(int fd)
     , m_waiting_connection(false)
 {}
 
-void socket::connect(const std::string& ip, uint16_t port) {
+void socket::connect(std::string_view ip, uint16_t port) {
     throw_if_closed();
     throw_if_disabled();
+
+    std::string ip_c(ip);
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = ::htons(port);
-    ::inet_pton(AF_INET, ip.c_str(), &addr.sin_addr);
+    ::inet_pton(AF_INET, ip_c.c_str(), &addr.sin_addr);
 
     if (::connect(fd(), reinterpret_cast<sockaddr*>(&addr), sizeof(addr))) {
         const auto error_code = get_call_error();

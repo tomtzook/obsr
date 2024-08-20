@@ -104,7 +104,7 @@ public:
     socket();
     explicit socket(int fd);
 
-    void connect(const std::string& ip, uint16_t port);
+    void connect(std::string_view ip, uint16_t port);
     void finalize_connect();
 
     size_t read(uint8_t* buffer, size_t buffer_size) override;

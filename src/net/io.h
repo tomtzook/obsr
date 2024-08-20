@@ -24,7 +24,7 @@ struct message_header {
 #pragma pack(pop)
 
 struct connection_info {
-    std::string ip;
+    std::string_view ip;
     uint16_t port;
 };
 
@@ -135,7 +135,7 @@ public:
 
     bool is_stopped();
 
-    void start(int bind_port);
+    void start(uint16_t bind_port);
     void stop();
 
     bool write_to(client_id id, uint8_t type, const uint8_t* buffer, size_t size);

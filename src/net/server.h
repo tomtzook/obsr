@@ -6,7 +6,7 @@
 #include "storage/storage.h"
 #include "net/io.h"
 #include "net/serialize.h"
-#include "updater.h"
+#include "net/net.h"
 
 namespace obsr::net {
 
@@ -55,14 +55,14 @@ private:
     std::deque<out_message> m_outgoing;
 };
 
-class server : public server_io::listener, public updatable {
+class server : public server_io::listener, public network_interface {
 public:
-    server(const std::shared_ptr<io::nio_runner>& nio_runner);
+    explicit server(const std::shared_ptr<io::nio_runner>& nio_runner);
 
-    void attach_storage(std::shared_ptr<storage::storage> storage);
+    void attach_storage(std::shared_ptr<storage::storage> storage) override;
 
-    void start(int bind_port);
-    void stop();
+    void start(uint16_t bind_port);
+    void stop() override;
 
     void update() override;
 

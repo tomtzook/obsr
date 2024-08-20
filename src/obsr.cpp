@@ -57,4 +57,16 @@ void delete_listener(listener listener) {
     s_instance.delete_listener(listener);
 }
 
+void start_server(uint16_t bind_port) {
+    s_instance.start_server(bind_port);
+}
+
+void start_client(std::string_view address, uint16_t server_port) {
+    s_instance.start_client(address, server_port);
+}
+
+void stop_network() {
+    s_instance.stop_network();
+}
+
 }

@@ -369,7 +369,7 @@ bool server_io::is_stopped() {
     return m_state == state::idle;
 }
 
-void server_io::start(int bind_port) {
+void server_io::start(uint16_t bind_port) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {

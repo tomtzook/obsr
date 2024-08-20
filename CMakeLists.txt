@@ -51,7 +51,8 @@ add_library(obsr STATIC
         src/net/server.h
         src/net/server.cpp
         src/updater.h
-        src/updater.cpp)
+        src/updater.cpp
+        src/net/net.h)
 target_include_directories(obsr
         PUBLIC ${INCLUDES}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
