@@ -52,7 +52,7 @@ int main() {
     while (now - start < std::chrono::milliseconds(10000)) {
         sleep(1);
 
-        /*obsr::value_t value{};
+        /*obsr::value value{};
         storage_client->get_entry_value(entry_client, value);
         if (value.type != obsr::value_type::empty) {
             printf("not empty!\n");

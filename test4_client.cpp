@@ -22,14 +22,14 @@ int main() {
     auto start = obsr::time_now();
     auto now = start;
     while (now - start < std::chrono::milliseconds(10000)) {
-        obsr::set_value(entry2, obsr::make_int64(now.count()));
-        sleep(1);
-
-        obsr::value_t value{};
+        obsr::value value{};
         obsr::get_value(entry2, value);
         if (value.type != obsr::value_type::empty) {
             printf("Val: %ld\n", value.value.integer64);
         }
+
+        sleep(1);
+        now = obsr::time_now();
     }
 
     return 0;

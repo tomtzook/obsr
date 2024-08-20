@@ -51,11 +51,11 @@ void storage_entry::remove_flags(uint16_t flags) {
     m_flags &= ~flags;
 }
 
-void storage_entry::get_value(value_t& value) const {
+void storage_entry::get_value(value& value) const {
     value = m_value;
 }
 
-value_t storage_entry::set_value(const value_t& value) {
+value storage_entry::set_value(const value& value) {
     const auto old_type = m_value.type;
     const auto new_type = value.type;
     if (old_type != value_type::empty && old_type != new_type) {
@@ -69,7 +69,7 @@ value_t storage_entry::set_value(const value_t& value) {
 }
 
 void storage_entry::clear() {
-    m_value = value_t{};
+    m_value = value{};
 
     add_flags(flag_internal_dirty);
 }
@@ -133,7 +133,7 @@ uint32_t storage::probe(entry entry) {
     return data->get_flags() & ~flag_internal_mask;
 }
 
-void storage::get_entry_value(entry entry, value_t& value) {
+void storage::get_entry_value(entry entry, value& value) {
     std::unique_lock guard(m_mutex);
 
     auto data = m_entries[entry];
@@ -144,7 +144,7 @@ void storage::get_entry_value(entry entry, value_t& value) {
     data->get_value(value);
 }
 
-void storage::set_entry_value(entry entry, const value_t& value) {
+void storage::set_entry_value(entry entry, const value& value) {
     std::unique_lock guard(m_mutex);
 
     set_entry_internal(entry, value);
@@ -206,7 +206,7 @@ void storage::remove_listener(listener listener) {
 
 void storage::on_entry_created(entry_id id,
                                std::string_view path,
-                               const value_t& value) {
+                               const value& value) {
     std::unique_lock guard(m_mutex);
 
     entry entry;
@@ -225,7 +225,7 @@ void storage::on_entry_created(entry_id id,
 }
 
 void storage::on_entry_updated(entry_id id,
-                               const value_t& value) {
+                               const value& value) {
     std::unique_lock guard(m_mutex);
 
     auto it = m_ids.find(id);
@@ -296,7 +296,7 @@ storage_entry* storage::get_entry_internal(entry entry, bool mark_dirty) {
 }
 
 void storage::set_entry_internal(entry entry,
-                                 const value_t& value,
+                                 const value& value,
                                  bool clear,
                                  entry_id id,
                                  bool mark_dirty) {

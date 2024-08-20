@@ -35,7 +35,7 @@ struct parse_data {
     storage::entry_id id;
     std::string name;
     value_type type;
-    value_t value;
+    obsr::value value;
 
     uint8_t name_buffer[1024];
 };
@@ -66,8 +66,8 @@ public:
     void reset();
 
     bool entry_id_assign(storage::entry_id id, std::string_view name);
-    bool entry_created(storage::entry_id id, std::string_view name, const value_t& value);
-    bool entry_updated(storage::entry_id id, const value_t& value);
+    bool entry_created(storage::entry_id id, std::string_view name, const value& value);
+    bool entry_updated(storage::entry_id id, const value& value);
     bool entry_deleted(storage::entry_id id);
 private:
     io::linear_buffer m_buffer;

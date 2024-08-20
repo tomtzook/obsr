@@ -15,7 +15,7 @@ struct out_message {
 
     storage::entry_id id;
     std::string name;
-    value_t value;
+    obsr::value value;
 };
 
 struct server_client {

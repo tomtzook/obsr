@@ -47,7 +47,7 @@ void server_client::publish(storage::entry_id id, std::string_view name) {
 }
 
 void server_client::enqueue(const out_message& message) {
-    TRACE_DEBUG(LOG_MODULE, "enqueuing message for server client %d, size=%d", m_id, m_outgoing.size() + 1);
+    TRACE_DEBUG(LOG_MODULE, "enqueuing message for server client %d, count=%d", m_id, m_outgoing.size() + 1);
     m_outgoing.push_back(message);
 }
 
@@ -312,7 +312,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
             message_to_others.value = parse_data.value;
             message_to_others.type = message_type::entry_create;
 
-            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value_t&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value&>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_created,
@@ -325,7 +325,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
             message_to_others.value = parse_data.value;
             message_to_others.type = message_type::entry_update;
 
-            invoke_shared_ptr<storage::storage, storage::entry_id, const value_t&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, const value&>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_updated,

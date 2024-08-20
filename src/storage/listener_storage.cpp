@@ -79,7 +79,7 @@ void listener_storage::notify(event_type type, const std::string_view& path) {
     notify(event);
 }
 
-void listener_storage::notify(event_type type, const std::string_view& path, const value_t& old_value, const value_t& new_value) {
+void listener_storage::notify(event_type type, const std::string_view& path, const value& old_value, const value& new_value) {
     obsr::event event;
     event.timestamp = time_now();
     event.type = type;

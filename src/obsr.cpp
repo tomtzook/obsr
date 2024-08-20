@@ -33,11 +33,11 @@ uint32_t probe(entry entry) {
     return s_instance.probe(entry);
 }
 
-void get_value(entry entry, value_t& value) {
+void get_value(entry entry, value& value) {
     s_instance.get_value(entry, value);
 }
 
-void set_value(entry entry, const value_t& value) {
+void set_value(entry entry, const value& value) {
     s_instance.set_value(entry, value);
 }
 

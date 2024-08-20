@@ -127,7 +127,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
     auto parse_data = m_parser.data();
     switch (type) {
         case message_type::entry_create:
-            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value_t&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value&>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_created,
@@ -136,7 +136,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
                     parse_data.value);
             break;
         case message_type::entry_update:
-            invoke_shared_ptr<storage::storage, storage::entry_id, const value_t&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, const value&>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_updated,
@@ -202,7 +202,7 @@ bool client::write_entry_created(const storage::storage_entry& entry) {
 
     m_writer.reset();
 
-    value_t value{};
+    value value{};
     entry.get_value(value);
     if (!m_writer.entry_created(entry.get_net_id(), entry.get_path(), value)) {
         return false;
@@ -220,7 +220,7 @@ bool client::write_entry_updated(const storage::storage_entry& entry) {
 
     m_writer.reset();
 
-    value_t value{};
+    value value{};
     entry.get_value(value);
     if (!m_writer.entry_updated(entry.get_net_id(), value)) {
         return false;

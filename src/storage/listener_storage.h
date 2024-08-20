@@ -36,7 +36,7 @@ public:
     void destroy_listeners(const std::string_view& path);
 
     void notify(event_type type, const std::string_view& path);
-    void notify(event_type type, const std::string_view& path, const value_t& old_value, const value_t& new_value);
+    void notify(event_type type, const std::string_view& path, const value& old_value, const value& new_value);
 
 private:
     void notify(const event& event);

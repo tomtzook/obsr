@@ -150,7 +150,7 @@ bool message_writer::entry_id_assign(storage::entry_id id, std::string_view name
     return true;
 }
 
-bool message_writer::entry_created(storage::entry_id id, std::string_view name, const value_t& value) {
+bool message_writer::entry_created(storage::entry_id id, std::string_view name, const value& value) {
     if (!io::write16(m_buffer, id)) {
         return false;
     }
@@ -170,7 +170,7 @@ bool message_writer::entry_created(storage::entry_id id, std::string_view name, 
     return true;
 }
 
-bool message_writer::entry_updated(storage::entry_id id, const value_t& value) {
+bool message_writer::entry_updated(storage::entry_id id, const value& value) {
     if (!io::write16(m_buffer, id)) {
         return false;
     }

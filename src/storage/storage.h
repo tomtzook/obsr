@@ -49,14 +49,14 @@ struct storage_entry {
         remove_flags(flag_internal_dirty);
     }
 
-    void get_value(value_t& value) const;
-    value_t set_value(const value_t& value);
+    void get_value(value& value) const;
+    value set_value(const value& value);
     void clear();
 
 private:
     entry m_handle;
     std::string m_path;
-    value_t m_value;
+    value m_value;
 
     entry_id m_net_id;
     uint16_t m_flags;
@@ -73,8 +73,8 @@ public:
     void delete_entries(const std::string_view& path);
 
     uint32_t probe(entry entry);
-    void get_entry_value(entry entry, value_t& value);
-    void set_entry_value(entry entry, const value_t& value);
+    void get_entry_value(entry entry, value& value);
+    void set_entry_value(entry entry, const value& value);
     void clear_entry(entry entry);
 
     void act_on_entries(const entry_action& action, uint16_t required_flags = 0);
@@ -87,9 +87,9 @@ public:
     // should be used from network code
     void on_entry_created(entry_id id,
                           std::string_view path,
-                          const value_t& value);
+                          const value& value);
     void on_entry_updated(entry_id id,
-                          const value_t& value);
+                          const value& value);
     void on_entry_deleted(entry_id id);
     void on_entry_id_assigned(entry_id id,
                               std::string_view path);
@@ -99,7 +99,7 @@ private:
     storage_entry* get_entry_internal(entry entry, bool mark_dirty = true);
 
     void set_entry_internal(entry entry,
-                            const value_t& value,
+                            const value& value,
                             bool clear = false,
                             entry_id id = id_not_assigned,
                             bool mark_dirty = true);

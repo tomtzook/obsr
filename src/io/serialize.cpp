@@ -6,7 +6,7 @@ namespace obsr::io {
 
 // todo: are floating point bits storage the same across arches?
 
-static size_t calc_required_size(const value_t& value) {
+static size_t calc_required_size(const value& value) {
     switch (value.type) {
         case value_type::boolean:
             return sizeof(uint8_t);
@@ -85,7 +85,7 @@ bool readraw(readable_buffer& buf, uint8_t* ptr, size_t& size) {
     return true;
 }
 
-bool read(readable_buffer& buf, value_type type, value_t& value) {
+bool read(readable_buffer& buf, value_type type, value& value) {
     switch (type) {
         case value_type::boolean:
             return read8(buf, reinterpret_cast<uint8_t&>(value.value.boolean));
@@ -136,7 +136,7 @@ bool writeraw(writable_buffer& buf, const uint8_t* ptr, size_t size) {
     return buf.write(ptr, size);
 }
 
-bool write(writable_buffer& buf, value_type type, const value_t& value) {
+bool write(writable_buffer& buf, value_type type, const value& value) {
     switch (type) {
         case value_type::empty:
             return true;
