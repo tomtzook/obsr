@@ -20,7 +20,7 @@ client::client(const std::shared_ptr<io::nio_runner>& nio_runner, const std::sha
     , m_io(nio_runner, this)
     , m_conn_info()
     , m_parser()
-    , m_serializer()
+    , m_message_queue(this)
     , m_storage()
     , m_connect_retry_timer()
     , m_clock_sync_timer()
@@ -45,6 +45,7 @@ void client::start(connection_info info) {
     m_storage->clear_net_ids();
     m_connect_retry_timer.stop();
     m_clock_sync_timer.stop();
+    m_message_queue.clear();
 
     m_conn_info = info;
     m_state = state::opening;
@@ -74,9 +75,8 @@ void client::update() {
 
     if (m_clock_sync_timer.is_running() && m_clock_sync_timer.has_elapsed(server_sync_time)) {
         TRACE_DEBUG(LOG_MODULE, "requesting time sync from server");
-        if (write_server_sync()) {
-            m_clock_sync_timer.stop();
-        }
+        m_message_queue.enqueue_time_sync_request();
+        m_clock_sync_timer.stop();
     }
 
     switch (m_state) {
@@ -95,48 +95,15 @@ void client::update() {
 
             break;
         }
-        case state::in_use: {
-            m_storage->act_on_entries([this](const storage::storage_entry& entry) -> bool {
-                const auto id = entry.get_net_id();
-
-                bool continue_run = false;
-                if (entry.has_flags(storage::flag_internal_deleted)) {
-                    // entry was deleted
-
-                    if (id == storage::id_not_assigned) {
-                        continue_run = true;
-                    } else {
-                        continue_run = write_entry_deleted(entry);
-                    }
-                } else {
-                    // entry value was updated
-                    if (id == storage::id_not_assigned) {
-                        continue_run = write_entry_created(entry);
-                    } else {
-                        continue_run = write_entry_updated(entry);
-                    }
-                }
-
-                // we want to mark un-dirty and resume if we succeeded
-                return continue_run;
-            }, storage::flag_internal_dirty);
+        case state::in_use:
+            process_storage();
+            m_message_queue.process();
             break;
-        }
         case state::in_handshake_time_sync:
-            TRACE_DEBUG(LOG_MODULE, "need to request sync with server");
-            if (write_server_sync()) {
-                m_state = state::in_handshake_time_sync_request_sent;
-            }
-            break;
-        case state::in_handshake_signal_server_ready:
-            TRACE_DEBUG(LOG_MODULE, "need to report ready to server");
-            if (write_handshake_ready()) {
-                m_state = state::in_handshake;
-            }
-            break;
-        case state::in_handshake_time_sync_request_sent:
         case state::in_handshake:
             // in this phase we do not send anything to the server, just receive data
+            m_message_queue.process();
+            break;
         case state::connecting:
         case state::idle:
         default:
@@ -162,28 +129,31 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
     auto parse_data = m_parser.data();
     switch (type) {
         case message_type::entry_create:
-            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_created,
                     parse_data.id,
                     parse_data.name,
-                    parse_data.value);
+                    parse_data.value,
+                    parse_data.time);
             break;
         case message_type::entry_update:
-            invoke_shared_ptr<storage::storage, storage::entry_id, const value&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, const value&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_updated,
                     parse_data.id,
-                    parse_data.value);
+                    parse_data.value,
+                    parse_data.time);
             break;
         case message_type::entry_delete:
-            invoke_shared_ptr<storage::storage, storage::entry_id>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_deleted,
-                    parse_data.id);
+                    parse_data.id,
+                    parse_data.time);
             break;
         case message_type::entry_id_assign:
             invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view>(
@@ -206,14 +176,10 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
             const auto time = m_clock->now();
             TRACE_DEBUG(LOG_MODULE, "received time sync response from server: %lu", time.count());
 
-            if (m_state == state::in_handshake_time_sync_request_sent) {
-                if (write_handshake_ready()) {
-                    TRACE_DEBUG(LOG_MODULE, "transitioning to handshake wait");
-                    m_state = state::in_handshake;
-                } else {
-                    TRACE_DEBUG(LOG_MODULE, "transitioning to handshake ready report");
-                    m_state = state::in_handshake_signal_server_ready;
-                }
+            if (m_state == state::in_handshake_time_sync) {
+                TRACE_DEBUG(LOG_MODULE, "transitioning to handshake wait");
+                m_message_queue.enqueue_handshake_ready();
+                m_state = state::in_handshake;
             } else {
                 m_clock_sync_timer.start();
             }
@@ -229,13 +195,10 @@ void client::on_connected() {
     std::unique_lock lock(m_mutex);
 
     TRACE_DEBUG(LOG_MODULE, "connected to server, starting first time sync");
+    m_message_queue.clear();
 
-
-    if (write_server_sync()) {
-        m_state = state::in_handshake_time_sync_request_sent;
-    } else {
-        m_state = state::in_handshake_time_sync;
-    }
+    m_message_queue.enqueue_time_sync_request();
+    m_state = state::in_handshake_time_sync;
 }
 
 void client::on_close() {
@@ -245,6 +208,14 @@ void client::on_close() {
     m_clock_sync_timer.stop();
 
     m_state = state::opening;
+}
+
+std::chrono::milliseconds client::get_time_now() {
+    return m_clock->now();
+}
+
+bool client::write(uint8_t type, const uint8_t* buffer, size_t size) {
+    return m_io.write(type, buffer, size);
 }
 
 bool client::open_socket_and_start_connection() {
@@ -265,91 +236,33 @@ bool client::open_socket_and_start_connection() {
     }
 }
 
-bool client::write_entry_created(const storage::storage_entry& entry) {
-    TRACE_DEBUG(LOG_MODULE, "writing entry created %d", entry.get_net_id());
+void client::process_storage() {
+    m_storage->act_on_entries([this](const storage::storage_entry& entry) -> bool {
+        const auto id = entry.get_net_id();
 
-    m_serializer.reset();
+        if (id == storage::id_not_assigned) {
+            obsr::value value{};
+            entry.get_value(value);
 
-    value value{};
-    entry.get_value(value);
-    if (!m_serializer.entry_created(entry.get_net_id(), entry.get_path(), value)) {
-        return false;
-    }
+            m_message_queue.enqueue_entry_create(id, entry.get_path(), value);
 
-    if (!m_io.write(static_cast<uint8_t>(message_type::entry_create), m_serializer.data(), m_serializer.size())) {
-        return false;
-    }
+            return true;
+        }
 
-    return true;
-}
+        if (entry.has_flags(storage::flag_internal_deleted)) {
+            // entry was deleted
+            m_message_queue.enqueue_entry_deleted(id);
+        } else {
+            // entry value was updated
+            obsr::value value{};
+            entry.get_value(value);
 
-bool client::write_entry_updated(const storage::storage_entry& entry) {
-    TRACE_DEBUG(LOG_MODULE, "writing entry updated %d", entry.get_net_id());
+            m_message_queue.enqueue_entry_update(id, value);
+        }
 
-    m_serializer.reset();
-
-    value value{};
-    entry.get_value(value);
-    if (!m_serializer.entry_updated(entry.get_net_id(), value)) {
-        return false;
-    }
-
-    if (!m_io.write(static_cast<uint8_t>(message_type::entry_update), m_serializer.data(), m_serializer.size())) {
-        return false;
-    }
-
-    return true;
-}
-
-bool client::write_entry_deleted(const storage::storage_entry& entry) {
-    TRACE_DEBUG(LOG_MODULE, "writing entry deleted %d", entry.get_net_id());
-
-    m_serializer.reset();
-
-    if (!m_serializer.entry_deleted(entry.get_net_id())) {
-        return false;
-    }
-
-    if (!m_io.write(static_cast<uint8_t>(message_type::entry_delete), m_serializer.data(), m_serializer.size())) {
-        return false;
-    }
-
-    return true;
-}
-
-bool client::write_server_sync() {
-    TRACE_DEBUG(LOG_MODULE, "writing server sync request");
-
-    const auto time = m_clock->now();
-    m_clock_sync_data.us_start = time;
-
-    m_serializer.reset();
-
-    if (!m_serializer.time_sync_request(time)) {
-        return false;
-    }
-
-    if (!m_io.write(
-            static_cast<uint8_t>(message_type::time_sync_request),
-            m_serializer.data(),
-            m_serializer.size())) {
-        return false;
-    }
-
-    return true;
-}
-
-bool client::write_handshake_ready() {
-    TRACE_DEBUG(LOG_MODULE, "writing ready for handshake");
-
-    if (!m_io.write(
-            static_cast<uint8_t>(message_type::handshake_ready),
-            nullptr,
-            0)) {
-        return false;
-    }
-
-    return true;
+        // we want to mark un-dirty and resume if we succeeded
+        return true;
+    }, storage::flag_internal_dirty);
 }
 
 }

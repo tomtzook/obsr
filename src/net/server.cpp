@@ -15,8 +15,7 @@ server_client::server_client(server_io::client_id id, server_io& io, const std::
     , m_io(io)
     , m_clock(clock)
     , m_state(state::connected)
-    , m_serializer()
-    , m_outgoing()
+    , m_queue(this)
     , m_published_entries()
 {}
 
@@ -49,143 +48,24 @@ void server_client::publish(storage::entry_id id, std::string_view name) {
 }
 
 void server_client::enqueue(const out_message& message) {
-    TRACE_DEBUG(LOG_MODULE, "enqueuing message for server client %d, count=%d", m_id, m_outgoing.size() + 1);
-    m_outgoing.push_back(message);
+    TRACE_DEBUG(LOG_MODULE, "enqueuing message for server client %d", m_id);
+    m_queue.enqueue(message);
+}
+
+void server_client::clear() {
+    m_queue.clear();
 }
 
 void server_client::update() {
-    auto it = m_outgoing.begin();
-    while (it != m_outgoing.end()) {
-        const auto success = write_message(*it);
-        if (success) {
-            it = m_outgoing.erase(it);
-        } else {
-            break;
-        }
-    }
+    m_queue.process();
 }
 
-bool server_client::write_message(const out_message& message) {
-    switch (message.type) {
-        case message_type::entry_create:
-            return write_entry_created(message);
-        case message_type::entry_update:
-            return write_entry_updated(message);
-        case message_type::entry_delete:
-            return write_entry_deleted(message);
-        case message_type::entry_id_assign:
-            return write_entry_id_assigned(message);
-        case message_type::handshake_finished:
-            return write_basic(message);
-        case message_type::time_sync_response:
-            return write_time_sync_response(message);
-        case message_type::no_type:
-        default:
-            return true;
-    }
+std::chrono::milliseconds server_client::get_time_now() {
+    return m_clock->now();
 }
 
-bool server_client::write_entry_created(const out_message& message) {
-    m_serializer.reset();
-
-    if (!m_serializer.entry_created(message.id, message.name, message.value)) {
-        return false;
-    }
-
-    if (!m_io.write_to(
-            m_id,
-            static_cast<uint8_t>(message_type::entry_create),
-            m_serializer.data(),
-            m_serializer.size())) {
-        return false;
-    }
-
-    return true;
-}
-
-bool server_client::write_entry_updated(const out_message& message) {
-    m_serializer.reset();
-
-    if (!m_serializer.entry_updated(message.id, message.value)) {
-        return false;
-    }
-
-    if (!m_io.write_to(
-            m_id,
-            static_cast<uint8_t>(message_type::entry_update),
-            m_serializer.data(),
-            m_serializer.size())) {
-        return false;
-    }
-
-    return true;
-}
-
-bool server_client::write_entry_deleted(const out_message& message) {
-    m_serializer.reset();
-
-    if (!m_serializer.entry_deleted(message.id)) {
-        return false;
-    }
-
-    if (!m_io.write_to(
-            m_id,
-            static_cast<uint8_t>(message_type::entry_delete),
-            m_serializer.data(),
-            m_serializer.size())) {
-        return false;
-    }
-
-    return true;
-}
-
-bool server_client::write_entry_id_assigned(const out_message& message) {
-    m_serializer.reset();
-
-    if (!m_serializer.entry_id_assign(message.id, message.name)) {
-        return false;
-    }
-
-    if (!m_io.write_to(
-            m_id,
-            static_cast<uint8_t>(message_type::entry_id_assign),
-            m_serializer.data(),
-            m_serializer.size())) {
-        return false;
-    }
-
-    return true;
-}
-
-bool server_client::write_time_sync_response(const out_message& message) {
-    m_serializer.reset();
-
-    const auto time = m_clock->now();
-    if (!m_serializer.time_sync_response(message.time, time)) {
-        return false;
-    }
-
-    if (!m_io.write_to(
-            m_id,
-            static_cast<uint8_t>(message_type::time_sync_response),
-            m_serializer.data(),
-            m_serializer.size())) {
-        return false;
-    }
-
-    return true;
-}
-
-bool server_client::write_basic(const out_message& message) {
-    if (!m_io.write_to(
-            m_id,
-            static_cast<uint8_t>(message.type),
-            nullptr,
-            0)) {
-        return false;
-    }
-
-    return true;
+bool server_client::write(uint8_t type, const uint8_t* buffer, size_t size) {
+    return m_io.write_to(m_id, type, buffer, size);
 }
 
 
@@ -254,10 +134,12 @@ void server::update() {
                 // entry deleted
                 out_message.id = id;
                 out_message.type = message_type::entry_delete;
+                out_message.update_time = m_clock->now();
             } else {
                 // entry updated
                 out_message.id = id;
                 out_message.type = message_type::entry_update;
+                out_message.update_time = m_clock->now();
                 entry.get_value(out_message.value);
             }
         }
@@ -328,37 +210,43 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
             message_to_others.id = parse_data.id;
             message_to_others.name = parse_data.name;
             message_to_others.value = parse_data.value;
+            message_to_others.update_time = parse_data.time;
             message_to_others.type = message_type::entry_create;
 
-            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_created,
                     parse_data.id,
                     parse_data.name,
-                    parse_data.value);
+                    parse_data.value,
+                    parse_data.time);
             break;
         case message_type::entry_update:
             message_to_others.id = parse_data.id;
             message_to_others.value = parse_data.value;
+            message_to_others.update_time = parse_data.time;
             message_to_others.type = message_type::entry_update;
 
-            invoke_shared_ptr<storage::storage, storage::entry_id, const value&>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, const value&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_updated,
                     parse_data.id,
-                    parse_data.value);
+                    parse_data.value,
+                    parse_data.time);
             break;
         case message_type::entry_delete:
             message_to_others.id = parse_data.id;
+            message_to_others.update_time = parse_data.time;
             message_to_others.type = message_type::entry_delete;
 
-            invoke_shared_ptr<storage::storage, storage::entry_id>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_deleted,
-                    parse_data.id);
+                    parse_data.id,
+                    parse_data.time);
             break;
         case message_type::time_sync_request: {
             out_message message{.type = message_type::time_sync_response, .time = m_clock->now()};

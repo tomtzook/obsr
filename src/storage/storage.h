@@ -9,6 +9,7 @@
 #include "obsr_types.h"
 #include "obsr_internal.h"
 #include "util/handles.h"
+#include "util/time.h"
 #include "listener_storage.h"
 
 namespace obsr::storage {
@@ -49,6 +50,9 @@ struct storage_entry {
         remove_flags(flag_internal_dirty);
     }
 
+    std::chrono::milliseconds get_last_update_timestamp() const;
+    void set_last_update_timestamp(std::chrono::milliseconds timestamp);
+
     void get_value(value& value) const;
     value set_value(const value& value);
     void clear();
@@ -58,6 +62,7 @@ private:
     std::string m_path;
     value m_value;
 
+    std::chrono::milliseconds m_last_update_timestamp;
     entry_id m_net_id;
     uint16_t m_flags;
 };
@@ -66,7 +71,7 @@ class storage {
 public:
     using entry_action = std::function<bool(storage_entry&)>;
 
-    explicit storage(listener_storage_ref& listener_storage);
+    explicit storage(listener_storage_ref& listener_storage, const std::shared_ptr<clock>& clock);
 
     entry get_or_create_entry(const std::string_view& path);
     void delete_entry(entry entry);
@@ -87,10 +92,13 @@ public:
     // should be used from network code
     void on_entry_created(entry_id id,
                           std::string_view path,
-                          const value& value);
+                          const value& value,
+                          std::chrono::milliseconds timestamp);
     void on_entry_updated(entry_id id,
-                          const value& value);
-    void on_entry_deleted(entry_id id);
+                          const value& value,
+                          std::chrono::milliseconds timestamp);
+    void on_entry_deleted(entry_id id,
+                          std::chrono::milliseconds timestamp);
     void on_entry_id_assigned(entry_id id,
                               std::string_view path);
 
@@ -102,12 +110,15 @@ private:
                             const value& value,
                             bool clear = false,
                             entry_id id = id_not_assigned,
-                            bool mark_dirty = true);
+                            bool mark_dirty = true,
+                            std::chrono::milliseconds timestamp = std::chrono::milliseconds(0));
     void delete_entry_internal(entry entry,
                                bool mark_dirty = true,
-                               bool notify = true);
+                               bool notify = true,
+                               std::chrono::milliseconds timestamp = std::chrono::milliseconds(0));
 
     listener_storage_ref m_listener_storage;
+    std::shared_ptr<clock> m_clock;
 
     std::mutex m_mutex;
     handle_table<storage_entry, 256> m_entries;

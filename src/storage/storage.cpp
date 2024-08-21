@@ -12,7 +12,8 @@ storage_entry::storage_entry(entry handle, const std::string_view& path)
     , m_path(path)
     , m_value()
     , m_net_id(id_not_assigned)
-    , m_flags(0) {
+    , m_flags(0)
+    , m_last_update_timestamp(0) {
 }
 
 bool storage_entry::is_in(const std::string_view& path) const {
@@ -51,6 +52,14 @@ void storage_entry::remove_flags(uint16_t flags) {
     m_flags &= ~flags;
 }
 
+std::chrono::milliseconds storage_entry::get_last_update_timestamp() const {
+    return m_last_update_timestamp;
+}
+
+void storage_entry::set_last_update_timestamp(std::chrono::milliseconds timestamp) {
+    m_last_update_timestamp = timestamp;
+}
+
 void storage_entry::get_value(value& value) const {
     value = m_value;
 }
@@ -74,8 +83,9 @@ void storage_entry::clear() {
     add_flags(flag_internal_dirty);
 }
 
-storage::storage(listener_storage_ref& listener_storage)
+storage::storage(listener_storage_ref& listener_storage, const std::shared_ptr<clock>& clock)
     : m_listener_storage(listener_storage)
+    , m_clock(clock)
     , m_mutex()
     , m_entries()
     , m_paths()
@@ -205,7 +215,8 @@ void storage::remove_listener(listener listener) {
 
 void storage::on_entry_created(entry_id id,
                                std::string_view path,
-                               const value& value) {
+                               const value& value,
+                               std::chrono::milliseconds timestamp) {
     std::unique_lock guard(m_mutex);
 
     entry entry;
@@ -220,11 +231,12 @@ void storage::on_entry_created(entry_id id,
 
     m_ids.emplace(id, entry);
 
-    set_entry_internal(entry, value, false, id, false);
+    set_entry_internal(entry, value, false, id, false, timestamp);
 }
 
 void storage::on_entry_updated(entry_id id,
-                               const value& value) {
+                               const value& value,
+                               std::chrono::milliseconds timestamp) {
     std::unique_lock guard(m_mutex);
 
     auto it = m_ids.find(id);
@@ -233,10 +245,10 @@ void storage::on_entry_updated(entry_id id,
         return;
     }
 
-    set_entry_internal(it->second, value, false, id, false);
+    set_entry_internal(it->second, value, false, id, false, timestamp);
 }
 
-void storage::on_entry_deleted(entry_id id) {
+void storage::on_entry_deleted(entry_id id, std::chrono::milliseconds timestamp) {
     std::unique_lock guard(m_mutex);
 
     auto it = m_ids.find(id);
@@ -245,7 +257,7 @@ void storage::on_entry_deleted(entry_id id) {
         return;
     }
 
-    delete_entry_internal(it->second, false, true);
+    delete_entry_internal(it->second, false, true, timestamp);
 }
 
 void storage::on_entry_id_assigned(entry_id id,
@@ -274,6 +286,7 @@ entry storage::create_new_entry(const std::string_view& path) {
 
     m_paths.emplace(path, entry);
 
+    // todo: only notify on this when receiving the first value
     m_listener_storage->notify(
             event_type::created,
             data->get_path());
@@ -298,10 +311,15 @@ void storage::set_entry_internal(entry entry,
                                  const value& value,
                                  bool clear,
                                  entry_id id,
-                                 bool mark_dirty) {
-    // todo: don't set always, base it on timestamp of receive value vs now value
-
+                                 bool mark_dirty,
+                                 std::chrono::milliseconds timestamp) {
+    // todo: bug! if we deleted this entry and receive a stale request, get_entry_internal will undelete it
     auto data = get_entry_internal(entry, mark_dirty);
+
+    if (timestamp.count() != 0 && data->get_last_update_timestamp() > timestamp) {
+        // this new update is too stale
+        return;
+    }
 
     if (mark_dirty) {
         data->mark_dirty();
@@ -312,6 +330,8 @@ void storage::set_entry_internal(entry entry,
     if (id != id_not_assigned) {
         data->set_net_id(id);
     }
+
+    data->set_last_update_timestamp(m_clock->now());
 
     if (clear) {
         data->clear();
@@ -330,10 +350,14 @@ void storage::set_entry_internal(entry entry,
 
 void storage::delete_entry_internal(entry entry,
                                     bool mark_dirty,
-                                    bool notify) {
-    // todo: don't set always, base it on timestamp of receive value vs now value
-
+                                    bool notify,
+                                    std::chrono::milliseconds timestamp) {
     auto data = get_entry_internal(entry, mark_dirty);
+
+    if (timestamp.count() != 0 && data->get_last_update_timestamp() > timestamp) {
+        // this new update is too stale
+        return;
+    }
 
     data->clear();
     data->add_flags(flag_internal_deleted);
@@ -345,6 +369,8 @@ void storage::delete_entry_internal(entry entry,
         // clear dirty flag
         data->clear_dirty();
     }
+
+    data->set_last_update_timestamp(m_clock->now());
 
     if (notify) {
         m_listener_storage->notify(

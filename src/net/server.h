@@ -10,16 +10,7 @@
 
 namespace obsr::net {
 
-struct out_message {
-    message_type type;
-
-    storage::entry_id id;
-    std::string name;
-    obsr::value value;
-    std::chrono::milliseconds time;
-};
-
-struct server_client {
+struct server_client : public message_queue::destination {
 public:
     enum class state {
         connected,
@@ -37,26 +28,23 @@ public:
     bool is_known(storage::entry_id id) const;
 
     void publish(storage::entry_id id, std::string_view name);
+
     void enqueue(const out_message& message);
+    void clear();
+
     void update();
 
-private:
-    bool write_message(const out_message& message);
-    bool write_entry_created(const out_message& message);
-    bool write_entry_updated(const out_message& message);
-    bool write_entry_deleted(const out_message& message);
-    bool write_entry_id_assigned(const out_message& message);
-    bool write_time_sync_response(const out_message& message);
-    bool write_basic(const out_message& message);
+    std::chrono::milliseconds get_time_now() override;
+    bool write(uint8_t type, const uint8_t* buffer, size_t size) override;
 
+private:
     server_io::client_id m_id;
     server_io& m_io;
     std::shared_ptr<clock> m_clock;
     state m_state;
 
-    message_serializer m_serializer;
+    message_queue m_queue;
     std::set<storage::entry_id> m_published_entries;
-    std::deque<out_message> m_outgoing;
 };
 
 class server : public server_io::listener, public network_interface {
