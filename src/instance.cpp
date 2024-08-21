@@ -11,6 +11,7 @@ object_data::object_data(const std::string_view& path)
 
 instance::instance()
     : m_mutex()
+    , m_clock(std::make_shared<clock>())
     , m_updater()
     , m_nio_runner(std::make_shared<io::nio_runner>())
     , m_listener_storage(std::make_shared<storage::listener_storage>())
@@ -121,7 +122,7 @@ void instance::delete_listener(listener listener) {
 }
 
 void instance::start_server(uint16_t bind_port) {
-    auto server = std::make_shared<net::server>(m_nio_runner);
+    auto server = std::make_shared<net::server>(m_nio_runner, m_clock);
     try {
         configure_net(server);
         server->start(bind_port);
@@ -134,7 +135,7 @@ void instance::start_server(uint16_t bind_port) {
 }
 
 void instance::start_client(std::string_view address, uint16_t server_port) {
-    auto client = std::make_shared<net::client>(m_nio_runner);
+    auto client = std::make_shared<net::client>(m_nio_runner, m_clock);
     try {
         configure_net(client);
         client->start({address, server_port});
@@ -154,12 +155,12 @@ void instance::stop_network() {
     }
 }
 
-void instance::configure_net(std::shared_ptr<net::network_interface> network_interface) {
+void instance::configure_net(const std::shared_ptr<net::network_interface>& network_interface) {
     m_updater.attach(network_interface, net_update_period);
     network_interface->attach_storage(m_storage);
 }
 
-void instance::unconfigure_net(std::shared_ptr<net::network_interface> network_interface) {
+void instance::unconfigure_net(const std::shared_ptr<net::network_interface>& network_interface) {
     if (m_net_update_handle != empty_handle) {
         m_updater.remove(m_net_update_handle);
         m_net_update_handle = empty_handle;

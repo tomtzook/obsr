@@ -158,10 +158,6 @@ void socket_io::connect(connection_info info) {
 bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
     std::unique_lock lock(m_mutex);
 
-    if (size > sizeof(uint32_t)) {
-        return false;
-    }
-
     if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
         TRACE_DEBUG(LOG_MODULE_CLIENT, "write buffer does not have enough space");
         return false;

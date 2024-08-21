@@ -14,7 +14,10 @@ enum class message_type {
     entry_update = 2,
     entry_delete = 3,
     entry_id_assign = 4,
-    handshake_finished = 5
+    handshake_finished = 5,
+    time_sync_request = 6,
+    time_sync_response = 7,
+    handshake_ready = 8
 };
 
 enum class parse_state {
@@ -22,7 +25,10 @@ enum class parse_state {
     read_id,
     read_name,
     read_type,
-    read_value
+    read_value,
+    read_time,
+    read_start_time,
+    read_end_time
 };
 
 enum parse_error {
@@ -38,6 +44,10 @@ struct parse_data {
     obsr::value value;
 
     uint8_t name_buffer[1024];
+
+    std::chrono::milliseconds time;
+    std::chrono::milliseconds start_time;
+    std::chrono::milliseconds end_time;
 };
 
 class message_parser : public state_machine<parse_state, parse_state::check_type, parse_data> {
@@ -56,9 +66,9 @@ private:
     io::readonly_buffer m_buffer;
 };
 
-class message_writer {
+class message_serializer {
 public:
-    message_writer();
+    message_serializer();
 
     const uint8_t* data() const;
     size_t size() const;
@@ -69,6 +79,8 @@ public:
     bool entry_created(storage::entry_id id, std::string_view name, const value& value);
     bool entry_updated(storage::entry_id id, const value& value);
     bool entry_deleted(storage::entry_id id);
+    bool time_sync_request(std::chrono::milliseconds start_time);
+    bool time_sync_response(std::chrono::milliseconds start_time, std::chrono::milliseconds end_time);
 private:
     io::linear_buffer m_buffer;
 };

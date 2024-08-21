@@ -16,6 +16,7 @@ struct out_message {
     storage::entry_id id;
     std::string name;
     obsr::value value;
+    std::chrono::milliseconds time;
 };
 
 struct server_client {
@@ -26,7 +27,7 @@ public:
         in_use,
     };
 
-    server_client(server_io::client_id id, server_io& io);
+    server_client(server_io::client_id id, server_io& io, const std::shared_ptr<clock>& clock);
 
     server_io::client_id get_id() const;
 
@@ -45,20 +46,22 @@ private:
     bool write_entry_updated(const out_message& message);
     bool write_entry_deleted(const out_message& message);
     bool write_entry_id_assigned(const out_message& message);
+    bool write_time_sync_response(const out_message& message);
     bool write_basic(const out_message& message);
 
     server_io::client_id m_id;
     server_io& m_io;
+    std::shared_ptr<clock> m_clock;
     state m_state;
 
-    message_writer m_writer;
+    message_serializer m_serializer;
     std::set<storage::entry_id> m_published_entries;
     std::deque<out_message> m_outgoing;
 };
 
 class server : public server_io::listener, public network_interface {
 public:
-    explicit server(const std::shared_ptr<io::nio_runner>& nio_runner);
+    explicit server(const std::shared_ptr<io::nio_runner>& nio_runner, const std::shared_ptr<clock>& clock);
 
     void attach_storage(std::shared_ptr<storage::storage> storage) override;
 
@@ -76,8 +79,11 @@ public:
 private:
     storage::entry_id assign_id_to_entry(std::string_view name);
     void enqueue_message_for_clients(const out_message& message, server_io::client_id id_to_skip = static_cast<server_io::client_id>(-1));
+    void enqueue_message_for_client(server_io::client_id id, const out_message& message);
 
-    void handle_do_handshake_for_client(server_client* client);
+    void handle_do_handshake_for_client(server_io::client_id id);
+
+    std::shared_ptr<clock> m_clock;
 
     std::mutex m_mutex;
 

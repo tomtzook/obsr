@@ -39,7 +39,7 @@ int main() {
 
     auto start = obsr::time_now();
     auto now = start;
-    while (now - start < std::chrono::milliseconds(10000)) {
+    while (now - start < std::chrono::milliseconds(20000)) {
         auto value = obsr::make_int64(now.count());
         obsr::set_value(entry2, value);
 

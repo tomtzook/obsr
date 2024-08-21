@@ -10,11 +10,12 @@ namespace obsr::net {
 
 #define LOG_MODULE "server"
 
-server_client::server_client(server_io::client_id id, server_io& io)
+server_client::server_client(server_io::client_id id, server_io& io, const std::shared_ptr<clock>& clock)
     : m_id(id)
     , m_io(io)
+    , m_clock(clock)
     , m_state(state::connected)
-    , m_writer()
+    , m_serializer()
     , m_outgoing()
     , m_published_entries()
 {}
@@ -76,6 +77,8 @@ bool server_client::write_message(const out_message& message) {
             return write_entry_id_assigned(message);
         case message_type::handshake_finished:
             return write_basic(message);
+        case message_type::time_sync_response:
+            return write_time_sync_response(message);
         case message_type::no_type:
         default:
             return true;
@@ -83,17 +86,17 @@ bool server_client::write_message(const out_message& message) {
 }
 
 bool server_client::write_entry_created(const out_message& message) {
-    m_writer.reset();
+    m_serializer.reset();
 
-    if (!m_writer.entry_created(message.id, message.name, message.value)) {
+    if (!m_serializer.entry_created(message.id, message.name, message.value)) {
         return false;
     }
 
     if (!m_io.write_to(
             m_id,
             static_cast<uint8_t>(message_type::entry_create),
-            m_writer.data(),
-            m_writer.size())) {
+            m_serializer.data(),
+            m_serializer.size())) {
         return false;
     }
 
@@ -101,17 +104,17 @@ bool server_client::write_entry_created(const out_message& message) {
 }
 
 bool server_client::write_entry_updated(const out_message& message) {
-    m_writer.reset();
+    m_serializer.reset();
 
-    if (!m_writer.entry_updated(message.id, message.value)) {
+    if (!m_serializer.entry_updated(message.id, message.value)) {
         return false;
     }
 
     if (!m_io.write_to(
             m_id,
             static_cast<uint8_t>(message_type::entry_update),
-            m_writer.data(),
-            m_writer.size())) {
+            m_serializer.data(),
+            m_serializer.size())) {
         return false;
     }
 
@@ -119,17 +122,17 @@ bool server_client::write_entry_updated(const out_message& message) {
 }
 
 bool server_client::write_entry_deleted(const out_message& message) {
-    m_writer.reset();
+    m_serializer.reset();
 
-    if (!m_writer.entry_deleted(message.id)) {
+    if (!m_serializer.entry_deleted(message.id)) {
         return false;
     }
 
     if (!m_io.write_to(
             m_id,
             static_cast<uint8_t>(message_type::entry_delete),
-            m_writer.data(),
-            m_writer.size())) {
+            m_serializer.data(),
+            m_serializer.size())) {
         return false;
     }
 
@@ -137,17 +140,36 @@ bool server_client::write_entry_deleted(const out_message& message) {
 }
 
 bool server_client::write_entry_id_assigned(const out_message& message) {
-    m_writer.reset();
+    m_serializer.reset();
 
-    if (!m_writer.entry_id_assign(message.id, message.name)) {
+    if (!m_serializer.entry_id_assign(message.id, message.name)) {
         return false;
     }
 
     if (!m_io.write_to(
             m_id,
             static_cast<uint8_t>(message_type::entry_id_assign),
-            m_writer.data(),
-            m_writer.size())) {
+            m_serializer.data(),
+            m_serializer.size())) {
+        return false;
+    }
+
+    return true;
+}
+
+bool server_client::write_time_sync_response(const out_message& message) {
+    m_serializer.reset();
+
+    const auto time = m_clock->now();
+    if (!m_serializer.time_sync_response(message.time, time)) {
+        return false;
+    }
+
+    if (!m_io.write_to(
+            m_id,
+            static_cast<uint8_t>(message_type::time_sync_response),
+            m_serializer.data(),
+            m_serializer.size())) {
         return false;
     }
 
@@ -167,8 +189,9 @@ bool server_client::write_basic(const out_message& message) {
 }
 
 
-server::server(const std::shared_ptr<io::nio_runner>& nio_runner)
-    : m_mutex()
+server::server(const std::shared_ptr<io::nio_runner>& nio_runner, const std::shared_ptr<clock>& clock)
+    : m_clock(clock)
+    , m_mutex()
     , m_io(nio_runner, this)
     , m_parser()
     , m_storage()
@@ -214,7 +237,7 @@ void server::update() {
     }
 
     m_storage->act_on_entries([this](const storage::storage_entry& entry)->bool {
-        //  todo: moving to a "push" methodology will solve this better
+        // todo: moving to a "push" methodology will solve this better
         // todo: this iteration does accesses that are not safe!
         auto id = entry.get_net_id();
         auto path = entry.get_path();
@@ -260,13 +283,11 @@ void server::update() {
 void server::on_client_connected(server_io::client_id id) {
     std::unique_lock lock(m_mutex);
 
-    auto client_u = std::make_unique<server_client>(id, m_io);
+    auto client_u = std::make_unique<server_client>(id, m_io, m_clock);
     auto [it, _] = m_clients.emplace(id, std::move(client_u));
 
     auto& client = it->second;
     client->set_state(server_client::state::in_handshake);
-
-    handle_do_handshake_for_client(client.get());
 }
 
 void server::on_client_disconnected(server_io::client_id id) {
@@ -295,7 +316,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
 
     TRACE_DEBUG(LOG_MODULE, "received new message from client=%d of type=%d", id, type);
 
-    out_message message_to_others;
+    out_message message_to_others{.type = message_type::no_type};
 
     auto parse_data = m_parser.data();
     switch (type) {
@@ -339,8 +360,17 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                     &storage::storage::on_entry_deleted,
                     parse_data.id);
             break;
+        case message_type::time_sync_request: {
+            out_message message{.type = message_type::time_sync_response, .time = m_clock->now()};
+            enqueue_message_for_client(id, message);
+            break;
+        }
+        case message_type::handshake_ready:
+            handle_do_handshake_for_client(id);
+            break;
         case message_type::entry_id_assign:
         case message_type::handshake_finished:
+        case message_type::time_sync_response:
             // clients should not send this
         case message_type::no_type:
         default:
@@ -375,7 +405,23 @@ void server::enqueue_message_for_clients(const out_message& message, server_io::
     }
 }
 
-void server::handle_do_handshake_for_client(server_client* client) {
+void server::enqueue_message_for_client(server_io::client_id id, const out_message& message) {
+    auto it = m_clients.find(id);
+    if (it == m_clients.end()) {
+        return;
+    }
+
+    it->second->enqueue(message);
+}
+
+void server::handle_do_handshake_for_client(server_io::client_id id) {
+    auto it = m_clients.find(id);
+    if (it == m_clients.end()) {
+        return;
+    }
+
+    auto& client = it->second;
+
     for (auto& [entry_id, name] : m_id_assignments) {
         if (client->is_known(entry_id)) {
             continue;

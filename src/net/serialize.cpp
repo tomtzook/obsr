@@ -5,6 +5,8 @@
 
 namespace obsr::net {
 
+static constexpr size_t writer_buffer_size = 512;
+
 message_parser::message_parser()
         : state_machine()
         , m_type(static_cast<message_type>(-1))
@@ -55,6 +57,33 @@ bool message_parser::process_state(parse_state current_state, parse_data& data) 
 
             return select_next_state(current_state);
         }
+        case parse_state::read_time: {
+            uint64_t value;
+            if (!io::read64(m_buffer, value)) {
+                return error(error_read_data);
+            }
+
+            data.time = std::chrono::milliseconds(value);
+            return select_next_state(current_state);
+        }
+        case parse_state::read_start_time: {
+            uint64_t value;
+            if (!io::read64(m_buffer, value)) {
+                return error(error_read_data);
+            }
+
+            data.start_time = std::chrono::milliseconds(value);
+            return select_next_state(current_state);
+        }
+        case parse_state::read_end_time: {
+            uint64_t value;
+            if (!io::read64(m_buffer, value)) {
+                return error(error_read_data);
+            }
+
+            data.end_time = std::chrono::milliseconds(value);
+            return select_next_state(current_state);
+        }
         default:
             return error(error_unknown_state);
     }
@@ -69,8 +98,13 @@ bool message_parser::select_next_state(parse_state current_state) {
                 case message_type::entry_delete:
                 case message_type::entry_id_assign:
                     return move_to_state(parse_state::read_id);
+                case message_type::handshake_ready:
                 case message_type::handshake_finished:
                     return finished();
+                case message_type::time_sync_request:
+                    return move_to_state(parse_state::read_time);
+                case message_type::time_sync_response:
+                    return move_to_state(parse_state::read_start_time);
                 default:
                     return error(error_unknown_type);
             }
@@ -117,28 +151,52 @@ bool message_parser::select_next_state(parse_state current_state) {
                     return error(error_unknown_type);
             }
         }
+        case parse_state::read_time: {
+            switch (m_type) {
+                case message_type::time_sync_request:
+                    return finished();
+                default:
+                    return error(error_unknown_type);
+            }
+        }
+        case parse_state::read_start_time: {
+            switch (m_type) {
+                case message_type::time_sync_response:
+                    return move_to_state(parse_state::read_end_time);
+                default:
+                    return error(error_unknown_type);
+            }
+        }
+        case parse_state::read_end_time: {
+            switch (m_type) {
+                case message_type::time_sync_response:
+                    return finished();
+                default:
+                    return error(error_unknown_type);
+            }
+        }
         default:
             return error(error_unknown_state);
     }
 }
 
-message_writer::message_writer()
-    : m_buffer()
+message_serializer::message_serializer()
+    : m_buffer(writer_buffer_size)
 {}
 
-const uint8_t* message_writer::data() const {
+const uint8_t* message_serializer::data() const {
     return m_buffer.data();
 }
 
-size_t message_writer::size() const {
+size_t message_serializer::size() const {
     return m_buffer.pos();
 }
 
-void message_writer::reset() {
+void message_serializer::reset() {
     m_buffer.reset();
 }
 
-bool message_writer::entry_id_assign(storage::entry_id id, std::string_view name) {
+bool message_serializer::entry_id_assign(storage::entry_id id, std::string_view name) {
     if (!io::write16(m_buffer, id)) {
         return false;
     }
@@ -150,7 +208,7 @@ bool message_writer::entry_id_assign(storage::entry_id id, std::string_view name
     return true;
 }
 
-bool message_writer::entry_created(storage::entry_id id, std::string_view name, const value& value) {
+bool message_serializer::entry_created(storage::entry_id id, std::string_view name, const value& value) {
     if (!io::write16(m_buffer, id)) {
         return false;
     }
@@ -170,7 +228,7 @@ bool message_writer::entry_created(storage::entry_id id, std::string_view name, 
     return true;
 }
 
-bool message_writer::entry_updated(storage::entry_id id, const value& value) {
+bool message_serializer::entry_updated(storage::entry_id id, const value& value) {
     if (!io::write16(m_buffer, id)) {
         return false;
     }
@@ -186,8 +244,27 @@ bool message_writer::entry_updated(storage::entry_id id, const value& value) {
     return true;
 }
 
-bool message_writer::entry_deleted(storage::entry_id id) {
+bool message_serializer::entry_deleted(storage::entry_id id) {
     if (!io::write16(m_buffer, id)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool message_serializer::time_sync_request(std::chrono::milliseconds start_time) {
+    if (!io::write64(m_buffer, static_cast<uint64_t>(start_time.count()))) {
+        return false;
+    }
+
+    return true;
+}
+
+bool message_serializer::time_sync_response(std::chrono::milliseconds start_time, std::chrono::milliseconds end_time) {
+    if (!io::write64(m_buffer, static_cast<uint64_t>(start_time.count()))) {
+        return false;
+    }
+    if (!io::write64(m_buffer, static_cast<uint64_t>(end_time.count()))) {
         return false;
     }
 

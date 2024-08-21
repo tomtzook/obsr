@@ -5,6 +5,22 @@
 
 namespace obsr {
 
+clock::clock()
+    : m_offset(std::chrono::milliseconds(0))
+{}
+
+void clock::sync(const sync_data& data) {
+    const auto now = this->now();
+    const auto offset = ((data.remote_start - data.us_start) + (data.remote_end - now)) / 2;
+
+    m_offset.store(offset);
+}
+
+std::chrono::milliseconds clock::now() {
+    const auto offset = m_offset.load();
+    return time_now() - offset;
+}
+
 timer::timer()
     : m_start(0)
 {}

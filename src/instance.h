@@ -8,6 +8,7 @@
 #include "net/client.h"
 #include "net/server.h"
 #include "io/nio.h"
+#include "util/time.h"
 #include "updater.h"
 
 namespace obsr {
@@ -45,10 +46,11 @@ public:
     void stop_network();
 
 private:
-    void configure_net(std::shared_ptr<net::network_interface> network_interface);
-    void unconfigure_net(std::shared_ptr<net::network_interface> network_interface);
+    void configure_net(const std::shared_ptr<net::network_interface>& network_interface);
+    void unconfigure_net(const std::shared_ptr<net::network_interface>& network_interface);
 
     std::mutex m_mutex;
+    std::shared_ptr<clock> m_clock;
     updater m_updater;
     std::shared_ptr<io::nio_runner> m_nio_runner;
     storage::listener_storage_ref m_listener_storage;
