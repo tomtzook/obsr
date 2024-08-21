@@ -59,30 +59,8 @@ target_include_directories(obsr
         )
 target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt)
 
-
-add_executable(test test.cpp)
-target_link_libraries(test obsr)
-
-add_executable(test2 test2.cpp)
-target_include_directories(test2
-        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-target_link_libraries(test2 obsr)
-
-add_executable(test3 test3.cpp)
-target_include_directories(test3
-        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-target_link_libraries(test3 obsr)
-
 add_executable(test4_server test4_server.cpp)
-target_include_directories(test4_server
-        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
 target_link_libraries(test4_server obsr)
 
 add_executable(test4_client test4_client.cpp)
-target_include_directories(test4_client
-        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
 target_link_libraries(test4_client obsr)

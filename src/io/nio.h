@@ -11,8 +11,6 @@
 
 namespace obsr::io {
 
-// todo: integrate poll into resources where they can tell us which poll type to use and meaning
-
 class nio_runner {
 public:
     using callback = std::function<void(obsr::os::resource& resource, uint32_t flags)>;

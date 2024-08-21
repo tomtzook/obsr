@@ -202,12 +202,6 @@ void server::stop() {
 
 void server::update() {
     std::unique_lock lock(m_mutex);
-    // todo: we will not be able to send all entry changes to all clients
-    //      need to save for later and iterate
-    //      there could also be starvation if there are too many entries
-    //  todo: moving to a "push" methodology will solve this better
-
-    // todo: this iteration does accesses that are not safe!
 
     if (m_io.is_stopped()) {
         // not running even
@@ -220,6 +214,8 @@ void server::update() {
     }
 
     m_storage->act_on_entries([this](const storage::storage_entry& entry)->bool {
+        //  todo: moving to a "push" methodology will solve this better
+        // todo: this iteration does accesses that are not safe!
         auto id = entry.get_net_id();
         auto path = entry.get_path();
 

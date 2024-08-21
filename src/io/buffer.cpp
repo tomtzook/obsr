@@ -30,11 +30,15 @@ bool readonly_buffer::read(uint8_t* buffer, size_t size) {
     return true;
 }
 
-linear_buffer::linear_buffer()
-    : m_buffer()
+linear_buffer::linear_buffer(size_t size)
+    : m_buffer(new uint8_t[size])
     , m_write_pos(0)
-    , m_size(sizeof(m_buffer))
+    , m_size(size)
 {}
+
+linear_buffer::~linear_buffer() {
+    delete[] m_buffer;
+}
 
 const uint8_t* linear_buffer::data() const {
     return m_buffer;

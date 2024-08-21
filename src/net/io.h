@@ -108,7 +108,7 @@ private:
     obsr::handle m_resource_handle;
 
     std::shared_ptr<obsr::os::socket> m_socket;
-    std::mutex m_mutex; // todo: seperate mutex for read/write maybe
+    std::mutex m_mutex;
 
     reader m_reader;
     obsr::io::buffer m_write_buffer;
@@ -152,7 +152,7 @@ private:
         server_io& m_io;
         std::unique_lock<std::mutex> m_lock;
     };
-    struct client_data : public socket_io::listener { // todo: hide these inner classes??
+    struct client_data : public socket_io::listener {
     public:
         client_data(server_io& parent, client_id id);
 
@@ -181,7 +181,7 @@ private:
     obsr::handle m_resource_handle;
 
     std::shared_ptr<obsr::os::server_socket> m_socket;
-    std::mutex m_mutex; // todo: seperate mutex for read/write maybe
+    std::mutex m_mutex;
 
     std::unordered_map<uint32_t, std::unique_ptr<client_data>> m_clients;
     client_id m_next_client_id;

@@ -35,7 +35,8 @@ private:
 
 class linear_buffer : public writable_buffer {
 public:
-    linear_buffer();
+    linear_buffer(size_t size);
+    ~linear_buffer();
 
     const uint8_t* data() const;
     size_t pos() const;
@@ -45,7 +46,7 @@ public:
     bool write(const uint8_t* buffer, size_t size) override;
 
 private:
-    uint8_t m_buffer[1024]; // todo: find something better for this
+    uint8_t* m_buffer;
     size_t m_write_pos;
     size_t m_size;
 };

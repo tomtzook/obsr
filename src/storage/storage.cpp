@@ -97,7 +97,6 @@ entry storage::get_or_create_entry(const std::string_view& path) {
         return entry_handle;
     }
 
-    // todo: better handling
     throw no_such_handle_exception(entry_handle);
 }
 

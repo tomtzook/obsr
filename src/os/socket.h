@@ -7,9 +7,6 @@
 
 namespace obsr::os {
 
-// TODO: SUPPORT NON-BLOCKING
-// TODO: BASE FLAGS WANTED FOR SOCKETS?
-
 enum class sockopt_type : size_t {
     reuse_port,
     keep_alive

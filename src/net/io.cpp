@@ -9,11 +9,6 @@
 
 namespace obsr::net {
 
-// todo: organize better by dividing into smaller more managed units.
-// todo: add logging
-// todo: handle errors better by actually getting error info and passing it forward and such
-
-
 #define LOG_MODULE_CLIENT "socketio"
 #define LOG_MODULE_SERVER "serverio"
 
@@ -55,7 +50,6 @@ bool reader::process_state(read_state current_state, read_data& data) {
                 return try_later();
             }
 
-            // todo: eliminate this middleman
             if (!m_read_buffer.read(buffer, header.message_size)) {
                 return error(read_error::read_failed);
             }
@@ -153,7 +147,7 @@ void socket_io::connect(connection_info info) {
         m_socket->connect(info.ip, info.port);
     } catch (const io_exception&) {
         TRACE_DEBUG(LOG_MODULE_CLIENT, "connect failed");
-        stop_internal(lock); // todo: maybe don't close socket
+        stop_internal(lock);
 
         throw;
     }
@@ -164,19 +158,23 @@ void socket_io::connect(connection_info info) {
 bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
     std::unique_lock lock(m_mutex);
 
+    if (size > sizeof(uint32_t)) {
+        return false;
+    }
+
+    if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "write buffer does not have enough space");
+        return false;
+    }
+
     auto index = m_next_message_index++;
     message_header header {
             message_header::message_magic,
             message_header::current_version,
             index,
             type,
-            static_cast<uint32_t>(size) //todo: return error if size too great
+            static_cast<uint32_t>(size)
     };
-
-    if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
-        TRACE_DEBUG(LOG_MODULE_CLIENT, "write buffer does not have enough space");
-        return false;
-    }
 
     if (!m_write_buffer.write(reinterpret_cast<uint8_t*>(&header), sizeof(header))) {
         TRACE_DEBUG(LOG_MODULE_CLIENT, "write failed to buffer at start");
@@ -267,7 +265,6 @@ void socket_io::update_handler::on_read_ready() {
             m_io.stop_internal(m_lock);
         }
 
-        // todo: is calling this here too heavy on the poll thread?
         process_new_data();
     } else {
         // we shouldn't be here
@@ -426,7 +423,7 @@ bool server_io::write_to(client_id id, uint8_t type, const uint8_t* buffer, size
 
     auto it = m_clients.find(id);
     if (it == m_clients.end()) {
-        throw illegal_state_exception(); // todo: throw no such server exception
+        throw illegal_state_exception();
     }
 
     return it->second->write(type, buffer, size);

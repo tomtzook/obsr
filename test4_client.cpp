@@ -17,17 +17,25 @@ int main() {
         printf("EVENT notification: type=%d, path=%s\n",
                static_cast<uint8_t>(event.type),
                event.path.c_str());
+        switch (event.type) {
+            case obsr::event_type::created:
+                printf("\t path created\n");
+                break;
+            case obsr::event_type::deleted:
+                printf("\t path deleted\n");
+                break;
+            case obsr::event_type::value_change:
+                printf("\t value changed, val=%ld\n", event.value.value.integer64);
+                break;
+            case obsr::event_type::cleared:
+                printf("\t value cleared\n");
+                break;
+        }
     });
 
     auto start = obsr::time_now();
     auto now = start;
-    while (now - start < std::chrono::milliseconds(10000)) {
-        obsr::value value{};
-        obsr::get_value(entry2, value);
-        if (value.type != obsr::value_type::empty) {
-            printf("Val: %ld\n", value.value.integer64);
-        }
-
+    while (now - start < std::chrono::milliseconds(30000)) {
         sleep(1);
         now = obsr::time_now();
     }

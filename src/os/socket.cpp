@@ -105,7 +105,7 @@ void base_socket::handle_call_error(error_code_t code) {
         code = get_call_error();
     }
 
-    if (code == ECONNRESET) { // TODO: maybe close not needed
+    if (code == ECONNRESET) {
         close();
     }
 
@@ -219,7 +219,7 @@ size_t socket::read(uint8_t* buffer, size_t buffer_size) {
 
     const auto result = ::read(fd(), buffer, buffer_size);
     if (result == 0) {
-        throw eof_exception(); // TODO: MAYBE NOT TREAT THIS AS EXCEPTION
+        throw eof_exception();
     } else if (result < 0) {
         handle_call_error();
     }
