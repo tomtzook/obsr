@@ -109,7 +109,9 @@ void listener_storage::thread_main() {
             break;
         }
 
-        for (auto& event : m_pending_events) {
+        while (!m_pending_events.empty()) {
+            auto& event = m_pending_events.front();
+
             for (auto [handle, listener] : m_listeners) {
                 lock.unlock();
                 try {
@@ -117,9 +119,9 @@ void listener_storage::thread_main() {
                 } catch (...) {}
                 lock.lock();
             }
-        }
-        m_pending_events.clear();
 
+            m_pending_events.pop_front();
+        }
     }
 }
 

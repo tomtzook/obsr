@@ -136,9 +136,8 @@ void nio_runner::thread_main() {
 }
 
 void nio_runner::handle_updates() {
-    auto it = m_updated.begin();
-    while (it != m_updated.end()) {
-        auto [handle, type] = *it;
+    while (!m_updated.empty()) {
+        auto [handle, type] = m_updated.front();
 
         switch (type) {
             case update_type::added: {
@@ -161,7 +160,7 @@ void nio_runner::handle_updates() {
             }
         }
 
-        it = m_updated.erase(it);
+        m_updated.pop_front();
     }
 }
 
