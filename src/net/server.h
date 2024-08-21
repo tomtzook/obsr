@@ -27,7 +27,8 @@ public:
     };
 
     server_client(server_io::client_id id, server_io& io);
-    ~server_client();
+
+    server_io::client_id get_id() const;
 
     state get_state() const;
     void set_state(state state);

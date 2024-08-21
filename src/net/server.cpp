@@ -19,8 +19,8 @@ server_client::server_client(server_io::client_id id, server_io& io)
     , m_published_entries()
 {}
 
-server_client::~server_client() {
-    m_outgoing.clear();
+server_io::client_id server_client::get_id() const {
+    return m_id;
 }
 
 server_client::state server_client::get_state() const {
@@ -36,6 +36,7 @@ bool server_client::is_known(storage::entry_id id) const {
 }
 
 void server_client::publish(storage::entry_id id, std::string_view name) {
+    TRACE_DEBUG(LOG_MODULE, "publishing entry for server client %d, entry=%d", m_id, id);
     out_message message {
         .type = message_type::entry_id_assign,
         .id = id,
@@ -289,10 +290,10 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
     m_parser.process();
 
     if (m_parser.is_errored()) {
-        TRACE_DEBUG(LOG_MODULE, "failed to parse incoming data, parser error=%d", m_parser.error_code());
+        TRACE_ERROR(LOG_MODULE, "failed to parse incoming data, parser error=%d", m_parser.error_code());
         return;
     } else if (!m_parser.is_finished()) {
-        TRACE_DEBUG(LOG_MODULE, "failed to parse incoming data, parser did not finish");
+        TRACE_ERROR(LOG_MODULE, "failed to parse incoming data, parser did not finish");
         return;
     }
 
@@ -389,6 +390,8 @@ void server::handle_do_handshake_for_client(server_client* client) {
 
     client->enqueue({.type = message_type::handshake_finished});
     client->set_state(server_client::state::in_use);
+
+    TRACE_INFO(LOG_MODULE, "finished writing handshake data to server client %d", client->get_id());
 }
 
 }

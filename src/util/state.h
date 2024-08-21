@@ -44,8 +44,9 @@ public:
                 break;
             case overall_state::error:
             case overall_state::end:
-            default:
                 return;
+            default:
+                break;
         }
 
         while (process_once());

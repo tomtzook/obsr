@@ -10,6 +10,8 @@ namespace obsr::net {
 
 #define LOG_MODULE "client"
 
+static constexpr auto connect_retry_time = std::chrono::milliseconds(1000);
+
 client::client(const std::shared_ptr<io::nio_runner>& nio_runner)
     : m_state(state::idle)
     , m_mutex()
@@ -18,6 +20,7 @@ client::client(const std::shared_ptr<io::nio_runner>& nio_runner)
     , m_parser()
     , m_writer()
     , m_storage()
+    , m_connect_retry_timer()
 {}
 
 void client::attach_storage(std::shared_ptr<storage::storage> storage) {
@@ -37,7 +40,7 @@ void client::start(connection_info info) {
 
     m_storage->clear_net_ids();
 
-    m_conn_info = std::move(info);
+    m_conn_info = info;
     m_state = state::opening;
 }
 
@@ -48,7 +51,11 @@ void client::stop() {
         throw illegal_state_exception();
     }
 
-    m_io.stop();
+    if (!m_io.is_stopped()) {
+        m_io.stop();
+    }
+
+    m_state = state::idle;
 }
 
 void client::update() {
@@ -63,11 +70,16 @@ void client::update() {
 
     switch (m_state) {
         case state::opening: {
-            // todo: we may want a delay before trying again
-            //  our caller is delayed, but we may want more
+            if (m_connect_retry_timer.is_running() && !m_connect_retry_timer.has_elapsed(connect_retry_time)) {
+                break;
+            }
+
             if (open_socket_and_start_connection()) {
                 // successful
+                m_connect_retry_timer.stop();
                 m_state = state::connecting;
+            } else {
+                m_connect_retry_timer.start();
             }
 
             break;
@@ -117,10 +129,10 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
     m_parser.process();
 
     if (m_parser.is_errored()) {
-        TRACE_DEBUG(LOG_MODULE, "failed to parse incoming data, parser error=%d", m_parser.error_code());
+        TRACE_ERROR(LOG_MODULE, "failed to parse incoming data, parser error=%d", m_parser.error_code());
         return;
     } else if (!m_parser.is_finished()) {
-        TRACE_DEBUG(LOG_MODULE, "failed to parse incoming data, parser did not finish");
+        TRACE_ERROR(LOG_MODULE, "failed to parse incoming data, parser did not finish");
         return;
     }
 

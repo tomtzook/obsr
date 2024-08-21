@@ -35,7 +35,7 @@ bool message_parser::process_state(parse_state current_state, parse_data& data) 
                 return error(error_read_data);
             }
 
-            data.name = std::string(reinterpret_cast<char*>(data.name_buffer));
+            data.name = std::string(reinterpret_cast<char*>(data.name_buffer), size);
 
             return select_next_state(current_state);
         }

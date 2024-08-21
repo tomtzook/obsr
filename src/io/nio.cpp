@@ -161,7 +161,7 @@ void nio_runner::handle_updates() {
             }
         }
 
-        m_updated.erase(it);
+        it = m_updated.erase(it);
     }
 }
 

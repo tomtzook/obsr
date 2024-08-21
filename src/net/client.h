@@ -4,6 +4,7 @@
 #include "net/io.h"
 #include "net/serialize.h"
 #include "net/net.h"
+#include "util/time.h"
 
 namespace obsr::net {
 
@@ -46,6 +47,8 @@ private:
     message_parser m_parser;
     message_writer m_writer;
     std::shared_ptr<storage::storage> m_storage;
+
+    timer m_connect_retry_timer;
 };
 
 }

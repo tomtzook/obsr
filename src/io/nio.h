@@ -4,6 +4,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <deque>
 
 #include "os/io.h"
 #include "util/handles.h"
@@ -61,7 +62,7 @@ private:
     };
 
     handle_table<resource_data, 16> m_handles;
-    std::vector<std::tuple<obsr::handle, update_type>> m_updated;
+    std::deque<std::tuple<obsr::handle, update_type>> m_updated;
 
     obsr::os::selector m_selector;
 
