@@ -34,7 +34,6 @@ public:
 
     void update();
 
-    std::chrono::milliseconds get_time_now() override;
     bool write(uint8_t type, const uint8_t* buffer, size_t size) override;
 
 private:

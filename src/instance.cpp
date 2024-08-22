@@ -1,4 +1,6 @@
 
+#include "internal_except.h"
+
 #include "instance.h"
 
 namespace obsr {
@@ -25,6 +27,10 @@ instance::instance()
 
 instance::~instance() {
     stop_network();
+}
+
+std::chrono::milliseconds instance::time() {
+    return m_clock->now();
 }
 
 object instance::get_root() {
@@ -122,6 +128,10 @@ void instance::delete_listener(listener listener) {
 }
 
 void instance::start_server(uint16_t bind_port) {
+    if (m_net_interface) {
+        throw illegal_state_exception();
+    }
+
     auto server = std::make_shared<net::server>(m_nio_runner, m_clock);
     try {
         configure_net(server);
@@ -135,6 +145,10 @@ void instance::start_server(uint16_t bind_port) {
 }
 
 void instance::start_client(std::string_view address, uint16_t server_port) {
+    if (m_net_interface) {
+        throw illegal_state_exception();
+    }
+
     auto client = std::make_shared<net::client>(m_nio_runner, m_clock);
     try {
         configure_net(client);

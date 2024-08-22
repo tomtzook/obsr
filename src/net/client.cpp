@@ -24,7 +24,6 @@ client::client(const std::shared_ptr<io::nio_runner>& nio_runner, const std::sha
     , m_storage()
     , m_connect_retry_timer()
     , m_clock_sync_timer()
-    , m_clock_sync_data()
 {}
 
 void client::attach_storage(std::shared_ptr<storage::storage> storage) {
@@ -75,7 +74,8 @@ void client::update() {
 
     if (m_clock_sync_timer.is_running() && m_clock_sync_timer.has_elapsed(server_sync_time)) {
         TRACE_DEBUG(LOG_MODULE, "requesting time sync from server");
-        m_message_queue.enqueue(out_message::time_sync_request(), message_queue::flag_immediate);
+        const auto now = m_clock->now();
+        m_message_queue.enqueue(out_message::time_sync_request(now), message_queue::flag_immediate);
         m_clock_sync_timer.stop();
     }
 
@@ -173,9 +173,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
             m_clock_sync_timer.start();
             break;
         case message_type::time_sync_response: {
-            m_clock_sync_data.remote_start = parse_data.start_time;
-            m_clock_sync_data.remote_end = parse_data.end_time;
-            m_clock->sync(m_clock_sync_data);
+            m_clock->sync(parse_data.time_value, parse_data.time);
 
             const auto time = m_clock->now();
             TRACE_DEBUG(LOG_MODULE, "received time sync response from server: %lu", time.count());
@@ -201,7 +199,8 @@ void client::on_connected() {
     TRACE_DEBUG(LOG_MODULE, "connected to server, starting first time sync");
     m_message_queue.clear();
 
-    m_message_queue.enqueue(out_message::time_sync_request(), message_queue::flag_immediate);
+    const auto now = m_clock->now();
+    m_message_queue.enqueue(out_message::time_sync_request(now), message_queue::flag_immediate);
     m_state = state::in_handshake_time_sync;
 }
 
@@ -212,10 +211,6 @@ void client::on_close() {
     m_clock_sync_timer.stop();
 
     m_state = state::opening;
-}
-
-std::chrono::milliseconds client::get_time_now() {
-    return m_clock->now();
 }
 
 bool client::write(uint8_t type, const uint8_t* buffer, size_t size) {

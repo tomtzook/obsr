@@ -7,15 +7,9 @@ namespace obsr {
 
 class clock {
 public:
-    struct sync_data {
-        std::chrono::milliseconds us_start;
-        std::chrono::milliseconds remote_start;
-        std::chrono::milliseconds remote_end;
-    };
-
     clock();
 
-    void sync(const sync_data& data);
+    void sync(std::chrono::milliseconds local_time, std::chrono::milliseconds remote_time);
 
     std::chrono::milliseconds now();
 

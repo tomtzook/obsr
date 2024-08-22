@@ -1,13 +1,14 @@
 
-#include "obsr_internal.h"
 #include "instance.h"
 #include "obsr.h"
-
 
 namespace obsr {
 
 obsr::instance s_instance;
 
+std::chrono::milliseconds time() {
+    return s_instance.time();
+}
 
 object get_root() {
     return s_instance.get_root();

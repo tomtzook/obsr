@@ -27,8 +27,7 @@ enum class parse_state {
     read_type,
     read_value,
     read_time,
-    read_start_time,
-    read_end_time
+    read_time_value
 };
 
 enum parse_error {
@@ -46,8 +45,7 @@ struct parse_data {
     uint8_t name_buffer[1024];
 
     std::chrono::milliseconds time;
-    std::chrono::milliseconds start_time;
-    std::chrono::milliseconds end_time;
+    std::chrono::milliseconds time_value;
 };
 
 struct out_message {
@@ -98,13 +96,15 @@ struct out_message {
         out_message message{.type = message_type::handshake_finished};
         return message;
     }
-    static inline out_message time_sync_request() {
+    static inline out_message time_sync_request(std::chrono::milliseconds update_time) {
         out_message message{.type = message_type::time_sync_request};
+        message.update_time = update_time;
         return message;
     }
-    static inline out_message time_sync_response(std::chrono::milliseconds time) {
+    static inline out_message time_sync_response(std::chrono::milliseconds update_time, std::chrono::milliseconds time) {
         out_message message{.type = message_type::time_sync_response};
         message.time = time;
+        message.update_time = update_time;
         return message;
     }
 };
@@ -139,7 +139,7 @@ public:
     bool entry_updated(std::chrono::milliseconds time, storage::entry_id id, const value_raw& value);
     bool entry_deleted(std::chrono::milliseconds time, storage::entry_id id);
     bool time_sync_request(std::chrono::milliseconds start_time);
-    bool time_sync_response(std::chrono::milliseconds start_time, std::chrono::milliseconds end_time);
+    bool time_sync_response(std::chrono::milliseconds client_time, std::chrono::milliseconds server_time);
 private:
     io::linear_buffer m_buffer;
 };
@@ -148,8 +148,6 @@ class message_queue {
 public:
     class destination {
     public:
-        virtual std::chrono::milliseconds get_time_now() = 0;
-
         virtual bool write(uint8_t type, const uint8_t* buffer, size_t size) = 0;
     };
     enum {

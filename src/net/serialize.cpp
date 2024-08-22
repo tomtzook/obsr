@@ -66,22 +66,13 @@ bool message_parser::process_state(parse_state current_state, parse_data& data) 
             data.time = std::chrono::milliseconds(value);
             return select_next_state(current_state);
         }
-        case parse_state::read_start_time: {
+        case parse_state::read_time_value: {
             uint64_t value;
             if (!io::read64(m_buffer, value)) {
                 return error(error_read_data);
             }
 
-            data.start_time = std::chrono::milliseconds(value);
-            return select_next_state(current_state);
-        }
-        case parse_state::read_end_time: {
-            uint64_t value;
-            if (!io::read64(m_buffer, value)) {
-                return error(error_read_data);
-            }
-
-            data.end_time = std::chrono::milliseconds(value);
+            data.time_value = std::chrono::milliseconds(value);
             return select_next_state(current_state);
         }
         default:
@@ -102,9 +93,8 @@ bool message_parser::select_next_state(parse_state current_state) {
                 case message_type::handshake_finished:
                     return finished();
                 case message_type::time_sync_request:
-                    return move_to_state(parse_state::read_time);
                 case message_type::time_sync_response:
-                    return move_to_state(parse_state::read_start_time);
+                    return move_to_state(parse_state::read_time);
                 default:
                     return error(error_unknown_type);
             }
@@ -158,19 +148,13 @@ bool message_parser::select_next_state(parse_state current_state) {
                 case message_type::entry_delete:
                 case message_type::time_sync_request:
                     return finished();
-                default:
-                    return error(error_unknown_type);
-            }
-        }
-        case parse_state::read_start_time: {
-            switch (m_type) {
                 case message_type::time_sync_response:
-                    return move_to_state(parse_state::read_end_time);
+                    return move_to_state(parse_state::read_time_value);
                 default:
                     return error(error_unknown_type);
             }
         }
-        case parse_state::read_end_time: {
+        case parse_state::read_time_value: {
             switch (m_type) {
                 case message_type::time_sync_response:
                     return finished();
@@ -275,12 +259,12 @@ bool message_serializer::time_sync_request(std::chrono::milliseconds start_time)
     return true;
 }
 
-bool message_serializer::time_sync_response(std::chrono::milliseconds start_time, std::chrono::milliseconds end_time) {
-    if (!io::write64(m_buffer, static_cast<uint64_t>(start_time.count()))) {
+bool message_serializer::time_sync_response(std::chrono::milliseconds client_time, std::chrono::milliseconds server_time) {
+    if (!io::write64(m_buffer, static_cast<uint64_t>(server_time.count()))) {
         return false;
     }
 
-    if (!io::write64(m_buffer, static_cast<uint64_t>(end_time.count()))) {
+    if (!io::write64(m_buffer, static_cast<uint64_t>(client_time.count()))) {
         return false;
     }
 
@@ -416,8 +400,7 @@ bool message_queue::write_entry_id_assigned(const out_message& message) {
 bool message_queue::write_time_sync_request(const out_message& message) {
     m_serializer.reset();
 
-    const auto time = m_destination->get_time_now();
-    if (!m_serializer.time_sync_request(time)) {
+    if (!m_serializer.time_sync_request(message.update_time)) {
         return false;
     }
 
@@ -434,8 +417,7 @@ bool message_queue::write_time_sync_request(const out_message& message) {
 bool message_queue::write_time_sync_response(const out_message& message) {
     m_serializer.reset();
 
-    const auto time = m_destination->get_time_now();
-    if (!m_serializer.time_sync_response(message.time, time)) {
+    if (!m_serializer.time_sync_response(message.time, message.update_time)) {
         return false;
     }
 

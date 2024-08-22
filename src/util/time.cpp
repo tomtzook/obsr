@@ -1,19 +1,26 @@
 
-#include "internal_except.h"
-
 #include "time.h" // NOLINT(*-deprecated-headers)
 
+#include "internal_except.h"
+#include "debug.h"
+
 namespace obsr {
+
+#define LOG_MODULE "time"
 
 clock::clock()
     : m_offset(std::chrono::milliseconds(0))
 {}
 
-void clock::sync(const sync_data& data) {
+void clock::sync(std::chrono::milliseconds local_time, std::chrono::milliseconds remote_time) {
     const auto now = this->now();
-    const auto offset = ((data.remote_start - data.us_start) + (data.remote_end - now)) / 2;
+    const auto rtt2 = (now - local_time) / 2;
 
+    const auto offset = remote_time + rtt2 - now;
     m_offset.store(offset);
+
+    TRACE_INFO(LOG_MODULE, "new clock offset: offset=%lu, old time=%lu, new time=%lu",
+                now, offset, this->now());
 }
 
 std::chrono::milliseconds clock::now() {

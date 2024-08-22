@@ -26,7 +26,6 @@ public:
     void on_connected() override;
     void on_close() override;
 
-    std::chrono::milliseconds get_time_now() override;
     bool write(uint8_t type, const uint8_t* buffer, size_t size) override;
 
 private:
@@ -55,7 +54,6 @@ private:
 
     timer m_connect_retry_timer;
     timer m_clock_sync_timer;
-    clock::sync_data m_clock_sync_data;
 };
 
 }

@@ -38,6 +38,7 @@ int main() {
                         printf("other\n");
                         break;
                 }
+                printf("\t now time=%ld\n", obsr::time().count());
                 break;
             }
         }

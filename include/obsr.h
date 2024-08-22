@@ -7,6 +7,8 @@
 
 namespace obsr {
 
+std::chrono::milliseconds time();
+
 object get_root();
 object get_child(object obj, std::string_view name);
 entry get_entry(object obj, std::string_view name);

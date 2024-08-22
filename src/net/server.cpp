@@ -55,14 +55,9 @@ void server_client::update() {
     m_queue.process();
 }
 
-std::chrono::milliseconds server_client::get_time_now() {
-    return m_clock->now();
-}
-
 bool server_client::write(uint8_t type, const uint8_t* buffer, size_t size) {
     return m_io.write_to(m_id, type, buffer, size);
 }
-
 
 server::server(const std::shared_ptr<io::nio_runner>& nio_runner, const std::shared_ptr<clock>& clock)
     : m_clock(clock)
@@ -227,7 +222,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
             break;
         case message_type::time_sync_request: {
             const auto now = m_clock->now();
-            enqueue_message_for_client(id, out_message::time_sync_response(now), message_queue::flag_immediate);
+            enqueue_message_for_client(id, out_message::time_sync_response(now, parse_data.time), message_queue::flag_immediate);
             break;
         }
         case message_type::handshake_ready:
