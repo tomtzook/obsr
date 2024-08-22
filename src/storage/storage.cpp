@@ -167,16 +167,23 @@ void storage::clear_entry(entry entry) {
     set_entry_internal(entry, {}, true);
 }
 
-void storage::act_on_entries(const entry_action& action, uint16_t required_flags) {
+void storage::act_on_dirty_entries(const entry_action& action) {
     std::unique_lock guard(m_mutex);
 
+    entry_info info;
     for (auto [handle, data] : m_entries) {
-        if (required_flags != 0 && !data.has_flags(required_flags)) {
+        if (!data.has_flags(flag_internal_dirty)) {
             continue;
         }
 
+        // todo: we keep making copies of value. find a way to avoid that
+        info.path = data.get_path();
+        info.last_update_timestamp = data.get_last_update_timestamp();
+        info.net_id = data.get_net_id();
+        info.flags = data.get_flags();
+
         guard.unlock();
-        const auto resume = action(data);
+        const auto resume = action(info);
         guard.lock();
 
         if (resume) {

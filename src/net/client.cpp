@@ -241,39 +241,34 @@ bool client::open_socket_and_start_connection() {
 }
 
 void client::process_storage() {
-    m_storage->act_on_entries([this](const storage::storage_entry& entry) -> bool {
-        const auto id = entry.get_net_id();
+    m_storage->act_on_dirty_entries([this](const storage::entry_info& entry) -> bool {
+        const auto id = entry.net_id;
 
         if (id == storage::id_not_assigned) {
-            obsr::value value{};
-            entry.get_value(value);
-
             m_message_queue.enqueue(
-                    out_message::entry_create(m_clock->now(), id, entry.get_path(), value));
+                    out_message::entry_create(m_clock->now(), id, entry.path, entry.value));
 
             return true;
         }
 
-        if (entry.has_flags(storage::flag_internal_deleted)) {
+        if ((entry.flags & storage::flag_internal_deleted) != 0) {
             // entry was deleted
             m_message_queue.enqueue(out_message::entry_deleted(
-                    entry.get_last_update_timestamp(),
+                    entry.last_update_timestamp,
                     id
-                    ));
+            ));
         } else {
             // entry value was updated
-            obsr::value value{};
-            entry.get_value(value);
-
             m_message_queue.enqueue(out_message::entry_update(
-                    entry.get_last_update_timestamp(),
-                    id, value
-                    ));
+                    entry.last_update_timestamp,
+                    id,
+                    entry.value
+            ));
         }
 
         // we want to mark un-dirty and resume if we succeeded
         return true;
-    }, storage::flag_internal_dirty);
+    });
 }
 
 }

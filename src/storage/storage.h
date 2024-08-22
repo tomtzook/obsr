@@ -68,9 +68,17 @@ private:
     uint16_t m_flags;
 };
 
+struct entry_info {
+    std::string_view path;
+    obsr::value value;
+    std::chrono::milliseconds last_update_timestamp;
+    entry_id net_id;
+    uint16_t flags;
+};
+
 class storage {
 public:
-    using entry_action = std::function<bool(storage_entry&)>;
+    using entry_action = std::function<bool(const entry_info&)>;
 
     explicit storage(listener_storage_ref& listener_storage, const std::shared_ptr<clock>& clock);
 
@@ -83,7 +91,7 @@ public:
     void set_entry_value(entry entry, const value& value);
     void clear_entry(entry entry);
 
-    void act_on_entries(const entry_action& action, uint16_t required_flags = 0);
+    void act_on_dirty_entries(const entry_action& action);
     void clear_net_ids();
 
     listener listen(entry entry, const listener_callback& callback);

@@ -111,33 +111,31 @@ void server::update() {
         return;
     }
 
-    m_storage->act_on_entries([this](const storage::storage_entry& entry)->bool {
+    m_storage->act_on_dirty_entries([this](const storage::entry_info& entry) -> bool {
         // todo: moving to a "push" methodology will solve this better
-        // todo: this iteration does accesses that are not safe!
-        auto id = entry.get_net_id();
-        auto path = entry.get_path();
+        auto id = entry.net_id;
 
         if (id == storage::id_not_assigned) {
-            id = assign_id_to_entry(path);
+            id = assign_id_to_entry(entry.path);
         }
 
         out_message out_message{.type = message_type::no_type};
-        if (entry.has_flags(storage::flag_internal_deleted)) {
+        if ((entry.flags & storage::flag_internal_deleted) != 0) {
             // entry deleted
             out_message.id = id;
-            out_message.update_time = entry.get_last_update_timestamp();
+            out_message.update_time = entry.last_update_timestamp;
             out_message.update_time = m_clock->now();
         } else {
             // entry updated
             out_message.id = id;
             out_message.type = message_type::entry_update;
-            out_message.update_time = entry.get_last_update_timestamp();
-            entry.get_value(out_message.value);
+            out_message.update_time = entry.last_update_timestamp;
+            out_message.value = entry.value;
         }
 
-        for (auto& [client_id, client] : m_clients) {
+        for (auto& [client_id, client]: m_clients) {
             if (!client->is_known(id)) {
-                client->publish(id, path);
+                client->publish(id, entry.path);
             }
 
             if (out_message.type != message_type::no_type) {
@@ -146,7 +144,7 @@ void server::update() {
         }
 
         return true;
-    }, storage::flag_internal_dirty);
+    });
 
     for (auto& [client_id, client] : m_clients) {
         client->update();
