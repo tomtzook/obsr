@@ -84,13 +84,13 @@ uint32_t instance::probe(entry entry) {
     return m_storage->probe(entry);
 }
 
-void instance::get_value(entry entry, value& value) {
+void instance::get_value(entry entry, obsr::value& value) {
     std::unique_lock guard(m_mutex);
 
     m_storage->get_entry_value(entry, value);
 }
 
-void instance::set_value(entry entry, const value& value) {
+void instance::set_value(entry entry, const obsr::value& value) {
     std::unique_lock guard(m_mutex);
 
     m_storage->set_entry_value(entry, value);

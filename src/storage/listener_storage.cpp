@@ -17,10 +17,10 @@ bool listener_data::in_path(const std::string_view& path) const {
 }
 
 void listener_data::invoke(const event& event) const {
-    if (event.timestamp < m_creation_timestamp) {
+    if (event.get_timestamp() < m_creation_timestamp) {
         return;
     }
-    if (event.path.find(m_prefix) < 0) {
+    if (event.get_path().find(m_prefix) < 0) {
         return;
     }
 
@@ -71,22 +71,12 @@ void listener_storage::destroy_listeners(const std::string_view& path) {
 }
 
 void listener_storage::notify(event_type type, const std::string_view& path) {
-    obsr::event event;
-    event.timestamp = time_now();
-    event.type = type;
-    event.path = path;
-
+    obsr::event event(time_now(), type, path);
     notify(event);
 }
 
 void listener_storage::notify(event_type type, const std::string_view& path, const value& old_value, const value& new_value) {
-    obsr::event event;
-    event.timestamp = time_now();
-    event.type = type;
-    event.path = path;
-    event.old_value = old_value;
-    event.value = new_value;
-
+    obsr::event event(time_now(), type, path, old_value, new_value);
     notify(event);
 }
 

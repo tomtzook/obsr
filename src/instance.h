@@ -33,8 +33,8 @@ public:
     void delete_entry(entry entry);
 
     uint32_t probe(entry entry);
-    void get_value(entry entry, value& value);
-    void set_value(entry entry, const value& value);
+    void get_value(entry entry, obsr::value& value);
+    void set_value(entry entry, const obsr::value& value);
     void clear_value(entry entry);
 
     listener listen_object(object obj, const listener_callback& callback);

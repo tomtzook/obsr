@@ -70,7 +70,7 @@ private:
 
 struct entry_info {
     std::string_view path;
-    obsr::value value;
+    obsr::value_raw value;
     std::chrono::milliseconds last_update_timestamp;
     entry_id net_id;
     uint16_t flags;
@@ -87,8 +87,8 @@ public:
     void delete_entries(const std::string_view& path);
 
     uint32_t probe(entry entry);
-    void get_entry_value(entry entry, value& value);
-    void set_entry_value(entry entry, const value& value);
+    void get_entry_value(entry entry, obsr::value& value);
+    void set_entry_value(entry entry, const obsr::value& value);
     void clear_entry(entry entry);
 
     void act_on_dirty_entries(const entry_action& action);
@@ -99,14 +99,14 @@ public:
     void remove_listener(listener listener);
 
     // should be used from network code
-    bool get_entry_value_from_id(entry_id id, obsr::value& value);
+    bool get_entry_value_from_id(entry_id id, obsr::value_raw& value);
 
     void on_entry_created(entry_id id,
                           std::string_view path,
-                          const value& value,
+                          const value_raw& value,
                           std::chrono::milliseconds timestamp);
     void on_entry_updated(entry_id id,
-                          const value& value,
+                          const value_raw& value,
                           std::chrono::milliseconds timestamp);
     void on_entry_deleted(entry_id id,
                           std::chrono::milliseconds timestamp);

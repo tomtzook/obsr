@@ -130,7 +130,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
     switch (type) {
         case message_type::entry_create:
             TRACE_DEBUG(LOG_MODULE, "ENTRY CREATE from server: id=%d, name=%s", parse_data.id, parse_data.name.c_str());
-            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value&, std::chrono::milliseconds>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value_raw&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_created,
@@ -141,7 +141,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
             break;
         case message_type::entry_update:
             TRACE_DEBUG(LOG_MODULE, "ENTRY UPDATE from server: id=%d", parse_data.id);
-            invoke_shared_ptr<storage::storage, storage::entry_id, const value&, std::chrono::milliseconds>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, const value_raw&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_updated,
@@ -258,7 +258,7 @@ void client::process_storage() {
                     id
             ));
         } else {
-            // entry value was updated
+            // entry value_raw was updated
             m_message_queue.enqueue(out_message::entry_update(
                     entry.last_update_timestamp,
                     id,

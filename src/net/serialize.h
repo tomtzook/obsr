@@ -41,7 +41,7 @@ struct parse_data {
     storage::entry_id id;
     std::string name;
     value_type type;
-    obsr::value value;
+    obsr::value_raw value;
 
     uint8_t name_buffer[1024];
 
@@ -55,11 +55,11 @@ struct out_message {
 
     storage::entry_id id;
     std::string name;
-    obsr::value value;
+    obsr::value_raw value;
     std::chrono::milliseconds time;
     std::chrono::milliseconds update_time;
 
-    static inline out_message entry_create(std::chrono::milliseconds update_time, storage::entry_id id, std::string_view name, const obsr::value& value) {
+    static inline out_message entry_create(std::chrono::milliseconds update_time, storage::entry_id id, std::string_view name, const obsr::value_raw& value) {
         out_message message{.type = message_type::entry_create};
         message.id = id;
         message.name = name;
@@ -68,7 +68,7 @@ struct out_message {
 
         return message;
     }
-    static inline out_message entry_update(std::chrono::milliseconds update_time, storage::entry_id id, const obsr::value& value) {
+    static inline out_message entry_update(std::chrono::milliseconds update_time, storage::entry_id id, const obsr::value_raw& value) {
         out_message message{.type = message_type::entry_update};
         message.id = id;
         message.value = value;
@@ -135,8 +135,8 @@ public:
     void reset();
 
     bool entry_id_assign(storage::entry_id id, std::string_view name);
-    bool entry_created(std::chrono::milliseconds time, storage::entry_id id, std::string_view name, const value& value);
-    bool entry_updated(std::chrono::milliseconds time, storage::entry_id id, const value& value);
+    bool entry_created(std::chrono::milliseconds time, storage::entry_id id, std::string_view name, const value_raw& value);
+    bool entry_updated(std::chrono::milliseconds time, storage::entry_id id, const value_raw& value);
     bool entry_deleted(std::chrono::milliseconds time, storage::entry_id id);
     bool time_sync_request(std::chrono::milliseconds start_time);
     bool time_sync_response(std::chrono::milliseconds start_time, std::chrono::milliseconds end_time);
@@ -159,6 +159,8 @@ public:
     explicit message_queue(destination* destination);
 
     // todo: optimize by only writing the latest message for an entry (not including publish)
+    // todo: try and switch to sending only the latest state instead of queueing every change
+    //      only relevant if we can't keep up with changes
     // todo: entry create should be a client only message without id to report new entry needing id assignment
     void enqueue(const out_message& message, uint8_t flags = 0);
     void clear();

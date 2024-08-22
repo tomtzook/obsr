@@ -211,7 +211,7 @@ bool message_serializer::entry_id_assign(storage::entry_id id, std::string_view 
     return true;
 }
 
-bool message_serializer::entry_created(std::chrono::milliseconds time, storage::entry_id id, std::string_view name, const value& value) {
+bool message_serializer::entry_created(std::chrono::milliseconds time, storage::entry_id id, std::string_view name, const value_raw& value) {
     if (!io::write16(m_buffer, id)) {
         return false;
     }
@@ -235,7 +235,7 @@ bool message_serializer::entry_created(std::chrono::milliseconds time, storage::
     return true;
 }
 
-bool message_serializer::entry_updated(std::chrono::milliseconds time, storage::entry_id id, const value& value) {
+bool message_serializer::entry_updated(std::chrono::milliseconds time, storage::entry_id id, const value_raw& value) {
     if (!io::write16(m_buffer, id)) {
         return false;
     }

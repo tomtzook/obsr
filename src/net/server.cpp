@@ -197,7 +197,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
             }
 
             message_to_others = out_message::entry_create(parse_data.time, parse_data.id, parse_data.name, parse_data.value);
-            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value&, std::chrono::milliseconds>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value_raw&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_created,
@@ -208,7 +208,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
             break;
         case message_type::entry_update:
             message_to_others = out_message::entry_update(parse_data.time, parse_data.id, parse_data.value);
-            invoke_shared_ptr<storage::storage, storage::entry_id, const value&, std::chrono::milliseconds>(
+            invoke_shared_ptr<storage::storage, storage::entry_id, const value_raw&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_updated,
@@ -288,7 +288,7 @@ void server::handle_do_handshake_for_client(server_io::client_id id) {
     auto& client = it->second;
 
     const auto now = m_clock->now();
-    obsr::value value{};
+    obsr::value_raw value{};
     for (auto& [entry_id, name] : m_id_assignments) {
         if (client->is_known(entry_id)) {
             continue;

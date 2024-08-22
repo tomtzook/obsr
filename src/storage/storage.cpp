@@ -13,7 +13,7 @@ namespace obsr::storage {
 storage_entry::storage_entry(entry handle, const std::string_view& path)
     : m_handle(handle)
     , m_path(path)
-    , m_value()
+    , m_value(value::make())
     , m_net_id(id_not_assigned)
     , m_flags(0)
     , m_last_update_timestamp(0) {
@@ -68,8 +68,8 @@ void storage_entry::get_value(value& value) const {
 }
 
 value storage_entry::set_value(const value& value) {
-    const auto old_type = m_value.type;
-    const auto new_type = value.type;
+    const auto old_type = m_value.get_type();
+    const auto new_type = value.get_type();
     if (old_type != value_type::empty && old_type != new_type) {
         throw entry_type_mismatch_exception(m_handle, old_type, new_type);
     }
@@ -82,7 +82,7 @@ value storage_entry::set_value(const value& value) {
 
 value storage_entry::clear() {
     auto old = m_value;
-    m_value = value{};
+    m_value = value::make();
 
     return old;
 }
@@ -144,7 +144,7 @@ uint32_t storage::probe(entry entry) {
     return data->get_flags() & ~flag_internal_mask;
 }
 
-void storage::get_entry_value(entry entry, value& value) {
+void storage::get_entry_value(entry entry, obsr::value& value) {
     std::unique_lock guard(m_mutex);
 
     auto data = m_entries[entry];
@@ -155,7 +155,7 @@ void storage::get_entry_value(entry entry, value& value) {
     data->get_value(value);
 }
 
-void storage::set_entry_value(entry entry, const value& value) {
+void storage::set_entry_value(entry entry, const obsr::value& value) {
     std::unique_lock guard(m_mutex);
 
     set_entry_internal(entry, value);
@@ -164,7 +164,7 @@ void storage::set_entry_value(entry entry, const value& value) {
 void storage::clear_entry(entry entry) {
     std::unique_lock guard(m_mutex);
 
-    set_entry_internal(entry, {}, true);
+    set_entry_internal(entry, value::make(), true);
 }
 
 void storage::act_on_dirty_entries(const entry_action& action) {
@@ -176,11 +176,15 @@ void storage::act_on_dirty_entries(const entry_action& action) {
             continue;
         }
 
-        // todo: we keep making copies of value. find a way to avoid that
+        // todo: we keep making copies of value_raw. find a way to avoid that
         info.path = data.get_path();
         info.last_update_timestamp = data.get_last_update_timestamp();
         info.net_id = data.get_net_id();
         info.flags = data.get_flags();
+
+        auto value = value::make();
+        data.get_value(value);
+        info.value = value.get_raw();
 
         guard.unlock();
         const auto resume = action(info);
@@ -222,7 +226,7 @@ void storage::remove_listener(listener listener) {
     m_listener_storage->destroy_listener(listener);
 }
 
-bool storage::get_entry_value_from_id(entry_id id, obsr::value& value) {
+bool storage::get_entry_value_from_id(entry_id id, obsr::value_raw& value) {
     std::unique_lock guard(m_mutex);
 
     auto it = m_ids.find(id);
@@ -241,13 +245,16 @@ bool storage::get_entry_value_from_id(entry_id id, obsr::value& value) {
         return false;
     }
 
-    data->get_value(value);
+    obsr::value base_value = value::make();
+    data->get_value(base_value);
+    value = base_value.get_raw();
+
     return true;
 }
 
 void storage::on_entry_created(entry_id id,
                                std::string_view path,
-                               const value& value,
+                               const value_raw& value,
                                std::chrono::milliseconds timestamp) {
     std::unique_lock guard(m_mutex);
 
@@ -263,11 +270,11 @@ void storage::on_entry_created(entry_id id,
 
     m_ids.emplace(id, entry);
 
-    set_entry_internal(entry, value, false, id, false, timestamp);
+    set_entry_internal(entry, obsr::value(value), false, id, false, timestamp);
 }
 
 void storage::on_entry_updated(entry_id id,
-                               const value& value,
+                               const value_raw& value,
                                std::chrono::milliseconds timestamp) {
     std::unique_lock guard(m_mutex);
 
@@ -277,7 +284,7 @@ void storage::on_entry_updated(entry_id id,
         return;
     }
 
-    set_entry_internal(it->second, value, false, id, false, timestamp);
+    set_entry_internal(it->second, obsr::value(value), false, id, false, timestamp);
 }
 
 void storage::on_entry_deleted(entry_id id, std::chrono::milliseconds timestamp) {
@@ -363,7 +370,7 @@ void storage::set_entry_internal(entry entry,
         data->set_net_id(id);
     }
 
-    obsr::value old_value{};
+    auto old_value = value::make();
     if (clear) {
         old_value = data->clear();
     } else {
