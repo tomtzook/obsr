@@ -77,10 +77,11 @@ value storage_entry::set_value(const value& value) {
     return old;
 }
 
-void storage_entry::clear() {
+value storage_entry::clear() {
+    auto old = m_value;
     m_value = value{};
 
-    add_flags(flag_internal_dirty);
+    return old;
 }
 
 storage::storage(listener_storage_ref& listener_storage, const std::shared_ptr<clock>& clock)
@@ -284,10 +285,8 @@ entry storage::create_new_entry(const std::string_view& path) {
 
     m_paths.emplace(path, entry);
 
-    // todo: only notify on this when receiving the first value
-    m_listener_storage->notify(
-            event_type::created,
-            data->get_path());
+    data->add_flags(flag_internal_created);
+    data->set_last_update_timestamp(m_clock->now());
 
     return entry;
 }
@@ -305,8 +304,32 @@ void storage::set_entry_internal(entry entry,
         return;
     }
 
+    bool just_created = false;
+    if (data->has_flags(flag_internal_created)) {
+        data->remove_flags(flag_internal_created);
+        just_created = true;
+    }
+
     if (data->has_flags(flag_internal_deleted)) {
         data->remove_flags(flag_internal_deleted);
+        just_created = true;
+    }
+
+    if (just_created) {
+        m_listener_storage->notify(
+                event_type::created,
+                data->get_path());
+    }
+
+    if (id != id_not_assigned) {
+        data->set_net_id(id);
+    }
+
+    obsr::value old_value{};
+    if (clear) {
+        old_value = data->clear();
+    } else {
+        old_value = data->set_value(value);
     }
 
     if (mark_dirty) {
@@ -315,25 +338,13 @@ void storage::set_entry_internal(entry entry,
         data->clear_dirty();
     }
 
-    if (id != id_not_assigned) {
-        data->set_net_id(id);
-    }
-
     data->set_last_update_timestamp(m_clock->now());
 
-    if (clear) {
-        data->clear();
-        m_listener_storage->notify(
-                event_type::cleared,
-                data->get_path());
-    } else {
-        auto old_value = data->set_value(value);
-        m_listener_storage->notify(
-                event_type::value_change,
-                data->get_path(),
-                old_value,
-                value);
-    }
+    m_listener_storage->notify(
+            event_type::value_changed,
+            data->get_path(),
+            old_value,
+            value);
 }
 
 void storage::delete_entry_internal(entry entry,
@@ -347,7 +358,7 @@ void storage::delete_entry_internal(entry entry,
         return;
     }
 
-    if (data->has_flags(flag_internal_deleted)) {
+    if (data->has_flags(flag_internal_created) || data->has_flags(flag_internal_deleted)) {
         return;
     }
 

@@ -121,22 +121,18 @@ void server::update() {
             id = assign_id_to_entry(path);
         }
 
-        auto dirty = entry.is_dirty();
-
         out_message out_message{.type = message_type::no_type};
-        if (dirty) {
-            if (entry.has_flags(storage::flag_internal_deleted)) {
-                // entry deleted
-                out_message.id = id;
-                out_message.update_time = entry.get_last_update_timestamp();
-                out_message.update_time = m_clock->now();
-            } else {
-                // entry updated
-                out_message.id = id;
-                out_message.type = message_type::entry_update;
-                out_message.update_time = entry.get_last_update_timestamp();
-                entry.get_value(out_message.value);
-            }
+        if (entry.has_flags(storage::flag_internal_deleted)) {
+            // entry deleted
+            out_message.id = id;
+            out_message.update_time = entry.get_last_update_timestamp();
+            out_message.update_time = m_clock->now();
+        } else {
+            // entry updated
+            out_message.id = id;
+            out_message.type = message_type::entry_update;
+            out_message.update_time = entry.get_last_update_timestamp();
+            entry.get_value(out_message.value);
         }
 
         for (auto& [client_id, client] : m_clients) {
@@ -150,7 +146,7 @@ void server::update() {
         }
 
         return true;
-    });
+    }, storage::flag_internal_dirty);
 
     for (auto& [client_id, client] : m_clients) {
         client->update();
@@ -300,10 +296,7 @@ void server::handle_do_handshake_for_client(server_io::client_id id) {
         }
 
         client->publish(entry_id, name);
-
-        obsr::value value{};
-        m_storage->get_entry_value(entry_id, value);
-        client->enqueue(out_message::entry_update(now, entry_id, value));
+        // todo: send value
     }
 
     client->enqueue(out_message::handshake_finished());

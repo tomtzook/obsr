@@ -22,7 +22,8 @@ constexpr entry_id id_not_assigned = static_cast<entry_id>(-1);
 
 enum entry_internal_flag : uint16_t {
     flag_internal_dirty = (1 << flag_internal_shift_start),
-    flag_internal_deleted = (1 << (flag_internal_shift_start + 1))
+    flag_internal_deleted = (1 << (flag_internal_shift_start + 1)),
+    flag_internal_created = (1 << (flag_internal_shift_start + 2))
 };
 
 struct storage_entry {
@@ -55,7 +56,7 @@ struct storage_entry {
 
     void get_value(value& value) const;
     value set_value(const value& value);
-    void clear();
+    value clear();
 
 private:
     entry m_handle;

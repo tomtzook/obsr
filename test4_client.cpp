@@ -24,11 +24,8 @@ int main() {
             case obsr::event_type::deleted:
                 printf("\t path deleted\n");
                 break;
-            case obsr::event_type::value_change:
+            case obsr::event_type::value_changed:
                 printf("\t value changed, val=%ld\n", event.value.value.integer64);
-                break;
-            case obsr::event_type::cleared:
-                printf("\t value cleared\n");
                 break;
         }
     });
