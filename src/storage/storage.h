@@ -104,7 +104,6 @@ public:
 
 private:
     entry create_new_entry(const std::string_view& path);
-    storage_entry* get_entry_internal(entry entry, bool mark_dirty = true);
 
     void set_entry_internal(entry entry,
                             const value& value,

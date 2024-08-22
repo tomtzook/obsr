@@ -75,7 +75,7 @@ void client::update() {
 
     if (m_clock_sync_timer.is_running() && m_clock_sync_timer.has_elapsed(server_sync_time)) {
         TRACE_DEBUG(LOG_MODULE, "requesting time sync from server");
-        m_message_queue.enqueue_time_sync_request();
+        m_message_queue.enqueue(out_message::time_sync_request());
         m_clock_sync_timer.stop();
     }
 
@@ -178,7 +178,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
 
             if (m_state == state::in_handshake_time_sync) {
                 TRACE_DEBUG(LOG_MODULE, "transitioning to handshake wait");
-                m_message_queue.enqueue_handshake_ready();
+                m_message_queue.enqueue(out_message::handshake_ready());
                 m_state = state::in_handshake;
             } else {
                 m_clock_sync_timer.start();
@@ -197,7 +197,7 @@ void client::on_connected() {
     TRACE_DEBUG(LOG_MODULE, "connected to server, starting first time sync");
     m_message_queue.clear();
 
-    m_message_queue.enqueue_time_sync_request();
+    m_message_queue.enqueue(out_message::time_sync_request());
     m_state = state::in_handshake_time_sync;
 }
 
@@ -244,20 +244,27 @@ void client::process_storage() {
             obsr::value value{};
             entry.get_value(value);
 
-            m_message_queue.enqueue_entry_create(id, entry.get_path(), value);
+            m_message_queue.enqueue(
+                    out_message::entry_create(m_clock->now(), id, entry.get_path(), value));
 
             return true;
         }
 
         if (entry.has_flags(storage::flag_internal_deleted)) {
             // entry was deleted
-            m_message_queue.enqueue_entry_deleted(id);
+            m_message_queue.enqueue(out_message::entry_deleted(
+                    entry.get_last_update_timestamp(),
+                    id
+                    ));
         } else {
             // entry value was updated
             obsr::value value{};
             entry.get_value(value);
 
-            m_message_queue.enqueue_entry_update(id, value);
+            m_message_queue.enqueue(out_message::entry_update(
+                    entry.get_last_update_timestamp(),
+                    id, value
+                    ));
         }
 
         // we want to mark un-dirty and resume if we succeeded

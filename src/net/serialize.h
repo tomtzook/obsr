@@ -58,6 +58,55 @@ struct out_message {
     obsr::value value;
     std::chrono::milliseconds time;
     std::chrono::milliseconds update_time;
+
+    static inline out_message entry_create(std::chrono::milliseconds update_time, storage::entry_id id, std::string_view name, const obsr::value& value) {
+        out_message message{.type = message_type::entry_create};
+        message.id = id;
+        message.name = name;
+        message.value = value;
+        message.update_time = update_time;
+
+        return message;
+    }
+    static inline out_message entry_update(std::chrono::milliseconds update_time, storage::entry_id id, const obsr::value& value) {
+        out_message message{.type = message_type::entry_update};
+        message.id = id;
+        message.value = value;
+        message.update_time = update_time;
+
+        return message;
+    }
+    static inline out_message entry_deleted(std::chrono::milliseconds update_time, storage::entry_id id) {
+        out_message message{.type = message_type::entry_delete};
+        message.id = id;
+        message.update_time = update_time;
+
+        return message;
+    }
+    static inline out_message entry_id_assign(storage::entry_id id, std::string_view name) {
+        out_message message{.type = message_type::entry_id_assign};
+        message.id = id;
+        message.name = name;
+
+        return message;
+    }
+    static inline out_message handshake_ready() {
+        out_message message{.type = message_type::handshake_ready};
+        return message;
+    }
+    static inline out_message handshake_finished() {
+        out_message message{.type = message_type::handshake_finished};
+        return message;
+    }
+    static inline out_message time_sync_request() {
+        out_message message{.type = message_type::time_sync_request};
+        return message;
+    }
+    static inline out_message time_sync_response(std::chrono::milliseconds time) {
+        out_message message{.type = message_type::time_sync_response};
+        message.time = time;
+        return message;
+    }
 };
 
 class message_parser : public state_machine<parse_state, parse_state::check_type, parse_data> {
@@ -108,54 +157,9 @@ public:
 
     // todo: optimize by only writing the latest message for an entry (not including publish)
     // todo: entry create should be a client only message without id to report new entry needing id assignment
+    // todo: time sync requests should be written immediately if possible
     void enqueue(const out_message& message);
     void clear();
-
-    // todo: make functions to create the out message instead of enqueue
-    inline void enqueue_entry_create(storage::entry_id id, std::string_view name, const obsr::value& value) {
-        out_message message{.type = message_type::entry_create};
-        message.id = id;
-        message.name = name;
-        message.value = value;
-        message.update_time = m_destination->get_time_now();
-        enqueue(message);
-    }
-    inline void enqueue_entry_update(storage::entry_id id, const obsr::value& value) {
-        out_message message{.type = message_type::entry_update};
-        message.id = id;
-        message.value = value;
-        message.update_time = m_destination->get_time_now();
-        enqueue(message);
-    }
-    inline void enqueue_entry_deleted(storage::entry_id id) {
-        out_message message{.type = message_type::entry_delete};
-        message.id = id;
-        message.update_time = m_destination->get_time_now();
-        enqueue(message);
-    }
-    inline void enqueue_entry_id_assign(storage::entry_id id, std::string_view name) {
-        out_message message{.type = message_type::entry_id_assign};
-        message.id = id;
-        message.name = name;
-        enqueue(message);
-    }
-    inline void enqueue_handshake_ready() {
-        out_message message{.type = message_type::handshake_ready};
-        enqueue(message);
-    }
-    inline void enqueue_handshake_finished() {
-        out_message message{.type = message_type::handshake_finished};
-        enqueue(message);
-    }
-    inline void enqueue_time_sync_request() {
-        out_message message{.type = message_type::time_sync_request};
-        enqueue(message);
-    }
-    inline void enqueue_time_sync_response(std::chrono::milliseconds time) {
-        out_message message{.type = message_type::time_sync_response};
-        message.time = time;
-        enqueue(message);
-    }
 
     void process();
 

@@ -37,12 +37,7 @@ bool server_client::is_known(storage::entry_id id) const {
 
 void server_client::publish(storage::entry_id id, std::string_view name) {
     TRACE_DEBUG(LOG_MODULE, "publishing entry for server client %d, entry=%d", m_id, id);
-    out_message message {
-        .type = message_type::entry_id_assign,
-        .id = id,
-        .name = std::string(name),
-    };
-    enqueue(message);
+    enqueue(out_message::entry_id_assign(id, name));
 
     m_published_entries.insert(id);
 }
@@ -133,13 +128,13 @@ void server::update() {
             if (entry.has_flags(storage::flag_internal_deleted)) {
                 // entry deleted
                 out_message.id = id;
-                out_message.type = message_type::entry_delete;
+                out_message.update_time = entry.get_last_update_timestamp();
                 out_message.update_time = m_clock->now();
             } else {
                 // entry updated
                 out_message.id = id;
                 out_message.type = message_type::entry_update;
-                out_message.update_time = m_clock->now();
+                out_message.update_time = entry.get_last_update_timestamp();
                 entry.get_value(out_message.value);
             }
         }
@@ -207,12 +202,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                 parse_data.id = assign_id_to_entry(parse_data.name);
             }
 
-            message_to_others.id = parse_data.id;
-            message_to_others.name = parse_data.name;
-            message_to_others.value = parse_data.value;
-            message_to_others.update_time = parse_data.time;
-            message_to_others.type = message_type::entry_create;
-
+            message_to_others = out_message::entry_create(parse_data.time, parse_data.id, parse_data.name, parse_data.value);
             invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
@@ -223,11 +213,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                     parse_data.time);
             break;
         case message_type::entry_update:
-            message_to_others.id = parse_data.id;
-            message_to_others.value = parse_data.value;
-            message_to_others.update_time = parse_data.time;
-            message_to_others.type = message_type::entry_update;
-
+            message_to_others = out_message::entry_update(parse_data.time, parse_data.id, parse_data.value);
             invoke_shared_ptr<storage::storage, storage::entry_id, const value&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
@@ -237,10 +223,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                     parse_data.time);
             break;
         case message_type::entry_delete:
-            message_to_others.id = parse_data.id;
-            message_to_others.update_time = parse_data.time;
-            message_to_others.type = message_type::entry_delete;
-
+            message_to_others = out_message::entry_deleted(parse_data.time, parse_data.id);
             invoke_shared_ptr<storage::storage, storage::entry_id, std::chrono::milliseconds>(
                     lock,
                     m_storage,
@@ -249,8 +232,8 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                     parse_data.time);
             break;
         case message_type::time_sync_request: {
-            out_message message{.type = message_type::time_sync_response, .time = m_clock->now()};
-            enqueue_message_for_client(id, message);
+            const auto now = m_clock->now();
+            enqueue_message_for_client(id, out_message::time_sync_response(now));
             break;
         }
         case message_type::handshake_ready:
@@ -310,15 +293,20 @@ void server::handle_do_handshake_for_client(server_io::client_id id) {
 
     auto& client = it->second;
 
+    const auto now = m_clock->now();
     for (auto& [entry_id, name] : m_id_assignments) {
         if (client->is_known(entry_id)) {
             continue;
         }
 
         client->publish(entry_id, name);
+
+        obsr::value value{};
+        m_storage->get_entry_value(entry_id, value);
+        client->enqueue(out_message::entry_update(now, entry_id, value));
     }
 
-    client->enqueue({.type = message_type::handshake_finished});
+    client->enqueue(out_message::handshake_finished());
     client->set_state(server_client::state::in_use);
 
     TRACE_INFO(LOG_MODULE, "finished writing handshake data to server client %d", client->get_id());

@@ -8,7 +8,6 @@
 
 namespace obsr::net {
 
-// todo: switch to using a message queue?
 // todo: manage like a proper state machine
 
 class client : public socket_io::listener, public network_interface, public message_queue::destination {

@@ -102,8 +102,6 @@ entry storage::get_or_create_entry(const std::string_view& path) {
 
     const auto entry_handle = it->second;
     if (m_entries.has(entry_handle)) {
-        // will initialize entry properly
-        get_entry_internal(entry_handle);
         return entry_handle;
     }
 
@@ -294,31 +292,21 @@ entry storage::create_new_entry(const std::string_view& path) {
     return entry;
 }
 
-storage_entry* storage::get_entry_internal(entry entry, bool mark_dirty) {
-    auto data = m_entries[entry];
-    if (data->has_flags(flag_internal_deleted)) {
-        data->remove_flags(flag_internal_deleted);
-
-        if (mark_dirty) {
-            data->mark_dirty();
-        }
-    }
-
-    return data;
-}
-
 void storage::set_entry_internal(entry entry,
                                  const value& value,
                                  bool clear,
                                  entry_id id,
                                  bool mark_dirty,
                                  std::chrono::milliseconds timestamp) {
-    // todo: bug! if we deleted this entry and receive a stale request, get_entry_internal will undelete it
-    auto data = get_entry_internal(entry, mark_dirty);
+    auto data = m_entries[entry];
 
     if (timestamp.count() != 0 && data->get_last_update_timestamp() > timestamp) {
         // this new update is too stale
         return;
+    }
+
+    if (data->has_flags(flag_internal_deleted)) {
+        data->remove_flags(flag_internal_deleted);
     }
 
     if (mark_dirty) {
@@ -352,10 +340,14 @@ void storage::delete_entry_internal(entry entry,
                                     bool mark_dirty,
                                     bool notify,
                                     std::chrono::milliseconds timestamp) {
-    auto data = get_entry_internal(entry, mark_dirty);
+    auto data = m_entries[entry];
 
     if (timestamp.count() != 0 && data->get_last_update_timestamp() > timestamp) {
         // this new update is too stale
+        return;
+    }
+
+    if (data->has_flags(flag_internal_deleted)) {
         return;
     }
 
