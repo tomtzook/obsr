@@ -129,6 +129,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
     auto parse_data = m_parser.data();
     switch (type) {
         case message_type::entry_create:
+            TRACE_DEBUG(LOG_MODULE, "ENTRY CREATE from server: id=%d, name=%s", parse_data.id, parse_data.name.c_str());
             invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
@@ -139,6 +140,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
                     parse_data.time);
             break;
         case message_type::entry_update:
+            TRACE_DEBUG(LOG_MODULE, "ENTRY UPDATE from server: id=%d", parse_data.id);
             invoke_shared_ptr<storage::storage, storage::entry_id, const value&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
@@ -148,6 +150,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
                     parse_data.time);
             break;
         case message_type::entry_delete:
+            TRACE_DEBUG(LOG_MODULE, "ENTRY DELETE from server: id=%d", parse_data.id);
             invoke_shared_ptr<storage::storage, storage::entry_id, std::chrono::milliseconds>(
                     lock,
                     m_storage,
@@ -156,6 +159,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
                     parse_data.time);
             break;
         case message_type::entry_id_assign:
+            TRACE_DEBUG(LOG_MODULE, "ENTRY ASSIGN from server: id=%d, name=%s", parse_data.id, parse_data.name.c_str());
             invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view>(
                     lock,
                     m_storage,

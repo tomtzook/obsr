@@ -1,11 +1,14 @@
 
 #include "obsr_except.h"
 #include "util/time.h"
+#include "debug.h"
 
 #include "storage.h"
 
 
 namespace obsr::storage {
+
+#define LOG_MODULE "storage"
 
 storage_entry::storage_entry(entry handle, const std::string_view& path)
     : m_handle(handle)
@@ -212,6 +215,29 @@ void storage::remove_listener(listener listener) {
     m_listener_storage->destroy_listener(listener);
 }
 
+bool storage::get_entry_value_from_id(entry_id id, obsr::value& value) {
+    std::unique_lock guard(m_mutex);
+
+    auto it = m_ids.find(id);
+    if (it == m_ids.end()) {
+        // no such id
+        return false;
+    }
+
+    const auto entry = it->second;
+    if (!m_entries.has(entry)) {
+        return false;
+    }
+
+    auto data = m_entries[entry];
+    if (data->has_flags(flag_internal_created) || data->has_flags(flag_internal_deleted)) {
+        return false;
+    }
+
+    data->get_value(value);
+    return true;
+}
+
 void storage::on_entry_created(entry_id id,
                                std::string_view path,
                                const value& value,
@@ -286,7 +312,7 @@ entry storage::create_new_entry(const std::string_view& path) {
     m_paths.emplace(path, entry);
 
     data->add_flags(flag_internal_created);
-    data->set_last_update_timestamp(m_clock->now());
+    data->set_last_update_timestamp(std::chrono::milliseconds(0));
 
     return entry;
 }
@@ -301,16 +327,21 @@ void storage::set_entry_internal(entry entry,
 
     if (timestamp.count() != 0 && data->get_last_update_timestamp() > timestamp) {
         // this new update is too stale
+        TRACE_DEBUG(LOG_MODULE, "received stale set entry request");
         return;
     }
 
     bool just_created = false;
     if (data->has_flags(flag_internal_created)) {
+        TRACE_DEBUG(LOG_MODULE, "received set request on new created entry");
+
         data->remove_flags(flag_internal_created);
         just_created = true;
     }
 
     if (data->has_flags(flag_internal_deleted)) {
+        TRACE_DEBUG(LOG_MODULE, "received set request on deleted entry");
+
         data->remove_flags(flag_internal_deleted);
         just_created = true;
     }
@@ -355,10 +386,12 @@ void storage::delete_entry_internal(entry entry,
 
     if (timestamp.count() != 0 && data->get_last_update_timestamp() > timestamp) {
         // this new update is too stale
+        TRACE_DEBUG(LOG_MODULE, "received stale delete entry request");
         return;
     }
 
     if (data->has_flags(flag_internal_created) || data->has_flags(flag_internal_deleted)) {
+        TRACE_DEBUG(LOG_MODULE, "received delete request on created/deleted entry");
         return;
     }
 

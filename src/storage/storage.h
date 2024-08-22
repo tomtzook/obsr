@@ -91,6 +91,8 @@ public:
     void remove_listener(listener listener);
 
     // should be used from network code
+    bool get_entry_value_from_id(entry_id id, obsr::value& value);
+
     void on_entry_created(entry_id id,
                           std::string_view path,
                           const value& value,

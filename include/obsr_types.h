@@ -77,10 +77,9 @@ static inline value make_double(double value) {
 }
 
 enum class event_type {
-    created,
+    created = 1,
     deleted,
-    value_change,
-    cleared
+    value_changed
 };
 
 struct event {

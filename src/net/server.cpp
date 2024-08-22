@@ -290,13 +290,17 @@ void server::handle_do_handshake_for_client(server_io::client_id id) {
     auto& client = it->second;
 
     const auto now = m_clock->now();
+    obsr::value value{};
     for (auto& [entry_id, name] : m_id_assignments) {
         if (client->is_known(entry_id)) {
             continue;
         }
 
         client->publish(entry_id, name);
-        // todo: send value
+
+        if (m_storage->get_entry_value_from_id(entry_id, value)) {
+            client->enqueue(out_message::entry_update(now, entry_id, value));
+        }
     }
 
     client->enqueue(out_message::handshake_finished());
