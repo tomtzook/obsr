@@ -29,7 +29,7 @@ public:
 
     void publish(storage::entry_id id, std::string_view name);
 
-    void enqueue(const out_message& message);
+    void enqueue(const out_message& message, uint8_t flags = 0);
     void clear();
 
     void update();
@@ -67,7 +67,7 @@ public:
 private:
     storage::entry_id assign_id_to_entry(std::string_view name);
     void enqueue_message_for_clients(const out_message& message, server_io::client_id id_to_skip = static_cast<server_io::client_id>(-1));
-    void enqueue_message_for_client(server_io::client_id id, const out_message& message);
+    void enqueue_message_for_client(server_io::client_id id, const out_message& message, uint8_t flags = 0);
 
     void handle_do_handshake_for_client(server_io::client_id id);
 

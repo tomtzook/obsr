@@ -293,8 +293,17 @@ message_queue::message_queue(destination* destination)
     , m_outgoing()
 {}
 
-void message_queue::enqueue(const out_message& message) {
-    m_outgoing.push_back(message);
+void message_queue::enqueue(const out_message& message, uint8_t flags) {
+    if ((flags & flag_immediate) != 0) {
+        if (write_message(message)) {
+            // success!
+            return;
+        } else {
+            m_outgoing.push_front(message);
+        }
+    } else {
+        m_outgoing.push_back(message);
+    }
 }
 
 void message_queue::clear() {

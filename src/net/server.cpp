@@ -42,9 +42,9 @@ void server_client::publish(storage::entry_id id, std::string_view name) {
     m_published_entries.insert(id);
 }
 
-void server_client::enqueue(const out_message& message) {
+void server_client::enqueue(const out_message& message, uint8_t flags) {
     TRACE_DEBUG(LOG_MODULE, "enqueuing message for server client %d", m_id);
-    m_queue.enqueue(message);
+    m_queue.enqueue(message, flags);
 }
 
 void server_client::clear() {
@@ -233,7 +233,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
             break;
         case message_type::time_sync_request: {
             const auto now = m_clock->now();
-            enqueue_message_for_client(id, out_message::time_sync_response(now));
+            enqueue_message_for_client(id, out_message::time_sync_response(now), message_queue::flag_immediate);
             break;
         }
         case message_type::handshake_ready:
@@ -276,13 +276,13 @@ void server::enqueue_message_for_clients(const out_message& message, server_io::
     }
 }
 
-void server::enqueue_message_for_client(server_io::client_id id, const out_message& message) {
+void server::enqueue_message_for_client(server_io::client_id id, const out_message& message, uint8_t flags) {
     auto it = m_clients.find(id);
     if (it == m_clients.end()) {
         return;
     }
 
-    it->second->enqueue(message);
+    it->second->enqueue(message, flags);
 }
 
 void server::handle_do_handshake_for_client(server_io::client_id id) {

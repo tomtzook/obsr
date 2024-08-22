@@ -75,7 +75,7 @@ void client::update() {
 
     if (m_clock_sync_timer.is_running() && m_clock_sync_timer.has_elapsed(server_sync_time)) {
         TRACE_DEBUG(LOG_MODULE, "requesting time sync from server");
-        m_message_queue.enqueue(out_message::time_sync_request());
+        m_message_queue.enqueue(out_message::time_sync_request(), message_queue::flag_immediate);
         m_clock_sync_timer.stop();
     }
 
@@ -197,7 +197,7 @@ void client::on_connected() {
     TRACE_DEBUG(LOG_MODULE, "connected to server, starting first time sync");
     m_message_queue.clear();
 
-    m_message_queue.enqueue(out_message::time_sync_request());
+    m_message_queue.enqueue(out_message::time_sync_request(), message_queue::flag_immediate);
     m_state = state::in_handshake_time_sync;
 }
 

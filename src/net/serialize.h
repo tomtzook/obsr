@@ -152,13 +152,15 @@ public:
 
         virtual bool write(uint8_t type, const uint8_t* buffer, size_t size) = 0;
     };
+    enum {
+        flag_immediate = 1 << 0
+    };
 
     explicit message_queue(destination* destination);
 
     // todo: optimize by only writing the latest message for an entry (not including publish)
     // todo: entry create should be a client only message without id to report new entry needing id assignment
-    // todo: time sync requests should be written immediately if possible
-    void enqueue(const out_message& message);
+    void enqueue(const out_message& message, uint8_t flags = 0);
     void clear();
 
     void process();
