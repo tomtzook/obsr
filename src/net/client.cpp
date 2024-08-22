@@ -199,6 +199,7 @@ void client::on_connected() {
     TRACE_DEBUG(LOG_MODULE, "connected to server, starting first time sync");
     m_message_queue.clear();
 
+    // todo: this shows we have a sync problem still
     const auto now = m_clock->now();
     m_message_queue.enqueue(out_message::time_sync_request(now), message_queue::flag_immediate);
     m_state = state::in_handshake_time_sync;
@@ -236,28 +237,32 @@ bool client::open_socket_and_start_connection() {
 }
 
 void client::process_storage() {
-    m_storage->act_on_dirty_entries([this](const storage::entry_info& entry) -> bool {
-        const auto id = entry.net_id;
+    m_storage->act_on_dirty_entries([this](const storage::storage_entry& entry) -> bool {
+        const auto id = entry.get_net_id();
 
         if (id == storage::id_not_assigned) {
             m_message_queue.enqueue(
-                    out_message::entry_create(m_clock->now(), id, entry.path, entry.value));
+                    out_message::entry_create(
+                            m_clock->now(),
+                            id,
+                            entry.get_path(),
+                            entry.get_value().get_raw()));
 
             return true;
         }
 
-        if ((entry.flags & storage::flag_internal_deleted) != 0) {
+        if (entry.has_flags(storage::flag_internal_deleted)) {
             // entry was deleted
             m_message_queue.enqueue(out_message::entry_deleted(
-                    entry.last_update_timestamp,
+                    entry.get_last_update_timestamp(),
                     id
             ));
         } else {
             // entry value_raw was updated
             m_message_queue.enqueue(out_message::entry_update(
-                    entry.last_update_timestamp,
+                    entry.get_last_update_timestamp(),
                     id,
-                    entry.value
+                    entry.get_value().get_raw()
             ));
         }
 

@@ -35,7 +35,7 @@ public:
     void delete_entry(entry entry);
 
     uint32_t probe(entry entry);
-    void get_value(entry entry, obsr::value& value);
+    obsr::value get_value(entry entry);
     void set_value(entry entry, const obsr::value& value);
     void clear_value(entry entry);
 

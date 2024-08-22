@@ -57,6 +57,10 @@ struct out_message {
     std::chrono::milliseconds time;
     std::chrono::milliseconds update_time;
 
+    static inline out_message empty() {
+        out_message message{.type = message_type::no_type};
+        return message;
+    }
     static inline out_message entry_create(std::chrono::milliseconds update_time, storage::entry_id id, std::string_view name, const obsr::value_raw& value) {
         out_message message{.type = message_type::entry_create};
         message.id = id;

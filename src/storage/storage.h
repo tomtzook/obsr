@@ -54,15 +54,15 @@ struct storage_entry {
     std::chrono::milliseconds get_last_update_timestamp() const;
     void set_last_update_timestamp(std::chrono::milliseconds timestamp);
 
-    void get_value(value& value) const;
+    const value& get_value() const;
     value set_value(const value& value);
     value clear();
 
 private:
-    entry m_handle;
-    std::string m_path;
-    value m_value;
+    const entry m_handle;
+    const std::string m_path;
 
+    value m_value;
     std::chrono::milliseconds m_last_update_timestamp;
     entry_id m_net_id;
     uint16_t m_flags;
@@ -78,7 +78,7 @@ struct entry_info {
 
 class storage {
 public:
-    using entry_action = std::function<bool(const entry_info&)>;
+    using entry_action = std::function<bool(const storage_entry&)>;
 
     explicit storage(listener_storage_ref& listener_storage, const std::shared_ptr<clock>& clock);
 
@@ -87,7 +87,7 @@ public:
     void delete_entries(const std::string_view& path);
 
     uint32_t probe(entry entry);
-    void get_entry_value(entry entry, obsr::value& value);
+    obsr::value get_entry_value(entry entry);
     void set_entry_value(entry entry, const obsr::value& value);
     void clear_entry(entry entry);
 
@@ -130,7 +130,7 @@ private:
     listener_storage_ref m_listener_storage;
     std::shared_ptr<clock> m_clock;
 
-    std::mutex m_mutex;
+    std::recursive_mutex m_mutex;
     handle_table<storage_entry, 256> m_entries;
     std::map<std::string, entry, std::less<>> m_paths;
     std::map<entry_id, entry> m_ids;

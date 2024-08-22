@@ -34,8 +34,8 @@ uint32_t probe(entry entry) {
     return s_instance.probe(entry);
 }
 
-void get_value(entry entry, obsr::value& value) {
-    s_instance.get_value(entry, value);
+obsr::value get_value(entry entry) {
+    return s_instance.get_value(entry);
 }
 
 void set_value(entry entry, const obsr::value& value) {

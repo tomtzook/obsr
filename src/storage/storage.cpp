@@ -63,8 +63,8 @@ void storage_entry::set_last_update_timestamp(std::chrono::milliseconds timestam
     m_last_update_timestamp = timestamp;
 }
 
-void storage_entry::get_value(value& value) const {
-    value = m_value;
+const value& storage_entry::get_value() const {
+    return m_value;
 }
 
 value storage_entry::set_value(const value& value) {
@@ -144,7 +144,7 @@ uint32_t storage::probe(entry entry) {
     return data->get_flags() & ~flag_internal_mask;
 }
 
-void storage::get_entry_value(entry entry, obsr::value& value) {
+obsr::value storage::get_entry_value(entry entry) {
     std::unique_lock guard(m_mutex);
 
     auto data = m_entries[entry];
@@ -152,7 +152,7 @@ void storage::get_entry_value(entry entry, obsr::value& value) {
         throw entry_deleted_exception();
     }
 
-    data->get_value(value);
+    return data->get_value();
 }
 
 void storage::set_entry_value(entry entry, const obsr::value& value) {
@@ -170,25 +170,12 @@ void storage::clear_entry(entry entry) {
 void storage::act_on_dirty_entries(const entry_action& action) {
     std::unique_lock guard(m_mutex);
 
-    entry_info info;
     for (auto [handle, data] : m_entries) {
         if (!data.has_flags(flag_internal_dirty)) {
             continue;
         }
 
-        // todo: we keep making copies of value_raw. find a way to avoid that
-        info.path = data.get_path();
-        info.last_update_timestamp = data.get_last_update_timestamp();
-        info.net_id = data.get_net_id();
-        info.flags = data.get_flags();
-
-        auto value = value::make();
-        data.get_value(value);
-        info.value = value.get_raw();
-
-        guard.unlock();
-        const auto resume = action(info);
-        guard.lock();
+        const auto resume = action(data);
 
         if (resume) {
             data.clear_dirty();
@@ -245,10 +232,7 @@ bool storage::get_entry_value_from_id(entry_id id, obsr::value_raw& value) {
         return false;
     }
 
-    obsr::value base_value = value::make();
-    data->get_value(base_value);
-    value = base_value.get_raw();
-
+    value = data->get_value().get_raw();
     return true;
 }
 

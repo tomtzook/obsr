@@ -106,31 +106,31 @@ void server::update() {
         return;
     }
 
-    m_storage->act_on_dirty_entries([this](const storage::entry_info& entry) -> bool {
+    m_storage->act_on_dirty_entries([this](const storage::storage_entry& entry) -> bool {
         // todo: moving to a "push" methodology will solve this better
-        auto id = entry.net_id;
+        auto id = entry.get_net_id();
 
         if (id == storage::id_not_assigned) {
-            id = assign_id_to_entry(entry.path);
+            id = assign_id_to_entry(entry.get_path());
         }
 
-        out_message out_message{.type = message_type::no_type};
-        if ((entry.flags & storage::flag_internal_deleted) != 0) {
+        auto out_message = out_message::empty();
+        if (entry.has_flags(storage::flag_internal_deleted)) {
             // entry deleted
-            out_message.id = id;
-            out_message.update_time = entry.last_update_timestamp;
-            out_message.update_time = m_clock->now();
+            out_message = out_message::entry_deleted(
+                    m_clock->now(),
+                    id);
         } else {
             // entry updated
-            out_message.id = id;
-            out_message.type = message_type::entry_update;
-            out_message.update_time = entry.last_update_timestamp;
-            out_message.value = entry.value;
+            out_message = out_message::entry_update(
+                    entry.get_last_update_timestamp(),
+                    id,
+                    entry.get_value().get_raw());
         }
 
         for (auto& [client_id, client]: m_clients) {
             if (!client->is_known(id)) {
-                client->publish(id, entry.path);
+                client->publish(id, entry.get_path());
             }
 
             if (out_message.type != message_type::no_type) {
@@ -182,7 +182,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
 
     TRACE_DEBUG(LOG_MODULE, "received new message from client=%d of type=%d", id, type);
 
-    out_message message_to_others{.type = message_type::no_type};
+    auto message_to_others = out_message::empty();
 
     auto parse_data = m_parser.data();
     switch (type) {
@@ -234,7 +234,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
             // clients should not send this
         case message_type::no_type:
         default:
-            message_to_others.type = message_type::no_type;
+            message_to_others = out_message::empty();
             break;
     }
 

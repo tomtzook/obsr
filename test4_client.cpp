@@ -39,6 +39,7 @@ int main() {
                         break;
                 }
                 printf("\t now time=%ld\n", obsr::time().count());
+                printf("\t now time actual=%ld\n", obsr::time_now().count());
                 break;
             }
         }
