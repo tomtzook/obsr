@@ -1,5 +1,6 @@
 #pragma once
 
+#ifdef DEBUG
 #define TRACE(level, module, format, ...) \
     do {                                  \
         if (can_log(level)) {             \
@@ -10,8 +11,14 @@
 #define TRACE_DEBUG(module, format, ...) TRACE(obsr::debug::log_level_debug, module, format, ##__VA_ARGS__)
 #define TRACE_INFO(module, format, ...) TRACE(obsr::debug::log_level_info, module, format, ##__VA_ARGS__)
 #define TRACE_ERROR(module, format, ...) TRACE(obsr::debug::log_level_error, module, format, ##__VA_ARGS__)
+#else
+#define TRACE(level, module, format, ...)
+#define TRACE_DEBUG(module, format, ...)
+#define TRACE_INFO(module, format, ...)
+#define TRACE_ERROR(module, format, ...)
+#endif
 
-
+#ifdef DEBUG
 namespace obsr::debug {
 
 enum log_level {
@@ -24,3 +31,4 @@ bool can_log(log_level level);
 void trace_impl(log_level level, const char* format, ...);
 
 }
+#endif

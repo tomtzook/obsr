@@ -22,6 +22,7 @@ struct {
 
 base_socket::base_socket()
     : resource(open_socket())
+    , m_disabled(false)
     , m_is_blocking(true) {
     configure_blocking(true);
 }
