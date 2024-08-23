@@ -159,7 +159,7 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
     std::unique_lock lock(m_mutex);
 
     if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
-        TRACE_DEBUG(LOG_MODULE_CLIENT, "write buffer does not have enough space");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "writevalue buffer does not have enough space");
         return false;
     }
 
@@ -173,7 +173,7 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
     };
 
     if (!m_write_buffer.write(reinterpret_cast<uint8_t*>(&header), sizeof(header))) {
-        TRACE_DEBUG(LOG_MODULE_CLIENT, "write failed to buffer at start");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "writevalue failed to buffer at start");
         return false;
     }
 
@@ -182,7 +182,7 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
             // this means we have probably sent a message with an header but no data. this will seriously
             // break down communication. as such, we will terminate connection here.
             // todo: add ability for remote to deal with this safely.
-            TRACE_ERROR(LOG_MODULE_CLIENT, "write attempt failed halfway, stopping");
+            TRACE_ERROR(LOG_MODULE_CLIENT, "writevalue attempt failed halfway, stopping");
             stop_internal(lock);
             return false;
         }
@@ -269,7 +269,7 @@ void socket_io::update_handler::on_read_ready() {
 }
 
 void socket_io::update_handler::on_write_ready() {
-    TRACE_DEBUG(LOG_MODULE_CLIENT, "on write update");
+    TRACE_DEBUG(LOG_MODULE_CLIENT, "on writevalue update");
 
     const auto state = m_io.m_state;
     if (state == state::connecting) {
@@ -294,12 +294,12 @@ void socket_io::update_handler::on_write_ready() {
         try {
             TRACE_DEBUG(LOG_MODULE_CLIENT, "writing to socket");
             if (!m_io.m_write_buffer.write_into(m_io.m_socket.get())) {
-                TRACE_DEBUG(LOG_MODULE_CLIENT, "nothing more to write");
-                // nothing more to write
+                TRACE_DEBUG(LOG_MODULE_CLIENT, "nothing more to writevalue");
+                // nothing more to writevalue
                 m_io.m_nio_runner->remove_flags(m_io.m_resource_handle, obsr::os::selector::poll_out);
             }
         } catch (const io_exception&) {
-            TRACE_ERROR(LOG_MODULE_CLIENT, "write error");
+            TRACE_ERROR(LOG_MODULE_CLIENT, "writevalue error");
             m_io.stop_internal(m_lock);
         }
     } else {

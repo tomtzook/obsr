@@ -15,7 +15,7 @@ int main() {
     auto entry2 = obsr::get_entry(table1, "time");
 
     auto listener = obsr::listen_object(root, [](const obsr::event& event)->void {
-        printf("EVENT notification: type=%d, path=%s\n",
+        printf("EVENT notification: m_type=%d, path=%s\n",
                static_cast<uint8_t>(event.get_type()),
                event.get_path().c_str());
         switch (event.get_type()) {
@@ -27,7 +27,7 @@ int main() {
                 break;
             case obsr::event_type::value_changed: {
                 const auto value = event.get_value();
-                printf("\t value changed, type=%d val=", static_cast<uint8_t>(value.get_type()));
+                printf("\t value changed, m_type=%d val=", static_cast<uint8_t>(value.get_type()));
                 switch (value.get_type()) {
                     case obsr::value_type::empty:
                         printf("empty\n");

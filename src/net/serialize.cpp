@@ -49,11 +49,12 @@ bool message_parser::process_state(parse_state current_state, parse_data& data) 
             return select_next_state(current_state);
         }
         case parse_state::read_value: {
-            if (!io::read(m_buffer, data.type, data.value)) {
+            auto value_opt = io::readvalue(m_buffer, data.type);
+            if (!value_opt) {
                 return error(error_read_data);
             }
 
-            data.value.type = data.type;
+            data.value = std::move(value_opt.value());
 
             return select_next_state(current_state);
         }
@@ -195,7 +196,7 @@ bool message_serializer::entry_id_assign(storage::entry_id id, std::string_view 
     return true;
 }
 
-bool message_serializer::entry_created(std::chrono::milliseconds time, storage::entry_id id, std::string_view name, const value_raw& value) {
+bool message_serializer::entry_created(std::chrono::milliseconds time, storage::entry_id id, std::string_view name, const value& value) {
     if (!io::write16(m_buffer, id)) {
         return false;
     }
@@ -208,18 +209,18 @@ bool message_serializer::entry_created(std::chrono::milliseconds time, storage::
         return false;
     }
 
-    if (!io::write8(m_buffer, static_cast<uint8_t>(value.type))) {
+    if (!io::write8(m_buffer, static_cast<uint8_t>(value.get_type()))) {
         return false;
     }
 
-    if (!io::write(m_buffer, value.type, value)) {
+    if (!io::writevalue(m_buffer, value)) {
         return false;
     }
 
     return true;
 }
 
-bool message_serializer::entry_updated(std::chrono::milliseconds time, storage::entry_id id, const value_raw& value) {
+bool message_serializer::entry_updated(std::chrono::milliseconds time, storage::entry_id id, const value& value) {
     if (!io::write16(m_buffer, id)) {
         return false;
     }
@@ -228,11 +229,11 @@ bool message_serializer::entry_updated(std::chrono::milliseconds time, storage::
         return false;
     }
 
-    if (!io::write8(m_buffer, static_cast<uint8_t>(value.type))) {
+    if (!io::write8(m_buffer, static_cast<uint8_t>(value.get_type()))) {
         return false;
     }
 
-    if (!io::write(m_buffer, value.type, value)) {
+    if (!io::writevalue(m_buffer, value)) {
         return false;
     }
 
@@ -307,7 +308,7 @@ void message_queue::process() {
 }
 
 bool message_queue::write_message(const out_message& message) {
-    switch (message.type) {
+    switch (message.type()) {
         case message_type::entry_create:
             return write_entry_created(message);
         case message_type::entry_update:
@@ -332,7 +333,10 @@ bool message_queue::write_message(const out_message& message) {
 bool message_queue::write_entry_created(const out_message& message) {
     m_serializer.reset();
 
-    if (!m_serializer.entry_created(message.update_time, message.id, message.name, message.value)) {
+    if (!m_serializer.entry_created(message.send_time(),
+                                    message.id(),
+                                    message.name(),
+                                    message.value())) {
         return false;
     }
 
@@ -349,7 +353,9 @@ bool message_queue::write_entry_created(const out_message& message) {
 bool message_queue::write_entry_updated(const out_message& message) {
     m_serializer.reset();
 
-    if (!m_serializer.entry_updated(message.update_time, message.id, message.value)) {
+    if (!m_serializer.entry_updated(message.send_time(),
+                                    message.id(),
+                                    message.value())) {
         return false;
     }
 
@@ -366,7 +372,8 @@ bool message_queue::write_entry_updated(const out_message& message) {
 bool message_queue::write_entry_deleted(const out_message& message) {
     m_serializer.reset();
 
-    if (!m_serializer.entry_deleted(message.update_time, message.id)) {
+    if (!m_serializer.entry_deleted(message.send_time(),
+                                    message.id())) {
         return false;
     }
 
@@ -383,7 +390,8 @@ bool message_queue::write_entry_deleted(const out_message& message) {
 bool message_queue::write_entry_id_assigned(const out_message& message) {
     m_serializer.reset();
 
-    if (!m_serializer.entry_id_assign(message.id, message.name)) {
+    if (!m_serializer.entry_id_assign(message.id(),
+                                      message.name())) {
         return false;
     }
 
@@ -400,7 +408,7 @@ bool message_queue::write_entry_id_assigned(const out_message& message) {
 bool message_queue::write_time_sync_request(const out_message& message) {
     m_serializer.reset();
 
-    if (!m_serializer.time_sync_request(message.update_time)) {
+    if (!m_serializer.time_sync_request(message.send_time())) {
         return false;
     }
 
@@ -417,7 +425,7 @@ bool message_queue::write_time_sync_request(const out_message& message) {
 bool message_queue::write_time_sync_response(const out_message& message) {
     m_serializer.reset();
 
-    if (!m_serializer.time_sync_response(message.time, message.update_time)) {
+    if (!m_serializer.time_sync_response(message.time_value(), message.send_time())) {
         return false;
     }
 
@@ -433,7 +441,7 @@ bool message_queue::write_time_sync_response(const out_message& message) {
 
 bool message_queue::write_basic(const out_message& message) {
     if (!m_destination->write(
-            static_cast<uint8_t>(message.type),
+            static_cast<uint8_t>(message.type()),
             nullptr,
             0)) {
         return false;

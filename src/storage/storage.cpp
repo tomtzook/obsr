@@ -213,27 +213,26 @@ void storage::remove_listener(listener listener) {
     m_listener_storage->destroy_listener(listener);
 }
 
-bool storage::get_entry_value_from_id(entry_id id, obsr::value_raw& value) {
+std::optional<obsr::value> storage::get_entry_value_from_id(entry_id id) {
     std::unique_lock guard(m_mutex);
 
     auto it = m_ids.find(id);
     if (it == m_ids.end()) {
         // no such id
-        return false;
+        return {};
     }
 
     const auto entry = it->second;
     if (!m_entries.has(entry)) {
-        return false;
+        return {};
     }
 
     auto data = m_entries[entry];
     if (data->has_flags(flag_internal_created) || data->has_flags(flag_internal_deleted)) {
-        return false;
+        return {};
     }
 
-    value = data->get_value().get_raw();
-    return true;
+    return {data->get_value()};
 }
 
 void storage::on_clock_resync() {
@@ -257,7 +256,7 @@ void storage::on_clock_resync() {
 
 void storage::on_entry_created(entry_id id,
                                std::string_view path,
-                               const value_raw& value,
+                               const value& value,
                                std::chrono::milliseconds timestamp) {
     std::unique_lock guard(m_mutex);
 
@@ -273,11 +272,11 @@ void storage::on_entry_created(entry_id id,
 
     m_ids.emplace(id, entry);
 
-    set_entry_internal(entry, obsr::value(value), false, id, false, timestamp);
+    set_entry_internal(entry, value, false, id, false, timestamp);
 }
 
 void storage::on_entry_updated(entry_id id,
-                               const value_raw& value,
+                               const value& value,
                                std::chrono::milliseconds timestamp) {
     std::unique_lock guard(m_mutex);
 
@@ -287,7 +286,7 @@ void storage::on_entry_updated(entry_id id,
         return;
     }
 
-    set_entry_internal(it->second, obsr::value(value), false, id, false, timestamp);
+    set_entry_internal(it->second, value, false, id, false, timestamp);
 }
 
 void storage::on_entry_deleted(entry_id id, std::chrono::milliseconds timestamp) {

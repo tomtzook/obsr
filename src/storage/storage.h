@@ -4,7 +4,7 @@
 #include <vector>
 #include <string>
 #include <mutex>
-#include <iterator>
+#include <optional>
 
 #include "obsr_types.h"
 #include "obsr_internal.h"
@@ -68,14 +68,6 @@ private:
     uint16_t m_flags;
 };
 
-struct entry_info {
-    std::string_view path;
-    obsr::value_raw value;
-    std::chrono::milliseconds last_update_timestamp;
-    entry_id net_id;
-    uint16_t flags;
-};
-
 class storage {
 public:
     using entry_action = std::function<bool(const storage_entry&)>;
@@ -99,15 +91,15 @@ public:
     void remove_listener(listener listener);
 
     // should be used from network code
-    bool get_entry_value_from_id(entry_id id, obsr::value_raw& value);
+    std::optional<obsr::value> get_entry_value_from_id(entry_id id);
     void on_clock_resync();
 
     void on_entry_created(entry_id id,
                           std::string_view path,
-                          const value_raw& value,
+                          const value& value,
                           std::chrono::milliseconds timestamp);
     void on_entry_updated(entry_id id,
-                          const value_raw& value,
+                          const value& value,
                           std::chrono::milliseconds timestamp);
     void on_entry_deleted(entry_id id,
                           std::chrono::milliseconds timestamp);

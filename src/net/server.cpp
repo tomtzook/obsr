@@ -122,10 +122,11 @@ void server::update() {
                     id);
         } else {
             // entry updated
+            auto value = entry.get_value();
             out_message = out_message::entry_update(
                     entry.get_last_update_timestamp(),
                     id,
-                    entry.get_value().get_raw());
+                    std::move(value));
         }
 
         for (auto& [client_id, client]: m_clients) {
@@ -133,7 +134,7 @@ void server::update() {
                 client->publish(id, entry.get_path());
             }
 
-            if (out_message.type != message_type::no_type) {
+            if (out_message.type() != message_type::no_type) {
                 client->enqueue(out_message);
             }
         }
@@ -180,7 +181,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
         return;
     }
 
-    TRACE_DEBUG(LOG_MODULE, "received new message from client=%d of type=%d", id, type);
+    TRACE_DEBUG(LOG_MODULE, "received new message from client=%d of m_type=%d", id, type);
 
     auto message_to_others = out_message::empty();
 
@@ -191,8 +192,11 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                 parse_data.id = assign_id_to_entry(parse_data.name);
             }
 
-            message_to_others = out_message::entry_create(parse_data.time, parse_data.id, parse_data.name, parse_data.value);
-            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const value_raw&, std::chrono::milliseconds>(
+            message_to_others = out_message::entry_create(parse_data.time,
+                                                          parse_data.id,
+                                                          parse_data.name,
+                                                          obsr::value(parse_data.value));
+            invoke_shared_ptr<storage::storage, storage::entry_id, std::string_view, const obsr::value&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_created,
@@ -202,8 +206,10 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                     parse_data.time);
             break;
         case message_type::entry_update:
-            message_to_others = out_message::entry_update(parse_data.time, parse_data.id, parse_data.value);
-            invoke_shared_ptr<storage::storage, storage::entry_id, const value_raw&, std::chrono::milliseconds>(
+            message_to_others = out_message::entry_update(parse_data.time,
+                                                          parse_data.id,
+                                                          obsr::value(parse_data.value));
+            invoke_shared_ptr<storage::storage, storage::entry_id, const obsr::value&, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_updated,
@@ -222,7 +228,9 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
             break;
         case message_type::time_sync_request: {
             const auto now = m_clock->now();
-            enqueue_message_for_client(id, out_message::time_sync_response(now, parse_data.time), message_queue::flag_immediate);
+            enqueue_message_for_client(id,
+                                       out_message::time_sync_response(now, parse_data.time),
+                                       message_queue::flag_immediate);
             break;
         }
         case message_type::handshake_ready:
@@ -238,7 +246,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
             break;
     }
 
-    if (message_to_others.type != message_type::no_type) {
+    if (message_to_others.type() != message_type::no_type) {
         enqueue_message_for_clients(message_to_others, id);
     }
 }
@@ -286,7 +294,6 @@ void server::handle_do_handshake_for_client(server_io::client_id id) {
     //todo: stop using value_raw, switch to value
     //  find a way to make sure we don't create too many copies of the same value
     //  will be problematic for values with allocated buffers (in the future)
-    obsr::value_raw value{};
     for (auto& [entry_id, name] : m_id_assignments) {
         if (client->is_known(entry_id)) {
             continue;
@@ -294,8 +301,10 @@ void server::handle_do_handshake_for_client(server_io::client_id id) {
 
         client->publish(entry_id, name);
 
-        if (m_storage->get_entry_value_from_id(entry_id, value)) {
-            client->enqueue(out_message::entry_update(now, entry_id, value));
+        auto value_opt = m_storage->get_entry_value_from_id(entry_id);
+        if (value_opt) {
+            auto& value = value_opt.value();
+            client->enqueue(out_message::entry_update(now, entry_id, std::move(value)));
         }
     }
 
