@@ -173,7 +173,9 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
             m_clock_sync_timer.start();
             break;
         case message_type::time_sync_response: {
-            m_clock->sync(parse_data.time_value, parse_data.time);
+            if (m_clock->sync(parse_data.time_value, parse_data.time)) {
+                m_storage->on_clock_resync();
+            }
 
             const auto time = m_clock->now();
             TRACE_DEBUG(LOG_MODULE, "received time sync response from server: %lu", time.count());
@@ -199,7 +201,6 @@ void client::on_connected() {
     TRACE_DEBUG(LOG_MODULE, "connected to server, starting first time sync");
     m_message_queue.clear();
 
-    // todo: this shows we have a sync problem still
     const auto now = m_clock->now();
     m_message_queue.enqueue(out_message::time_sync_request(now), message_queue::flag_immediate);
     m_state = state::in_handshake_time_sync;

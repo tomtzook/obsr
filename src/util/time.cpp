@@ -10,17 +10,29 @@ namespace obsr {
 
 clock::clock()
     : m_offset(std::chrono::milliseconds(0))
+    , m_rtt2(std::chrono::milliseconds(INT64_MAX))
 {}
 
-void clock::sync(std::chrono::milliseconds local_time, std::chrono::milliseconds remote_time) {
+bool clock::sync(std::chrono::milliseconds local_time, std::chrono::milliseconds remote_time) {
     const auto now = this->now();
     const auto rtt2 = (now - local_time) / 2;
+    if (rtt2 >= m_rtt2.load()) {
+        return false;
+    }
 
     const auto offset = remote_time + rtt2 - now;
+
+    m_rtt2.store(rtt2);
     m_offset.store(offset);
 
-    TRACE_INFO(LOG_MODULE, "new clock offset: offset=%lu, old time=%lu, new time=%lu",
-                now, offset, this->now());
+    TRACE_DEBUG(LOG_MODULE, "new clock offset: offset=%lu, old time=%lu, new time=%lu",
+               offset, now, this->now());
+
+    return true;
+}
+
+std::chrono::milliseconds clock::adjust_time(std::chrono::milliseconds time) {
+    return time - m_offset.load();
 }
 
 std::chrono::milliseconds clock::now() {

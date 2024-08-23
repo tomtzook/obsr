@@ -236,6 +236,25 @@ bool storage::get_entry_value_from_id(entry_id id, obsr::value_raw& value) {
     return true;
 }
 
+void storage::on_clock_resync() {
+    std::unique_lock guard(m_mutex);
+
+    TRACE_DEBUG(LOG_MODULE, "resynching timestamp of entries");
+
+    for (auto [handle, data] : m_entries) {
+        const auto time = data.get_last_update_timestamp();
+        if (time.count() == 0) {
+            continue;
+        }
+
+        const auto adjusted_time = m_clock->adjust_time(time);
+        TRACE_DEBUG(LOG_MODULE, "adjusted entry time. old=%lu, new=%lu",
+                   time, adjusted_time);
+
+        data.set_last_update_timestamp(adjusted_time);
+    }
+}
+
 void storage::on_entry_created(entry_id id,
                                std::string_view path,
                                const value_raw& value,
@@ -367,7 +386,10 @@ void storage::set_entry_internal(entry entry,
         data->clear_dirty();
     }
 
-    data->set_last_update_timestamp(m_clock->now());
+    if (timestamp.count() == 0) {
+        timestamp = m_clock->now();
+    }
+    data->set_last_update_timestamp(timestamp);
 
     m_listener_storage->notify(
             event_type::value_changed,
@@ -404,7 +426,12 @@ void storage::delete_entry_internal(entry entry,
         data->clear_dirty();
     }
 
-    data->set_last_update_timestamp(m_clock->now());
+    if (timestamp.count() == 0) {
+        // todo: if this is done before clock sync with server then we have a problem!
+        //      receive rtt2 from net to update all local time
+        timestamp = m_clock->now();
+    }
+    data->set_last_update_timestamp(timestamp);
 
     if (notify) {
         m_listener_storage->notify(

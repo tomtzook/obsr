@@ -283,6 +283,9 @@ void server::handle_do_handshake_for_client(server_io::client_id id) {
     auto& client = it->second;
 
     const auto now = m_clock->now();
+    //todo: stop using value_raw, switch to value
+    //  find a way to make sure we don't create too many copies of the same value
+    //  will be problematic for values with allocated buffers (in the future)
     obsr::value_raw value{};
     for (auto& [entry_id, name] : m_id_assignments) {
         if (client->is_known(entry_id)) {

@@ -100,6 +100,7 @@ public:
 
     // should be used from network code
     bool get_entry_value_from_id(entry_id id, obsr::value_raw& value);
+    void on_clock_resync();
 
     void on_entry_created(entry_id id,
                           std::string_view path,

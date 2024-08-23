@@ -9,12 +9,14 @@ class clock {
 public:
     clock();
 
-    void sync(std::chrono::milliseconds local_time, std::chrono::milliseconds remote_time);
+    bool sync(std::chrono::milliseconds local_time, std::chrono::milliseconds remote_time);
+    std::chrono::milliseconds adjust_time(std::chrono::milliseconds time);
 
     std::chrono::milliseconds now();
 
 private:
     std::atomic<std::chrono::milliseconds> m_offset;
+    std::atomic<std::chrono::milliseconds> m_rtt2;
 };
 
 class timer {

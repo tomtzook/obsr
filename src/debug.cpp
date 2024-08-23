@@ -3,11 +3,6 @@
 
 #include "debug.h"
 
-
-namespace obsr::debug {
-
-#ifdef DEBUG
-
 #define TRACE_LEVEL_ERROR 0
 #define TRACE_LEVEL_INFO 1
 #define TRACE_LEVEL_DEBUG 2
@@ -20,14 +15,22 @@ namespace obsr::debug {
 #endif
 
 #ifndef TRACE_SINK
-#define TRACE_SINK TRACE_SINK_LINUX_SYSLOG
+#define TRACE_SINK TRACE_SINK_STDOUT
 #endif
 
 #if TRACE_SINK == TRACE_SINK_STDOUT
 #include <cstdio>
 #elif TRACE_SINK == TRACE_SINK_LINUX_SYSLOG
 #include <sys/syslog.h>
+#else
+#error "unknown trace sink"
+#endif
 
+namespace obsr::debug {
+
+#ifdef DEBUG
+
+#if TRACE_SINK == TRACE_SINK_LINUX_SYSLOG
 static inline int level_to_pri(log_level level) {
     switch (level) {
         case log_level_debug:
@@ -40,8 +43,6 @@ static inline int level_to_pri(log_level level) {
             return LOG_INFO;
     }
 }
-#else
-#error "unknown trace sink"
 #endif
 
 #if TRACE_LEVEL == TRACE_LEVEL_ERROR
