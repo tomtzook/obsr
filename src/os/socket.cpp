@@ -218,11 +218,22 @@ size_t socket::read(uint8_t* buffer, size_t buffer_size) {
     throw_if_closed();
     throw_if_disabled();
 
+    if (buffer_size == 0) {
+        return 0;
+    }
+
     const auto result = ::read(fd(), buffer, buffer_size);
     if (result == 0) {
         throw eof_exception();
     } else if (result < 0) {
-        handle_call_error();
+        const auto error_code = get_call_error();
+        if (error_code == EAGAIN && !is_blocking()) {
+            // while in non-blocking mode, socket operations may return eagain if
+            // the operation will end up blocking, as such just return.
+            return 0;
+        } else {
+            handle_call_error(error_code);
+        }
     }
 
     return result;

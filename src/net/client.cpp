@@ -73,7 +73,7 @@ void client::update() {
     }
 
     if (m_clock_sync_timer.is_running() && m_clock_sync_timer.has_elapsed(server_sync_time)) {
-        TRACE_DEBUG(LOG_MODULE, "requesting time sync from server");
+        TRACE_DEBUG(LOG_MODULE, "requesting send_time sync from server");
         const auto now = m_clock->now();
         m_message_queue.enqueue(out_message::time_sync_request(now), message_queue::flag_immediate);
         m_clock_sync_timer.stop();
@@ -137,7 +137,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
                     parse_data.id,
                     parse_data.name,
                     parse_data.value,
-                    parse_data.time);
+                    parse_data.send_time);
             break;
         case message_type::entry_update:
             TRACE_DEBUG(LOG_MODULE, "ENTRY UPDATE from server: id=%d", parse_data.id);
@@ -147,7 +147,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
                     &storage::storage::on_entry_updated,
                     parse_data.id,
                     parse_data.value,
-                    parse_data.time);
+                    parse_data.send_time);
             break;
         case message_type::entry_delete:
             TRACE_DEBUG(LOG_MODULE, "ENTRY DELETE from server: id=%d", parse_data.id);
@@ -156,7 +156,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
                     m_storage,
                     &storage::storage::on_entry_deleted,
                     parse_data.id,
-                    parse_data.time);
+                    parse_data.send_time);
             break;
         case message_type::entry_id_assign:
             TRACE_DEBUG(LOG_MODULE, "ENTRY ASSIGN from server: id=%d, name=%s", parse_data.id, parse_data.name.c_str());
@@ -173,12 +173,12 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
             m_clock_sync_timer.start();
             break;
         case message_type::time_sync_response: {
-            if (m_clock->sync(parse_data.time_value, parse_data.time)) {
+            if (m_clock->sync(parse_data.time_value, parse_data.send_time)) {
                 m_storage->on_clock_resync();
             }
 
             const auto time = m_clock->now();
-            TRACE_DEBUG(LOG_MODULE, "received time sync response from server: %lu", time.count());
+            TRACE_DEBUG(LOG_MODULE, "received send_time sync response from server: %lu", time.count());
 
             if (m_state == state::in_handshake_time_sync) {
                 TRACE_DEBUG(LOG_MODULE, "transitioning to handshake wait");
@@ -198,7 +198,7 @@ void client::on_new_message(const message_header& header, const uint8_t* buffer,
 void client::on_connected() {
     std::unique_lock lock(m_mutex);
 
-    TRACE_DEBUG(LOG_MODULE, "connected to server, starting first time sync");
+    TRACE_DEBUG(LOG_MODULE, "connected to server, starting first send_time sync");
     m_message_queue.clear();
 
     const auto now = m_clock->now();
@@ -243,6 +243,7 @@ void client::process_storage() {
 
         if (id == storage::id_not_assigned) {
             // entry was created
+            // todo: some flows has a problem here
             auto value = entry.get_value();
             m_message_queue.enqueue(out_message::entry_create(
                             m_clock->now(),

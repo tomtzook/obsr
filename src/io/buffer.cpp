@@ -196,13 +196,19 @@ void buffer::read_from(obsr::os::readable& readable) {
             return;
         }
 
-        space = (m_read_pos - m_write_pos);
-        read = readable.read(m_buffer, space);
-        m_write_pos = read;
+        space = (m_read_pos);
+        if (space >= 1) {
+            read = readable.read(m_buffer, space);
+            m_write_pos = read;
+        } else {
+            m_write_pos = m_read_pos;
+        }
     } else {
         const auto space = (m_read_pos - m_write_pos);
-        auto read = readable.read(m_buffer + m_write_pos, space);
-        m_write_pos += read;
+        if (space >= 1) {
+            auto read = readable.read(m_buffer + m_write_pos, space);
+            m_write_pos += read;
+        }
     }
 }
 

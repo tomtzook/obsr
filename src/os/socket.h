@@ -30,6 +30,8 @@ define_sockopt(keepalive, sockopt_type::keep_alive, bool);
 
 class base_socket : public resource {
 public:
+    using error_code_t = int;
+
     base_socket();
     explicit base_socket(int fd);
 
@@ -54,8 +56,9 @@ public:
     void bind(const std::string& ip, uint16_t port);
     void bind(uint16_t port);
 
+    error_code_t get_internal_error();
+
 protected:
-    using error_code_t = int;
 
     inline bool is_blocking() const {
         return m_is_blocking;
@@ -73,7 +76,6 @@ protected:
     }
 
     error_code_t get_call_error() const;
-    error_code_t get_internal_error();
 
     void handle_call_error(error_code_t code=0);
     void check_internal_error(error_code_t code=0);

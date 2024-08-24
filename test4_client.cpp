@@ -11,7 +11,7 @@ int main() {
 
     auto root = obsr::get_root();
     auto table1 = obsr::get_child(root, "hello");
-    auto entry2 = obsr::get_entry(table1, "time");
+    auto entry2 = obsr::get_entry(table1, "send_time");
 
     auto listener = obsr::listen_object(root, [](const obsr::event& event)->void {
         printf("EVENT notification: m_type=%d, path=%s\n",
@@ -38,8 +38,8 @@ int main() {
                         printf("other\n");
                         break;
                 }
-                printf("\t now time=%ld\n", obsr::time().count());
-                printf("\t now time actual=%ld\n", obsr::time_now().count());
+                printf("\t now send_time=%ld\n", obsr::time().count());
+                printf("\t now send_time actual=%ld\n", obsr::time_now().count());
                 break;
             }
         }

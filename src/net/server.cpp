@@ -192,7 +192,7 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                 parse_data.id = assign_id_to_entry(parse_data.name);
             }
 
-            message_to_others = out_message::entry_create(parse_data.time,
+            message_to_others = out_message::entry_create(parse_data.send_time,
                                                           parse_data.id,
                                                           parse_data.name,
                                                           obsr::value(parse_data.value));
@@ -203,10 +203,10 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                     parse_data.id,
                     parse_data.name,
                     parse_data.value,
-                    parse_data.time);
+                    parse_data.send_time);
             break;
         case message_type::entry_update:
-            message_to_others = out_message::entry_update(parse_data.time,
+            message_to_others = out_message::entry_update(parse_data.send_time,
                                                           parse_data.id,
                                                           obsr::value(parse_data.value));
             invoke_shared_ptr<storage::storage, storage::entry_id, const obsr::value&, std::chrono::milliseconds>(
@@ -215,21 +215,24 @@ void server::on_new_message(server_io::client_id id, const message_header& heade
                     &storage::storage::on_entry_updated,
                     parse_data.id,
                     parse_data.value,
-                    parse_data.time);
+                    parse_data.send_time);
             break;
         case message_type::entry_delete:
-            message_to_others = out_message::entry_deleted(parse_data.time, parse_data.id);
+            message_to_others = out_message::entry_deleted(parse_data.send_time,
+                                                           parse_data.id);
             invoke_shared_ptr<storage::storage, storage::entry_id, std::chrono::milliseconds>(
                     lock,
                     m_storage,
                     &storage::storage::on_entry_deleted,
                     parse_data.id,
-                    parse_data.time);
+                    parse_data.send_time);
             break;
         case message_type::time_sync_request: {
             const auto now = m_clock->now();
             enqueue_message_for_client(id,
-                                       out_message::time_sync_response(now, parse_data.time),
+                                       out_message::time_sync_response(
+                                               now,
+                                               parse_data.send_time),
                                        message_queue::flag_immediate);
             break;
         }
@@ -304,7 +307,10 @@ void server::handle_do_handshake_for_client(server_io::client_id id) {
         auto value_opt = m_storage->get_entry_value_from_id(entry_id);
         if (value_opt) {
             auto& value = value_opt.value();
-            client->enqueue(out_message::entry_update(now, entry_id, std::move(value)));
+            client->enqueue(out_message::entry_update(
+                    now,
+                    entry_id,
+                    std::move(value)));
         }
     }
 

@@ -6,7 +6,7 @@
 
 namespace obsr {
 
-#define LOG_MODULE "time"
+#define LOG_MODULE "send_time"
 
 clock::clock()
     : m_offset(std::chrono::milliseconds(0))
@@ -25,7 +25,7 @@ bool clock::sync(std::chrono::milliseconds local_time, std::chrono::milliseconds
     m_rtt2.store(rtt2);
     m_offset.store(offset);
 
-    TRACE_DEBUG(LOG_MODULE, "new clock offset: offset=%lu, old time=%lu, new time=%lu",
+    TRACE_DEBUG(LOG_MODULE, "new clock offset: offset=%lu, old send_time=%lu, new send_time=%lu",
                offset, now, this->now());
 
     return true;

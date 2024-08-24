@@ -58,6 +58,18 @@ private:
     obsr::io::buffer m_read_buffer;
 };
 
+enum class io_stop_reason {
+    read_eof,
+    read_error,
+    write_error,
+    open_error,
+    deconstructed,
+    external_call,
+    connect_failed,
+    poll_error,
+    reader_error
+};
+
 class socket_io {
 public:
     class listener {
@@ -102,7 +114,7 @@ private:
     };
 
     void on_ready_resource(uint32_t flags);
-    void stop_internal(std::unique_lock<std::mutex>& lock, bool report = true);
+    void stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason reason, bool report = true);
 
     std::shared_ptr<obsr::io::nio_runner> m_nio_runner;
     obsr::handle m_resource_handle;
@@ -159,6 +171,8 @@ private:
         void attach(std::unique_ptr<os::socket>&& socket);
         bool write(uint8_t type, const uint8_t* buffer, size_t size);
 
+        void stop();
+
         // events from server
         void on_new_message(const message_header& header, const uint8_t* buffer, size_t size) override;
         void on_connected() override;
@@ -175,7 +189,7 @@ private:
     };
 
     void on_ready_resource(uint32_t flags);
-    void stop_internal(std::unique_lock<std::mutex>& lock, bool report = true);
+    void stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason reason, bool report = true);
 
     std::shared_ptr<obsr::io::nio_runner> m_nio_runner;
     obsr::handle m_resource_handle;

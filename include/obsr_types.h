@@ -55,6 +55,13 @@ public:
         return m_value.boolean;
     }
 
+    [[nodiscard]] inline bool get_boolean_or(bool default_val) const {
+        if (m_type == value_type::boolean) {
+            return m_value.boolean;
+        }
+        return default_val;
+    }
+
     inline void set_boolean(bool value) {
         m_type = value_type::boolean;
         m_value.boolean = value;
@@ -63,6 +70,13 @@ public:
     [[nodiscard]] inline int32_t get_int32() const {
         assert(m_type == value_type::integer32);
         return m_value.integer;
+    }
+
+    [[nodiscard]] inline int32_t get_int32_or(int32_t default_val) const {
+        if (m_type == value_type::integer32) {
+            return m_value.integer;
+        }
+        return default_val;
     }
 
     inline void set_int32(int32_t value) {
@@ -75,6 +89,13 @@ public:
         return m_value.integer64;
     }
 
+    [[nodiscard]] inline int64_t get_int64_or(int64_t default_val) const {
+        if (m_type == value_type::integer64) {
+            return m_value.integer64;
+        }
+        return default_val;
+    }
+
     inline void set_int64(int64_t value) {
         m_type = value_type::integer64;
         m_value.integer64 = value;
@@ -85,6 +106,13 @@ public:
         return m_value.floating_point;
     }
 
+    [[nodiscard]] inline float get_float_or(float default_val) const {
+        if (m_type == value_type::floating_point32) {
+            return m_value.floating_point;
+        }
+        return default_val;
+    }
+
     inline void set_float(float value) {
         m_type = value_type::floating_point32;
         m_value.floating_point = value;
@@ -93,6 +121,13 @@ public:
     [[nodiscard]] inline double get_double() const {
         assert(m_type == value_type::floating_point64);
         return m_value.floating_point64;
+    }
+
+    [[nodiscard]] inline double get_double_or(double default_val) const {
+        if (m_type == value_type::floating_point64) {
+            return m_value.floating_point64;
+        }
+        return default_val;
     }
 
     inline void set_double(double value) {

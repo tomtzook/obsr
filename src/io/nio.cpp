@@ -74,7 +74,9 @@ nio_runner::nio_runner()
 
 nio_runner::~nio_runner() {
     m_thread_loop_run.store(false);
-    m_thread.join();
+    if (m_thread.joinable()) {
+        m_thread.join();
+    }
 }
 
 obsr::handle nio_runner::add(std::shared_ptr<obsr::os::resource> resource, uint32_t flags, callback callback) {

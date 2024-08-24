@@ -24,9 +24,9 @@ enum class parse_state {
     check_type,
     read_id,
     read_name,
-    read_type,
+    read_value_type,
     read_value,
-    read_time,
+    read_send_time,
     read_time_value
 };
 
@@ -37,14 +37,15 @@ enum parse_error {
 };
 
 struct parse_data {
-    storage::entry_id id;
-    std::string name;
-    value_type type;
-    obsr::value value = obsr::value::make();
+    std::chrono::milliseconds send_time;
 
+    storage::entry_id id;
+
+    std::string name;
     uint8_t name_buffer[1024];
 
-    std::chrono::milliseconds time;
+    value_type type;
+    obsr::value value = obsr::value::make();
     std::chrono::milliseconds time_value;
 };
 
@@ -56,7 +57,7 @@ public:
         , m_name()
         , m_value(value::make())
         , m_time(0)
-        , m_update_time(0)
+        , m_send_time(0)
     {}
 
     inline message_type type() const {
@@ -80,7 +81,7 @@ public:
 
     inline std::chrono::milliseconds send_time() const {
         assert(m_type == message_type::entry_create || m_type == message_type::entry_update || m_type == message_type::entry_delete || m_type == message_type::entry_id_assign || m_type == message_type::time_sync_response || m_type == message_type::time_sync_request);
-        return m_update_time;
+        return m_send_time;
     }
 
     inline std::chrono::milliseconds time_value() const {
@@ -92,29 +93,29 @@ public:
         return out_message();
     }
 
-    static inline out_message entry_create(std::chrono::milliseconds update_time, storage::entry_id id, std::string_view name, obsr::value&& value) {
+    static inline out_message entry_create(std::chrono::milliseconds send_time, storage::entry_id id, std::string_view name, obsr::value&& value) {
         out_message message(message_type::entry_create);
+        message.m_send_time = send_time;
         message.m_id = id;
         message.m_name = name;
-        message.m_value = value;
-        message.m_update_time = update_time;
+        message.m_value = std::move(value);
 
         return std::move(message);
     }
 
-    static inline out_message entry_update(std::chrono::milliseconds update_time, storage::entry_id id, obsr::value&& value) {
+    static inline out_message entry_update(std::chrono::milliseconds send_time, storage::entry_id id, obsr::value&& value) {
         out_message message(message_type::entry_update);
+        message.m_send_time = send_time;
         message.m_id = id;
-        message.m_value = value;
-        message.m_update_time = update_time;
+        message.m_value = std::move(value);
 
         return std::move(message);
     }
 
-    static inline out_message entry_deleted(std::chrono::milliseconds update_time, storage::entry_id id) {
+    static inline out_message entry_deleted(std::chrono::milliseconds send_time, storage::entry_id id) {
         out_message message(message_type::entry_delete);
+        message.m_send_time = send_time;
         message.m_id = id;
-        message.m_update_time = update_time;
 
         return std::move(message);
     }
@@ -134,16 +135,16 @@ public:
         return out_message(message_type::handshake_finished);
     }
 
-    static inline out_message time_sync_request(std::chrono::milliseconds update_time) {
+    static inline out_message time_sync_request(std::chrono::milliseconds send_time) {
         out_message message(message_type::time_sync_request);
-        message.m_update_time = update_time;
+        message.m_send_time = send_time;
 
         return std::move(message);
     }
 
-    static inline out_message time_sync_response(std::chrono::milliseconds update_time, std::chrono::milliseconds time) {
+    static inline out_message time_sync_response(std::chrono::milliseconds send_time, std::chrono::milliseconds time) {
         out_message message(message_type::time_sync_response);
-        message.m_update_time = update_time;
+        message.m_send_time = send_time;
         message.m_time = time;
 
         return std::move(message);
@@ -156,7 +157,7 @@ private:
     std::string m_name;
     obsr::value m_value;
     std::chrono::milliseconds m_time;
-    std::chrono::milliseconds m_update_time;
+    std::chrono::milliseconds m_send_time;
 };
 
 class message_parser : public state_machine<parse_state, parse_state::check_type, parse_data> {
@@ -185,11 +186,11 @@ public:
     void reset();
 
     bool entry_id_assign(storage::entry_id id, std::string_view name);
-    bool entry_created(std::chrono::milliseconds time, storage::entry_id id, std::string_view name, const value& value);
-    bool entry_updated(std::chrono::milliseconds time, storage::entry_id id, const value& value);
-    bool entry_deleted(std::chrono::milliseconds time, storage::entry_id id);
-    bool time_sync_request(std::chrono::milliseconds start_time);
-    bool time_sync_response(std::chrono::milliseconds client_time, std::chrono::milliseconds server_time);
+    bool entry_created(std::chrono::milliseconds send_time, storage::entry_id id, std::string_view name, const value& value);
+    bool entry_updated(std::chrono::milliseconds send_time, storage::entry_id id, const value& value);
+    bool entry_deleted(std::chrono::milliseconds send_time, storage::entry_id id);
+    bool time_sync_request(std::chrono::milliseconds send_time);
+    bool time_sync_response(std::chrono::milliseconds send_time, std::chrono::milliseconds request_time);
 private:
     io::linear_buffer m_buffer;
 };

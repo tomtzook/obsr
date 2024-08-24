@@ -79,7 +79,7 @@ public:
     void delete_entries(const std::string_view& path);
 
     uint32_t probe(entry entry);
-    obsr::value get_entry_value(entry entry);
+    std::optional<obsr::value> get_entry_value(entry entry);
     void set_entry_value(entry entry, const obsr::value& value);
     void clear_entry(entry entry);
 
@@ -123,7 +123,7 @@ private:
     listener_storage_ref m_listener_storage;
     std::shared_ptr<clock> m_clock;
 
-    std::recursive_mutex m_mutex;
+    std::recursive_mutex m_mutex; // todo: switch to regular
     handle_table<storage_entry, 256> m_entries;
     std::map<std::string, entry, std::less<>> m_paths;
     std::map<entry_id, entry> m_ids;

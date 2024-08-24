@@ -93,7 +93,12 @@ uint32_t instance::probe(entry entry) {
 obsr::value instance::get_value(entry entry) {
     std::unique_lock guard(m_mutex);
 
-    return m_storage->get_entry_value(entry);
+    auto opt = m_storage->get_entry_value(entry);
+    if (opt) {
+        return std::move(opt.value());
+    }
+
+    return value::make();
 }
 
 void instance::set_value(entry entry, const obsr::value& value) {

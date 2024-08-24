@@ -41,7 +41,7 @@ bool message_parser::process_state(parse_state current_state, parse_data& data) 
 
             return select_next_state(current_state);
         }
-        case parse_state::read_type: {
+        case parse_state::read_value_type: {
             if (!io::read8(m_buffer, reinterpret_cast<uint8_t&>(data.type))) {
                 return error(error_read_data);
             }
@@ -58,13 +58,13 @@ bool message_parser::process_state(parse_state current_state, parse_data& data) 
 
             return select_next_state(current_state);
         }
-        case parse_state::read_time: {
+        case parse_state::read_send_time: {
             uint64_t value;
             if (!io::read64(m_buffer, value)) {
                 return error(error_read_data);
             }
 
-            data.time = std::chrono::milliseconds(value);
+            data.send_time = std::chrono::milliseconds(value);
             return select_next_state(current_state);
         }
         case parse_state::read_time_value: {
@@ -88,14 +88,14 @@ bool message_parser::select_next_state(parse_state current_state) {
                 case message_type::entry_create:
                 case message_type::entry_update:
                 case message_type::entry_delete:
+                case message_type::time_sync_request:
+                case message_type::time_sync_response:
+                    return move_to_state(parse_state::read_send_time);
                 case message_type::entry_id_assign:
                     return move_to_state(parse_state::read_id);
                 case message_type::handshake_ready:
                 case message_type::handshake_finished:
                     return finished();
-                case message_type::time_sync_request:
-                case message_type::time_sync_response:
-                    return move_to_state(parse_state::read_time);
                 default:
                     return error(error_unknown_type);
             }
@@ -103,11 +103,12 @@ bool message_parser::select_next_state(parse_state current_state) {
         case parse_state::read_id: {
             switch (m_type) {
                 case message_type::entry_create:
-                case message_type::entry_update:
-                case message_type::entry_delete:
-                    return move_to_state(parse_state::read_time);
                 case message_type::entry_id_assign:
                     return move_to_state(parse_state::read_name);
+                case message_type::entry_update:
+                    return move_to_state(parse_state::read_value_type);
+                case message_type::entry_delete:
+                    return finished();
                 default:
                     return error(error_unknown_type);
             }
@@ -115,14 +116,14 @@ bool message_parser::select_next_state(parse_state current_state) {
         case parse_state::read_name: {
             switch (m_type) {
                 case message_type::entry_create:
-                    return move_to_state(parse_state::read_type);
+                    return move_to_state(parse_state::read_value_type);
                 case message_type::entry_id_assign:
                     return finished();
                 default:
                     return error(error_unknown_type);
             }
         }
-        case parse_state::read_type: {
+        case parse_state::read_value_type: {
             switch (m_type) {
                 case message_type::entry_create:
                 case message_type::entry_update:
@@ -140,13 +141,12 @@ bool message_parser::select_next_state(parse_state current_state) {
                     return error(error_unknown_type);
             }
         }
-        case parse_state::read_time: {
+        case parse_state::read_send_time: {
             switch (m_type) {
                 case message_type::entry_create:
-                    return move_to_state(parse_state::read_name);
                 case message_type::entry_update:
-                    return move_to_state(parse_state::read_type);
                 case message_type::entry_delete:
+                    return move_to_state(parse_state::read_id);
                 case message_type::time_sync_request:
                     return finished();
                 case message_type::time_sync_response:
@@ -196,12 +196,12 @@ bool message_serializer::entry_id_assign(storage::entry_id id, std::string_view 
     return true;
 }
 
-bool message_serializer::entry_created(std::chrono::milliseconds time, storage::entry_id id, std::string_view name, const value& value) {
-    if (!io::write16(m_buffer, id)) {
+bool message_serializer::entry_created(std::chrono::milliseconds send_time, storage::entry_id id, std::string_view name, const value& value) {
+    if (!io::write64(m_buffer, send_time.count())) {
         return false;
     }
 
-    if (!io::write64(m_buffer, time.count())) {
+    if (!io::write16(m_buffer, id)) {
         return false;
     }
 
@@ -220,12 +220,12 @@ bool message_serializer::entry_created(std::chrono::milliseconds time, storage::
     return true;
 }
 
-bool message_serializer::entry_updated(std::chrono::milliseconds time, storage::entry_id id, const value& value) {
-    if (!io::write16(m_buffer, id)) {
+bool message_serializer::entry_updated(std::chrono::milliseconds send_time, storage::entry_id id, const value& value) {
+    if (!io::write64(m_buffer, send_time.count())) {
         return false;
     }
 
-    if (!io::write64(m_buffer, time.count())) {
+    if (!io::write16(m_buffer, id)) {
         return false;
     }
 
@@ -240,32 +240,32 @@ bool message_serializer::entry_updated(std::chrono::milliseconds time, storage::
     return true;
 }
 
-bool message_serializer::entry_deleted(std::chrono::milliseconds time, storage::entry_id id) {
+bool message_serializer::entry_deleted(std::chrono::milliseconds send_time, storage::entry_id id) {
+    if (!io::write64(m_buffer, send_time.count())) {
+        return false;
+    }
+
     if (!io::write16(m_buffer, id)) {
         return false;
     }
 
-    if (!io::write64(m_buffer, time.count())) {
+    return true;
+}
+
+bool message_serializer::time_sync_request(std::chrono::milliseconds send_time) {
+    if (!io::write64(m_buffer, static_cast<uint64_t>(send_time.count()))) {
         return false;
     }
 
     return true;
 }
 
-bool message_serializer::time_sync_request(std::chrono::milliseconds start_time) {
-    if (!io::write64(m_buffer, static_cast<uint64_t>(start_time.count()))) {
+bool message_serializer::time_sync_response(std::chrono::milliseconds send_time, std::chrono::milliseconds request_time) {
+    if (!io::write64(m_buffer, static_cast<uint64_t>(send_time.count()))) {
         return false;
     }
 
-    return true;
-}
-
-bool message_serializer::time_sync_response(std::chrono::milliseconds client_time, std::chrono::milliseconds server_time) {
-    if (!io::write64(m_buffer, static_cast<uint64_t>(server_time.count()))) {
-        return false;
-    }
-
-    if (!io::write64(m_buffer, static_cast<uint64_t>(client_time.count()))) {
+    if (!io::write64(m_buffer, static_cast<uint64_t>(request_time.count()))) {
         return false;
     }
 
@@ -425,7 +425,7 @@ bool message_queue::write_time_sync_request(const out_message& message) {
 bool message_queue::write_time_sync_response(const out_message& message) {
     m_serializer.reset();
 
-    if (!m_serializer.time_sync_response(message.time_value(), message.send_time())) {
+    if (!m_serializer.time_sync_response(message.send_time(), message.time_value())) {
         return false;
     }
 

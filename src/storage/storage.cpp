@@ -10,6 +10,10 @@ namespace obsr::storage {
 
 #define LOG_MODULE "storage"
 
+static inline bool does_entry_have_value(const storage_entry* entry) {
+    return !entry->has_flags(flag_internal_created) && !entry->has_flags(flag_internal_deleted);
+}
+
 storage_entry::storage_entry(entry handle, const std::string_view& path)
     : m_handle(handle)
     , m_path(path)
@@ -144,15 +148,15 @@ uint32_t storage::probe(entry entry) {
     return data->get_flags() & ~flag_internal_mask;
 }
 
-obsr::value storage::get_entry_value(entry entry) {
+std::optional<obsr::value> storage::get_entry_value(entry entry) {
     std::unique_lock guard(m_mutex);
 
     auto data = m_entries[entry];
-    if (data->has_flags(flag_internal_deleted)) {
-        throw entry_deleted_exception();
+    if (does_entry_have_value(data)) {
+        return data->get_value();
     }
 
-    return data->get_value();
+    return {};
 }
 
 void storage::set_entry_value(entry entry, const obsr::value& value) {
@@ -228,11 +232,11 @@ std::optional<obsr::value> storage::get_entry_value_from_id(entry_id id) {
     }
 
     auto data = m_entries[entry];
-    if (data->has_flags(flag_internal_created) || data->has_flags(flag_internal_deleted)) {
-        return {};
+    if (does_entry_have_value(data)) {
+        return data->get_value();
     }
 
-    return {data->get_value()};
+    return {};
 }
 
 void storage::on_clock_resync() {
@@ -247,7 +251,7 @@ void storage::on_clock_resync() {
         }
 
         const auto adjusted_time = m_clock->adjust_time(time);
-        TRACE_DEBUG(LOG_MODULE, "adjusted entry time. old=%lu, new=%lu",
+        TRACE_DEBUG(LOG_MODULE, "adjusted entry send_time. old=%lu, new=%lu",
                    time, adjusted_time);
 
         data.set_last_update_timestamp(adjusted_time);
@@ -427,7 +431,7 @@ void storage::delete_entry_internal(entry entry,
 
     if (timestamp.count() == 0) {
         // todo: if this is done before clock sync with server then we have a problem!
-        //      receive rtt2 from net to update all local time
+        //      receive rtt2 from net to update all local send_time
         timestamp = m_clock->now();
     }
     data->set_last_update_timestamp(timestamp);

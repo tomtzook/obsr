@@ -2,6 +2,7 @@
 
 #include <string>
 #include <functional>
+#include <chrono>
 
 #include "obsr_types.h"
 

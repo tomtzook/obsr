@@ -12,7 +12,7 @@ int main() {
     auto root = obsr::get_root();
     auto table1 = obsr::get_child(root, "hello");
     auto entry1 = obsr::get_entry(table1, "11");
-    auto entry2 = obsr::get_entry(table1, "time");
+    auto entry2 = obsr::get_entry(table1, "send_time");
 
     auto listener = obsr::listen_object(root, [](const obsr::event& event)->void {
         printf("EVENT notification: m_type=%d, path=%s\n",
@@ -53,7 +53,8 @@ int main() {
         auto value = obsr::value::make_int64(now.count());
         obsr::set_value(entry2, value);
 
-        sleep(1);
+        //sleep(1);
+        usleep(20000);
         now = obsr::time_now();
     }
 
