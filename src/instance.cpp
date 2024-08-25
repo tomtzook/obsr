@@ -1,9 +1,12 @@
 
 #include "internal_except.h"
+#include "debug.h"
 
 #include "instance.h"
 
 namespace obsr {
+
+#define LOG_MODULE "instance"
 
 static constexpr auto net_update_period = std::chrono::milliseconds(100);
 
@@ -141,7 +144,8 @@ void instance::start_server(uint16_t bind_port) {
     try {
         configure_net(server);
         server->start(bind_port);
-    } catch (...) {
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE, "error while starting network server: what=%s", e.what());
         unconfigure_net(server);
         throw;
     }
@@ -158,7 +162,8 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
     try {
         configure_net(client);
         client->start({address, server_port});
-    } catch (...) {
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE, "error while starting network client: what=%s", e.what());
         unconfigure_net(client);
         throw;
     }

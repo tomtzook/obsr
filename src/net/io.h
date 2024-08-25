@@ -102,6 +102,8 @@ private:
     public:
         explicit update_handler(socket_io& io);
 
+        bool socket_closed() const;
+
         void on_read_ready();
         void on_write_ready();
         void on_hung_or_error();
@@ -156,6 +158,8 @@ private:
     class update_handler {
     public:
         explicit update_handler(server_io& io);
+
+        bool socket_closed() const;
 
         void on_read_ready();
         void on_hung_or_error();

@@ -13,6 +13,11 @@ namespace obsr::io {
 
 class nio_runner {
 public:
+    // todo: redesign to handle race where remove happens while callback is called.
+    //  many options, problem is also not deadlocking or starving .
+    //  need to make sure to have a more streamlined and consistent api.
+    //  all this queue of changing is mehhhhh
+    //  maybe try converging threads and such
     using callback = std::function<void(obsr::os::resource& resource, uint32_t flags)>;
 
     nio_runner();

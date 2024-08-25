@@ -228,7 +228,9 @@ bool client::open_socket_and_start_connection() {
         m_io.connect(m_conn_info);
 
         return true;
-    } catch (...) {
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE, "error while opening socket: what=%s", e.what());
+
         if (!m_io.is_stopped()) {
             m_io.stop();
         }

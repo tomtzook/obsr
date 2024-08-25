@@ -92,6 +92,7 @@ base_socket::error_code_t base_socket::get_call_error() const {
 }
 
 base_socket::error_code_t base_socket::get_internal_error() {
+    // todo: exposing this is breaking system abstraction
     int code;
     socklen_t len = sizeof(code);
     if (::getsockopt(fd(), SOL_SOCKET, SO_ERROR, &code, &len)) {

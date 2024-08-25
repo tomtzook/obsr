@@ -115,8 +115,8 @@ void socket_io::start(std::shared_ptr<obsr::os::socket> socket, bool connected) 
         m_resource_handle = m_nio_runner->add(m_socket,
                                               flags,
                                               [this](obsr::os::resource& res, uint32_t flags)->void { on_ready_resource(flags); });
-    } catch (...) {
-        TRACE_ERROR(LOG_MODULE_CLIENT, "start failed");
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE_CLIENT, "start failed: what=%s", e.what());
         stop_internal(lock, io_stop_reason::open_error);
 
         throw;
@@ -196,6 +196,10 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
 void socket_io::on_ready_resource(uint32_t flags) {
     update_handler handler(*this);
 
+    if (handler.socket_closed()) {
+        return;
+    }
+
     if ((flags & (obsr::os::selector::poll_hung | obsr::os::selector::poll_error)) != 0) {
         handler.on_hung_or_error();
     }
@@ -219,8 +223,8 @@ void socket_io::stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason
     if (m_resource_handle != empty_handle) {
         try {
             m_nio_runner->remove(m_resource_handle);
-        } catch (...) {
-            TRACE_ERROR(LOG_MODULE_CLIENT, "error while detaching from nio");
+        } catch (const std::exception& e) {
+            TRACE_ERROR(LOG_MODULE_CLIENT, "error while detaching from nio: what=%s", e.what());
         }
         m_resource_handle = empty_handle;
     }
@@ -228,8 +232,8 @@ void socket_io::stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason
     try {
         m_socket->close();
         m_socket.reset();
-    } catch (...) {
-        TRACE_ERROR(LOG_MODULE_CLIENT, "error while closing socket");
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE_CLIENT, "error while closing socket: what=%s", e.what());
     }
 
     m_state = state::idle;
@@ -245,6 +249,10 @@ socket_io::update_handler::update_handler(socket_io& io)
     , m_lock(io.m_mutex)
 {}
 
+bool socket_io::update_handler::socket_closed() const {
+    return !static_cast<bool>(m_io.m_socket);
+}
+
 void socket_io::update_handler::on_read_ready() {
     TRACE_DEBUG(LOG_MODULE_CLIENT, "on read update");
 
@@ -256,9 +264,9 @@ void socket_io::update_handler::on_read_ready() {
             // socket was closed
             TRACE_ERROR(LOG_MODULE_CLIENT, "read eof");
             m_io.stop_internal(m_lock, io_stop_reason::read_eof);
-        } catch (...) {
+        } catch (const std::exception& e) {
             // any other error
-            TRACE_ERROR(LOG_MODULE_CLIENT, "read error");
+            TRACE_ERROR(LOG_MODULE_CLIENT, "read error: what=%s", e.what());
             m_io.stop_internal(m_lock, io_stop_reason::read_error);
         }
 
@@ -394,8 +402,8 @@ void server_io::start(uint16_t bind_port) {
         m_resource_handle = m_nio_runner->add(m_socket,
                                               flags,
                                               [this](obsr::os::resource& res, uint32_t flags)->void { on_ready_resource(flags); });
-    } catch (...) {
-        TRACE_ERROR(LOG_MODULE_CLIENT, "start failed");
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE_CLIENT, "start failed: what=%s", e.what());
         stop_internal(lock, io_stop_reason::open_error);
 
         throw;
@@ -430,6 +438,10 @@ bool server_io::write_to(client_id id, uint8_t type, const uint8_t* buffer, size
 void server_io::on_ready_resource(uint32_t flags) {
     update_handler handler(*this);
 
+    if (handler.socket_closed()) {
+        return;
+    }
+
     if ((flags & (obsr::os::selector::poll_hung | obsr::os::selector::poll_error)) != 0) {
         handler.on_hung_or_error();
     }
@@ -448,9 +460,14 @@ void server_io::stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason
 
     if (m_resource_handle != empty_handle) {
         try {
+            // todo: if we finish stop_internal we have a race where the callback may be called
+            //  again after we exit. as such we could get a critical error due to accessing certain
+            //  memories
+            //  problem is: we have a potential for a deadlock because we are calling nio here with
+            //  our lock and it has its own lock
             m_nio_runner->remove(m_resource_handle);
-        } catch (...) {
-            TRACE_ERROR(LOG_MODULE_SERVER, "error while detaching from nio");
+        } catch (const std::exception& e) {
+            TRACE_ERROR(LOG_MODULE_SERVER, "error while detaching from nio: what=%s", e.what());
         }
         m_resource_handle = empty_handle;
     }
@@ -458,8 +475,8 @@ void server_io::stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason
     for (auto& [id, client] : m_clients) {
         try {
             client->stop();
-        } catch (...) {
-            TRACE_ERROR(LOG_MODULE_SERVER, "error stopping client id=%d", id);
+        } catch (const std::exception& e) {
+            TRACE_ERROR(LOG_MODULE_SERVER, "error stopping client id=%d: what=%s", id, e.what());
         }
     }
     m_clients.clear();
@@ -467,8 +484,8 @@ void server_io::stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason
     try {
         m_socket->close();
         m_socket.reset();
-    } catch (...) {
-        TRACE_ERROR(LOG_MODULE_SERVER, "error while closing socket");
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE_SERVER, "error while closing socket: what=%s", e.what());
     }
 
     m_state = state::idle;
@@ -483,6 +500,10 @@ server_io::update_handler::update_handler(server_io& io)
     : m_io(io)
     , m_lock(io.m_mutex)
 {}
+
+bool server_io::update_handler::socket_closed() const {
+    return !static_cast<bool>(m_io.m_socket);
+}
 
 void server_io::update_handler::on_read_ready() {
     TRACE_DEBUG(LOG_MODULE_SERVER, "on read ready");
