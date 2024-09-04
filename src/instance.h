@@ -7,8 +7,8 @@
 #include "storage/storage.h"
 #include "net/client.h"
 #include "net/server.h"
+#include "events/events.h"
 #include "util/time.h"
-#include "updater.h"
 
 namespace obsr {
 
@@ -47,17 +47,17 @@ public:
     void stop_network();
 
 private:
-    void configure_net(const std::shared_ptr<net::network_interface>& network_interface);
-    void unconfigure_net(const std::shared_ptr<net::network_interface>& network_interface);
+    void start_net(const std::shared_ptr<net::network_interface>& network_interface);
+    void stop_net(const std::shared_ptr<net::network_interface>& network_interface);
 
     std::mutex m_mutex;
     std::shared_ptr<clock> m_clock;
-    updater m_updater;
     storage::listener_storage_ref m_listener_storage;
     std::shared_ptr<storage::storage> m_storage;
+    std::shared_ptr<events::looper> m_looper;
+    events::looper_thread m_looper_thread;
 
     std::shared_ptr<net::network_interface> m_net_interface;
-    obsr::handle m_net_update_handle;
 
     handle_table<object_data, 256> m_objects;
     std::map<std::string, object, std::less<>> m_object_paths;

@@ -272,11 +272,15 @@ bool message_serializer::time_sync_response(std::chrono::milliseconds send_time,
     return true;
 }
 
-message_queue::message_queue(destination* destination)
-    : m_destination(destination)
+message_queue::message_queue()
+    : m_destination(nullptr)
     , m_serializer()
     , m_outgoing()
 {}
+
+void message_queue::attach(destination destination) {
+    m_destination = std::move(destination);
+}
 
 void message_queue::enqueue(const out_message& message, uint8_t flags) {
     if ((flags & flag_immediate) != 0) {
@@ -340,7 +344,7 @@ bool message_queue::write_entry_created(const out_message& message) {
         return false;
     }
 
-    if (!m_destination->write(
+    if (!m_destination(
             static_cast<uint8_t>(message_type::entry_create),
             m_serializer.data(),
             m_serializer.size())) {
@@ -359,7 +363,7 @@ bool message_queue::write_entry_updated(const out_message& message) {
         return false;
     }
 
-    if (!m_destination->write(
+    if (!m_destination(
             static_cast<uint8_t>(message_type::entry_update),
             m_serializer.data(),
             m_serializer.size())) {
@@ -377,7 +381,7 @@ bool message_queue::write_entry_deleted(const out_message& message) {
         return false;
     }
 
-    if (!m_destination->write(
+    if (!m_destination(
             static_cast<uint8_t>(message_type::entry_delete),
             m_serializer.data(),
             m_serializer.size())) {
@@ -395,7 +399,7 @@ bool message_queue::write_entry_id_assigned(const out_message& message) {
         return false;
     }
 
-    if (!m_destination->write(
+    if (!m_destination(
             static_cast<uint8_t>(message_type::entry_id_assign),
             m_serializer.data(),
             m_serializer.size())) {
@@ -412,7 +416,7 @@ bool message_queue::write_time_sync_request(const out_message& message) {
         return false;
     }
 
-    if (!m_destination->write(
+    if (!m_destination(
             static_cast<uint8_t>(message_type::time_sync_request),
             m_serializer.data(),
             m_serializer.size())) {
@@ -429,7 +433,7 @@ bool message_queue::write_time_sync_response(const out_message& message) {
         return false;
     }
 
-    if (!m_destination->write(
+    if (!m_destination(
             static_cast<uint8_t>(message_type::time_sync_response),
             m_serializer.data(),
             m_serializer.size())) {
@@ -440,7 +444,7 @@ bool message_queue::write_time_sync_response(const out_message& message) {
 }
 
 bool message_queue::write_basic(const out_message& message) {
-    if (!m_destination->write(
+    if (!m_destination(
             static_cast<uint8_t>(message.type()),
             nullptr,
             0)) {

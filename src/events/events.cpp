@@ -4,6 +4,7 @@
 #include "internal_except.h"
 #include "os/signal.h"
 #include "events.h"
+#include "util/time.h"
 
 namespace obsr::events {
 
@@ -26,7 +27,9 @@ looper::looper(std::unique_ptr<poller>&& poller)
     , m_fd_map()
     , m_updates()
     , m_execute_requests()
-    , m_run_signal(std::make_shared<os::signal>()) {
+    , m_run_signal(std::make_shared<os::signal>())
+    , m_timer_handles()
+    , m_timeout(1000) {
     add(m_run_signal, event_in, [this](looper& looper, obsr::handle handle, event_types events)->void {
         m_run_signal->clear();
     });
@@ -97,6 +100,37 @@ void looper::request_updates(obsr::handle handle, event_types events, events_upd
     m_run_signal->set();
 }
 
+obsr::handle looper::create_timer(std::chrono::milliseconds timeout, timer_callback callback) {
+    std::unique_lock lock(m_mutex);
+
+    if (timeout.count() < 100) {
+        throw illegal_state_exception();
+    }
+
+    auto handle = m_timer_handles.allocate_new();
+    auto data = m_timer_handles[handle];
+    data->timeout = timeout;
+    data->callback = std::move(callback);
+    data->next_timestamp = time_now() + timeout;
+
+    if (m_timeout > timeout) {
+        m_timeout = timeout;
+    }
+
+    return handle;
+}
+
+void looper::stop_timer(obsr::handle handle) {
+    std::unique_lock lock(m_mutex);
+
+    if (!m_handles.has(handle)) {
+        throw illegal_state_exception();
+    }
+
+    auto data = m_timer_handles[handle];
+    data->timeout = std::chrono::milliseconds(0);
+}
+
 void looper::request_execute(generic_callback callback) {
     std::unique_lock lock(m_mutex);
 
@@ -118,6 +152,7 @@ void looper::loop() {
     lock.lock();
 
     process_events(lock, result);
+    process_timers(lock);
     execute_requests(lock);
 }
 
@@ -178,6 +213,34 @@ void looper::process_events(std::unique_lock<std::mutex>& lock, polled_events& e
             // todo: handle
         }
         lock.lock();
+    }
+}
+
+void looper::process_timers(std::unique_lock<std::mutex>& lock) {
+    std::vector<obsr::handle> to_remove;
+    const auto now = time_now();
+
+    for (auto [handle, data] : m_timer_handles) {
+        if (data.timeout.count() == 0) {
+            to_remove.push_back(handle);
+            continue;
+        }
+
+        if (data.next_timestamp < now) {
+            continue;
+        }
+
+        lock.unlock();
+        try {
+            data.callback(*this, handle);
+        } catch (...) {}
+        lock.lock();
+
+        data.next_timestamp = now + data.timeout;
+    }
+
+    for (auto handle : to_remove) {
+        m_timer_handles.release(handle);
     }
 }
 

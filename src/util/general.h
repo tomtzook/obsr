@@ -27,8 +27,17 @@ static void invoke_ptr_nolock(obj_* ref, void(obj_::*func)(args_...), args_... a
     }
 }
 
+template<typename... args_>
+static void invoke_func_nolock(const std::function<void(args_...)>& ref, args_... args) {
+    if (ref != nullptr) {
+        try {
+            ref(args...);
+        } catch (...) {}
+    }
+}
+
 template<typename obj_, typename... args_>
-static void invoke_shared_ptr(std::unique_lock<std::mutex>& lock, const std::shared_ptr<obj_>& ref, void(obj_::*func)(args_...), args_... args) {
+static void invoke_sharedptr(std::unique_lock<std::mutex>& lock, const std::shared_ptr<obj_>& ref, void(obj_::*func)(args_...), args_... args) {
     auto ptr = ref.get();
     if (ptr != nullptr) {
         lock.unlock();
@@ -36,6 +45,16 @@ static void invoke_shared_ptr(std::unique_lock<std::mutex>& lock, const std::sha
             (ptr->*func)(args...);
         } catch (...) {}
         lock.lock();
+    }
+}
+
+template<typename obj_, typename... args_>
+static void invoke_sharedptr_nolock(const std::shared_ptr<obj_>& ref, void(obj_::*func)(args_...), args_... args) {
+    auto ptr = ref.get();
+    if (ptr != nullptr) {
+        try {
+            (ptr->*func)(args...);
+        } catch (...) {}
     }
 }
 

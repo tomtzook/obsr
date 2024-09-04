@@ -52,8 +52,6 @@ add_library(obsr STATIC
         src/util/general.h
         src/net/server.h
         src/net/server.cpp
-        src/updater.h
-        src/updater.cpp
         src/net/net.h
         src/os/poller.h
         src/os/poller.cpp

@@ -92,6 +92,7 @@ class looper {
 public:
     using generic_callback = std::function<void(looper&)>;
     using io_callback = std::function<void(looper&, obsr::handle, event_types)>;
+    using timer_callback = std::function<void(looper&, obsr::handle)>;
     enum class events_update_type {
         override,
         append,
@@ -106,6 +107,9 @@ public:
     void remove(obsr::handle handle);
     void request_updates(obsr::handle handle, event_types events, events_update_type type = events_update_type::override);
 
+    obsr::handle create_timer(std::chrono::milliseconds timeout, timer_callback callback);
+    void stop_timer(obsr::handle handle);
+
     void request_execute(generic_callback callback);
 
     void loop();
@@ -116,6 +120,11 @@ private:
         std::shared_ptr<obsr::os::resource> resource;
         event_types events;
         io_callback callback;
+    };
+    struct timer_data {
+        std::chrono::milliseconds timeout;
+        timer_callback callback;
+        std::chrono::milliseconds next_timestamp;
     };
     enum class update_type {
         add,
@@ -135,6 +144,7 @@ private:
     void process_updates();
     void process_update(update& update);
     void process_events(std::unique_lock<std::mutex>& lock, polled_events& events);
+    void process_timers(std::unique_lock<std::mutex>& lock);
     void execute_requests(std::unique_lock<std::mutex>& lock);
 
     std::mutex m_mutex;
@@ -144,6 +154,8 @@ private:
     std::deque<update> m_updates;
     std::deque<execute_request> m_execute_requests;
     std::shared_ptr<os::signal> m_run_signal;
+    handle_table<timer_data, 16> m_timer_handles;
+    std::chrono::milliseconds m_timeout;
 };
 
 class looper_thread {

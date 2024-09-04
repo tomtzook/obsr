@@ -210,20 +210,19 @@ private:
 
 class message_queue {
 public:
-    class destination {
-    public:
-        virtual bool write(uint8_t type, const uint8_t* buffer, size_t size) = 0;
-    };
+    using destination = std::function<bool(uint8_t, const uint8_t*, size_t)>;
     enum {
         flag_immediate = 1 << 0
     };
 
-    explicit message_queue(destination* destination);
+    message_queue();
+
+    void attach(destination destination);
 
     // todo: optimize by only writing the latest message for an entry (not including publish)
     // todo: try and switch to sending only the latest state instead of queueing every change
     //      only relevant if we can't keep up with changes
-    // todo: entry create should be a client only message without id to report new entry needing id assignment
+    // todo: entry create should be a network_client only message without id to report new entry needing id assignment
     void enqueue(const out_message& message, uint8_t flags = 0);
     void clear();
 
@@ -239,7 +238,7 @@ private:
     bool write_time_sync_response(const out_message& message);
     bool write_basic(const out_message& message);
 
-    destination* m_destination;
+    destination m_destination;
 
     message_serializer m_serializer;
     std::deque<out_message> m_outgoing;

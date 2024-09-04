@@ -17,18 +17,18 @@ class server_listener : public obsr::net::server_io::listener {
     obsr::net::server_io& m_io;
 
     void on_client_connected(obsr::net::server_io::client_id id) override {
-        printf("[server] client connected: id=%d\n", id);
+        printf("[server] network_client connected: id=%d\n", id);
 
         const char* msg = "hello";
         m_io.write_to(id, 1, reinterpret_cast<const uint8_t*>(msg), strlen(msg));
     }
 
     void on_client_disconnected(obsr::net::server_io::client_id id) override {
-        printf("[server] client disconnected: id=%d\n", id);
+        printf("[server] network_client disconnected: id=%d\n", id);
     }
 
     void on_new_message(obsr::net::server_io::client_id id, const obsr::net::message_header& header, const uint8_t* buffer, size_t size) override {
-        printf("[server] client new message: id=%d, type=%d, size=%d\n", id, header.type, size);
+        printf("[server] network_client new message: id=%d, type=%d, size=%d\n", id, header.type, size);
     }
 
     void on_close() override {
@@ -46,17 +46,17 @@ class client_listener : public obsr::net::socket_io::listener {
     obsr::net::socket_io& m_io;
 
     void on_new_message(const obsr::net::message_header& header, const uint8_t* buffer, size_t size) override {
-        printf("[client] new message: type=%d, size=%d\n", header.type, size);
+        printf("[network_client] new message: type=%d, size=%d\n", header.type, size);
         const char* msg = "hello2";
         m_io.write(1, reinterpret_cast<const uint8_t*>(msg), strlen(msg));
     }
 
     void on_connected() override {
-        printf("[client] connected\n");
+        printf("[network_client] connected\n");
     }
 
     void on_close() override {
-        printf("[client] close\n");
+        printf("[network_client] close\n");
     }
 
 public:

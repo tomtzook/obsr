@@ -1,6 +1,7 @@
 
 #include "internal_except.h"
 #include "debug.h"
+#include "os/poller.h"
 
 #include "instance.h"
 
@@ -17,11 +18,11 @@ object_data::object_data(const std::string_view& path)
 instance::instance()
     : m_mutex()
     , m_clock(std::make_shared<clock>())
-    , m_updater()
     , m_listener_storage(std::make_shared<storage::listener_storage>())
     , m_storage(std::make_shared<storage::storage>(m_listener_storage, m_clock))
+    , m_looper(std::make_shared<events::looper>(std::make_unique<os::resource_poller>()))
+    , m_looper_thread(m_looper)
     , m_net_interface()
-    , m_net_update_handle(empty_handle)
     , m_objects()
     , m_object_paths()
     , m_root(m_objects.allocate_new("")) {
@@ -141,11 +142,11 @@ void instance::start_server(uint16_t bind_port) {
 
     /*auto server = std::make_shared<net::server>(m_nio_runner, m_clock);
     try {
-        configure_net(server);
+        start_net(server);
         server->start(bind_port);
     } catch (const std::exception& e) {
         TRACE_ERROR(LOG_MODULE, "error while starting network server: what=%s", e.what());
-        unconfigure_net(server);
+        stop_net(server);
         throw;
     }
 
@@ -157,37 +158,35 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
         throw illegal_state_exception();
     }
 
-    /*auto client = std::make_shared<net::client>(m_nio_runner, m_clock);
+    auto network_client = std::make_shared<net::network_client>(m_clock);
     try {
-        configure_net(client);
-        client->start({address, server_port});
+        // todo: could have a bug with this address since it may not be tied to a string in the data section
+        network_client->configure_target({address, server_port});
+        start_net(network_client);
     } catch (const std::exception& e) {
-        TRACE_ERROR(LOG_MODULE, "error while starting network client: what=%s", e.what());
-        unconfigure_net(client);
+        TRACE_ERROR(LOG_MODULE, "error while starting network network_client: what=%s", e.what());
+        stop_net(network_client);
         throw;
     }
 
-    m_net_interface = client;*/
+    m_net_interface = network_client;
 }
 
 void instance::stop_network() {
     if (m_net_interface) {
         m_net_interface->stop();
-        unconfigure_net(m_net_interface);
+        stop_net(m_net_interface);
         m_net_interface.reset();
     }
 }
 
-void instance::configure_net(const std::shared_ptr<net::network_interface>& network_interface) {
-    m_updater.attach(network_interface, net_update_period);
+void instance::start_net(const std::shared_ptr<net::network_interface>& network_interface) {
     network_interface->attach_storage(m_storage);
+    network_interface->start(m_looper.get());
 }
 
-void instance::unconfigure_net(const std::shared_ptr<net::network_interface>& network_interface) {
-    if (m_net_update_handle != empty_handle) {
-        m_updater.remove(m_net_update_handle);
-        m_net_update_handle = empty_handle;
-    }
+void instance::stop_net(const std::shared_ptr<net::network_interface>& network_interface) {
+    network_interface->stop();
 }
 
 }

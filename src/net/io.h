@@ -49,20 +49,19 @@ private:
 // must be used from inside the looper
 class socket_io {
 public:
-    class listener {
-    public:
-        virtual void on_new_message(const message_header& header, const uint8_t* buffer, size_t size) = 0;
-        virtual void on_connected() = 0;
-        virtual void on_close() = 0;
-    };
+    using on_connect_cb = std::function<void()>;
+    using on_close_cb = std::function<void()>;
+    using on_message_cb = std::function<void(const message_header&, const uint8_t*, size_t)>;
 
     socket_io();
     ~socket_io();
 
+    void on_connect(on_connect_cb callback);
+    void on_close(on_close_cb callback);
+    void on_message(on_message_cb callback);
+
+    void start(events::looper* looper);
     void start(events::looper* looper,
-               listener* listener);
-    void start(events::looper* looper,
-               listener* listener,
                std::shared_ptr<obsr::os::socket> socket,
                bool connected = false);
     void stop();
@@ -86,9 +85,14 @@ private:
     void stop_internal();
 
     state m_state;
-    listener* m_listener;
     events::looper* m_looper;
     obsr::handle m_looper_handle;
+
+    struct {
+        on_connect_cb on_connect = nullptr;
+        on_close_cb on_close = nullptr;
+        on_message_cb on_message = nullptr;
+    } m_callbacks;
 
     std::shared_ptr<obsr::os::socket> m_socket;
     reader m_reader;
@@ -96,23 +100,26 @@ private:
     uint32_t m_next_message_index;
 };
 
+// must be used from inside the looper
 class server_io {
 public:
     using client_id = uint16_t;
     static constexpr client_id invalid_client_id = static_cast<client_id>(-1);
 
-    class listener {
-    public:
-        virtual void on_client_connected(client_id id) = 0;
-        virtual void on_client_disconnected(client_id id) = 0;
-        virtual void on_new_message(client_id id, const message_header& header, const uint8_t* buffer, size_t size) = 0;
-        virtual void on_close() = 0;
-    };
+    using on_connect_cb = std::function<void(client_id)>;
+    using on_disconnect_cb = std::function<void(client_id)>;
+    using on_close_cb = std::function<void()>;
+    using on_message_cb = std::function<void(client_id, const message_header&, const uint8_t*, size_t)>;
 
     server_io();
     ~server_io();
 
-    void start(events::looper* looper, listener* listener, uint16_t bind_port);
+    void on_connect(on_connect_cb callback);
+    void on_disconnect(on_disconnect_cb callback);
+    void on_close(on_close_cb callback);
+    void on_message(on_message_cb callback);
+
+    void start(events::looper* looper, uint16_t bind_port);
     void stop();
 
     bool write_to(client_id id, uint8_t type, const uint8_t* buffer, size_t size);
@@ -122,7 +129,7 @@ private:
         idle,
         open
     };
-    struct client : public socket_io::listener {
+    struct client {
     public:
         client(server_io& parent, client_id id);
 
@@ -130,11 +137,6 @@ private:
         void stop();
 
         bool write(uint8_t type, const uint8_t* buffer, size_t size);
-
-        // from listener
-        void on_new_message(const message_header& header, const uint8_t* buffer, size_t size) override;
-        void on_connected() override;
-        void on_close() override;
 
     private:
         server_io& m_parent;
@@ -149,9 +151,15 @@ private:
     void stop_internal();
 
     state m_state;
-    listener* m_listener;
     events::looper* m_looper;
     obsr::handle m_looper_handle;
+
+    struct {
+        on_connect_cb on_connect = nullptr;
+        on_disconnect_cb on_disconnect = nullptr;
+        on_close_cb on_close = nullptr;
+        on_message_cb on_message = nullptr;
+    } m_callbacks;
 
     std::shared_ptr<obsr::os::server_socket> m_socket;
 

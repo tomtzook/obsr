@@ -62,9 +62,9 @@ bool reader::process_state(read_state current_state, read_data& data) {
 
 socket_io::socket_io()
     : m_state(state::idle)
-    , m_listener(nullptr)
     , m_looper(nullptr)
     , m_looper_handle(empty_handle)
+    , m_callbacks()
     , m_socket()
     , m_reader(1024)
     , m_write_buffer(1024)
@@ -77,8 +77,19 @@ socket_io::~socket_io() {
     }
 }
 
-void socket_io::start(events::looper* looper,
-                      listener* listener) {
+void socket_io::on_connect(on_connect_cb callback) {
+    m_callbacks.on_connect = std::move(callback);
+}
+
+void socket_io::on_close(on_close_cb callback) {
+    m_callbacks.on_close = std::move(callback);
+}
+
+void socket_io::on_message(on_message_cb callback) {
+    m_callbacks.on_message = std::move(callback);
+}
+
+void socket_io::start(events::looper* looper) {
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
@@ -93,11 +104,10 @@ void socket_io::start(events::looper* looper,
         throw;
     }
 
-    start(looper, listener, socket, false);
+    start(looper, socket, false);
 }
 
 void socket_io::start(events::looper* looper,
-                      listener* listener,
                       std::shared_ptr<obsr::os::socket> socket,
                       bool connected) {
     if (m_state != state::idle) {
@@ -105,7 +115,6 @@ void socket_io::start(events::looper* looper,
     }
 
     m_looper = looper;
-    m_listener = listener;
 
     m_socket = std::move(socket);
     m_socket->configure_blocking(false);
@@ -243,7 +252,7 @@ void socket_io::on_write_ready() {
         // we can start reading again
         m_looper->request_updates(m_looper_handle, events::event_in, events::looper::events_update_type::append);
 
-        invoke_ptr_nolock(m_listener, &listener::on_connected);
+        invoke_func_nolock(m_callbacks.on_connect);
     } else if (m_state == state::connected) {
         try {
             TRACE_DEBUG(LOG_MODULE_CLIENT, "writing to socket");
@@ -280,9 +289,8 @@ void socket_io::process_new_data() {
             TRACE_DEBUG(LOG_MODULE_CLIENT, "new message processed");
             auto& state = m_reader.data();
 
-            invoke_ptr_nolock<listener, const message_header&, const uint8_t*, size_t>(
-                    m_listener,
-                    &listener::on_new_message,
+            invoke_func_nolock<const message_header&, const uint8_t*, size_t>(
+                    m_callbacks.on_message,
                     state.header,
                     state.message_buffer,
                     state.header.message_size);
@@ -321,14 +329,14 @@ void socket_io::stop_internal() {
     }
 
     m_state = state::idle;
-    invoke_ptr_nolock(m_listener, &listener::on_close);
+    invoke_func_nolock(m_callbacks.on_close);
 }
 
 server_io::server_io()
     : m_state(state::idle)
-    , m_listener(nullptr)
     , m_looper(nullptr)
     , m_looper_handle(empty_handle)
+    , m_callbacks()
     , m_socket()
     , m_clients()
     , m_next_client_id(0)
@@ -340,13 +348,28 @@ server_io::~server_io() {
     }
 }
 
-void server_io::start(events::looper* looper, listener* listener, uint16_t bind_port) {
+void server_io::on_connect(on_connect_cb callback) {
+    m_callbacks.on_connect = std::move(callback);
+}
+
+void server_io::on_disconnect(on_disconnect_cb callback) {
+    m_callbacks.on_disconnect = std::move(callback);
+}
+
+void server_io::on_close(on_close_cb callback) {
+    m_callbacks.on_close = std::move(callback);
+}
+
+void server_io::on_message(on_message_cb callback) {
+    m_callbacks.on_message = std::move(callback);
+}
+
+void server_io::start(events::looper* looper, uint16_t bind_port) {
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
 
     m_looper = looper;
-    m_listener = listener;
 
     TRACE_INFO(LOG_MODULE_SERVER, "start called");
 
@@ -414,20 +437,20 @@ void server_io::on_read_ready() {
         auto socket = m_socket->accept();
 
         id = m_next_client_id++;
-        TRACE_INFO(LOG_MODULE_SERVER, "handling new server client %d", id);
+        TRACE_INFO(LOG_MODULE_SERVER, "handling new server network_client %d", id);
 
         auto client = std::make_unique<server_io::client>(*this, id);
         auto [it, inserted] = m_clients.emplace(id, std::move(client));
         if (!inserted) {
-            TRACE_ERROR(LOG_MODULE_SERVER, "failed to store new client");
+            TRACE_ERROR(LOG_MODULE_SERVER, "failed to store new network_client");
             socket->close();
             return;
         }
 
         it->second->start(m_looper, std::move(socket));
-        invoke_ptr_nolock(m_listener, &server_io::listener::on_client_connected, id);
+        invoke_func_nolock(m_callbacks.on_connect, id);
 
-        TRACE_ERROR(LOG_MODULE_SERVER, "new client registered %d", id);
+        TRACE_ERROR(LOG_MODULE_SERVER, "new network_client registered %d", id);
     } catch (const io_exception&) {
         TRACE_ERROR(LOG_MODULE_SERVER, "error with new server");
 
@@ -465,7 +488,7 @@ void server_io::stop_internal() {
         try {
             client->stop(); // todo: make sure this isn't calling our close callback
         } catch (...) {
-            TRACE_ERROR(LOG_MODULE_SERVER, "error stopping client");
+            TRACE_ERROR(LOG_MODULE_SERVER, "error stopping network_client");
         }
     }
     m_clients.clear();
@@ -478,18 +501,36 @@ void server_io::stop_internal() {
     }
 
     m_state = state::idle;
-    invoke_ptr_nolock(m_listener, &listener::on_close);
+    invoke_func_nolock(m_callbacks.on_close);
 }
 
 server_io::client::client(server_io& parent, client_id id)
     : m_parent(parent)
     , m_id(id)
     , m_io()
-    , m_closing(false)
-{}
+    , m_closing(false) {
+    m_io.on_connect([this]()->void {
+        invoke_func_nolock(
+                m_parent.m_callbacks.on_connect,
+                m_id);
+    });
+    m_io.on_close([this]()->void {
+        invoke_func_nolock(
+                m_parent.m_callbacks.on_disconnect,
+                m_id);
+    });
+    m_io.on_message([this](const message_header& header, const uint8_t* buffer, size_t size)->void {
+        invoke_func_nolock<client_id, const message_header&, const uint8_t*, size_t>(
+                m_parent.m_callbacks.on_message,
+                m_id,
+                header,
+                buffer,
+                size);
+    });
+}
 
 void server_io::client::start(events::looper* looper, std::shared_ptr<obsr::os::socket> socket) {
-    m_io.start(looper, this, std::move(socket), true);
+    m_io.start(looper, std::move(socket), true);
 }
 
 void server_io::client::stop() {
@@ -499,34 +540,6 @@ void server_io::client::stop() {
 
 bool server_io::client::write(uint8_t type, const uint8_t* buffer, size_t size) {
     return m_io.write(type, buffer, size);
-}
-
-void server_io::client::on_new_message(const message_header& header, const uint8_t* buffer, size_t size) {
-    invoke_ptr_nolock<server_io::listener, client_id, const message_header&, const uint8_t*, size_t>(
-            m_parent.m_listener,
-            &server_io::listener::on_new_message,
-            m_id,
-            header,
-            buffer,
-            size);
-}
-
-void server_io::client::on_connected() {
-    invoke_ptr_nolock<server_io::listener, client_id>(
-            m_parent.m_listener,
-            &server_io::listener::on_client_connected,
-            m_id);
-}
-
-void server_io::client::on_close() {
-    if (m_closing) {
-        return;
-    }
-
-    invoke_ptr_nolock<server_io::listener, client_id>(
-            m_parent.m_listener,
-            &server_io::listener::on_client_disconnected,
-            m_id);
 }
 
 }
