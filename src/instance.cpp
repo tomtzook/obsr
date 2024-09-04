@@ -1,7 +1,6 @@
 
 #include "internal_except.h"
 #include "debug.h"
-#include "os/poller.h"
 
 #include "instance.h"
 
@@ -20,8 +19,6 @@ instance::instance()
     , m_clock(std::make_shared<clock>())
     , m_listener_storage(std::make_shared<storage::listener_storage>())
     , m_storage(std::make_shared<storage::storage>(m_listener_storage, m_clock))
-    , m_looper(std::make_shared<events::looper>(std::make_unique<os::resource_poller>()))
-    , m_looper_thread(m_looper)
     , m_net_interface()
     , m_objects()
     , m_object_paths()
@@ -140,17 +137,17 @@ void instance::start_server(uint16_t bind_port) {
         throw illegal_state_exception();
     }
 
-    /*auto server = std::make_shared<net::server>(m_nio_runner, m_clock);
+    auto network_server = std::make_shared<net::network_server>(m_clock);
     try {
-        start_net(server);
-        server->start(bind_port);
+        network_server->configure_bind(bind_port);
+        start_net(network_server);
     } catch (const std::exception& e) {
         TRACE_ERROR(LOG_MODULE, "error while starting network server: what=%s", e.what());
-        stop_net(server);
+        stop_net(network_server);
         throw;
     }
 
-    m_net_interface = server;*/
+    m_net_interface = network_server;
 }
 
 void instance::start_client(std::string_view address, uint16_t server_port) {
@@ -164,7 +161,7 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
         network_client->configure_target({address, server_port});
         start_net(network_client);
     } catch (const std::exception& e) {
-        TRACE_ERROR(LOG_MODULE, "error while starting network network_client: what=%s", e.what());
+        TRACE_ERROR(LOG_MODULE, "error while starting network client: what=%s", e.what());
         stop_net(network_client);
         throw;
     }
@@ -174,7 +171,6 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
 
 void instance::stop_network() {
     if (m_net_interface) {
-        m_net_interface->stop();
         stop_net(m_net_interface);
         m_net_interface.reset();
     }
@@ -182,7 +178,7 @@ void instance::stop_network() {
 
 void instance::start_net(const std::shared_ptr<net::network_interface>& network_interface) {
     network_interface->attach_storage(m_storage);
-    network_interface->start(m_looper.get());
+    network_interface->start();
 }
 
 void instance::stop_net(const std::shared_ptr<net::network_interface>& network_interface) {

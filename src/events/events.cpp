@@ -5,6 +5,7 @@
 #include "os/signal.h"
 #include "events.h"
 #include "util/time.h"
+#include "os/poller.h"
 
 namespace obsr::events {
 
@@ -22,6 +23,7 @@ polled_events::iterator polled_events::end() const {
 
 looper::looper(std::unique_ptr<poller>&& poller)
     : m_mutex()
+    , m_loop_finish()
     , m_poller(std::move(poller))
     , m_handles()
     , m_fd_map()
@@ -33,6 +35,14 @@ looper::looper(std::unique_ptr<poller>&& poller)
     add(m_run_signal, event_in, [this](looper& looper, obsr::handle handle, event_types events)->void {
         m_run_signal->clear();
     });
+}
+
+looper::looper()
+    : looper(std::make_unique<os::resource_poller>())
+{}
+
+void looper::signal_run() {
+    m_run_signal->set();
 }
 
 obsr::handle looper::add(std::shared_ptr<os::resource> resource, event_types events, io_callback callback) {
@@ -55,7 +65,7 @@ obsr::handle looper::add(std::shared_ptr<os::resource> resource, event_types eve
     m_fd_map.emplace(descriptor, data);
     m_updates.push_back({handle, update_type::add, events});
 
-    m_run_signal->set();
+    signal_run();
 
     return handle;
 }
@@ -71,7 +81,7 @@ void looper::remove(obsr::handle handle) {
     m_fd_map.erase(data->resource->get_descriptor());
     m_poller->remove(*data->resource);
 
-    m_run_signal->set();
+    signal_run();
 }
 
 void looper::request_updates(obsr::handle handle, event_types events, events_update_type type) {
@@ -97,13 +107,13 @@ void looper::request_updates(obsr::handle handle, event_types events, events_upd
     }
 
     m_updates.push_back({handle, update_type, events});
-    m_run_signal->set();
+    signal_run();
 }
 
 obsr::handle looper::create_timer(std::chrono::milliseconds timeout, timer_callback callback) {
     std::unique_lock lock(m_mutex);
 
-    if (timeout.count() < 100) {
+    if (timeout.count() < 100) { // todo const
         throw illegal_state_exception();
     }
 
@@ -116,6 +126,8 @@ obsr::handle looper::create_timer(std::chrono::milliseconds timeout, timer_callb
     if (m_timeout > timeout) {
         m_timeout = timeout;
     }
+
+    signal_run();
 
     return handle;
 }
@@ -131,14 +143,22 @@ void looper::stop_timer(obsr::handle handle) {
     data->timeout = std::chrono::milliseconds(0);
 }
 
-void looper::request_execute(generic_callback callback) {
+void looper::request_execute(generic_callback callback, execute_type type) {
     std::unique_lock lock(m_mutex);
 
     execute_request request{};
     request.callback = std::move(callback);
     m_execute_requests.push_back(request);
 
-    m_run_signal->set();
+    signal_run();
+
+    if (type == execute_type::sync) {
+        // this is kind of a cheat since we wait for everything in the loop
+        // to run
+        m_loop_finish.wait(lock, [&]()->bool {
+            return m_execute_requests.empty();
+        });
+    }
 }
 
 void looper::loop() {
@@ -148,12 +168,14 @@ void looper::loop() {
 
     lock.unlock();
     // todo: max events and milliseconds
-    auto result = m_poller->poll(20, std::chrono::milliseconds(5000));
+    auto result = m_poller->poll(20, m_timeout);
     lock.lock();
 
     process_events(lock, result);
     process_timers(lock);
     execute_requests(lock);
+
+    m_loop_finish.notify_all();
 }
 
 void looper::process_updates() {
@@ -226,7 +248,7 @@ void looper::process_timers(std::unique_lock<std::mutex>& lock) {
             continue;
         }
 
-        if (data.next_timestamp < now) {
+        if (data.next_timestamp > now) {
             continue;
         }
 
@@ -269,8 +291,7 @@ looper_thread::looper_thread(std::shared_ptr<looper>& looper)
 looper_thread::~looper_thread() {
     m_thread_loop_run.store(false);
     // force looper to run
-    // todo: specific api
-    m_looper->request_execute([](events::looper&)->void {});
+    m_looper->signal_run();
     if (m_thread.joinable()) {
         m_thread.join();
     }

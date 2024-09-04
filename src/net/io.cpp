@@ -437,12 +437,12 @@ void server_io::on_read_ready() {
         auto socket = m_socket->accept();
 
         id = m_next_client_id++;
-        TRACE_INFO(LOG_MODULE_SERVER, "handling new server network_client %d", id);
+        TRACE_INFO(LOG_MODULE_SERVER, "handling new server client %d", id);
 
         auto client = std::make_unique<server_io::client>(*this, id);
         auto [it, inserted] = m_clients.emplace(id, std::move(client));
         if (!inserted) {
-            TRACE_ERROR(LOG_MODULE_SERVER, "failed to store new network_client");
+            TRACE_ERROR(LOG_MODULE_SERVER, "failed to store new client");
             socket->close();
             return;
         }
@@ -450,7 +450,7 @@ void server_io::on_read_ready() {
         it->second->start(m_looper, std::move(socket));
         invoke_func_nolock(m_callbacks.on_connect, id);
 
-        TRACE_ERROR(LOG_MODULE_SERVER, "new network_client registered %d", id);
+        TRACE_ERROR(LOG_MODULE_SERVER, "new client registered %d", id);
     } catch (const io_exception&) {
         TRACE_ERROR(LOG_MODULE_SERVER, "error with new server");
 
@@ -488,7 +488,7 @@ void server_io::stop_internal() {
         try {
             client->stop(); // todo: make sure this isn't calling our close callback
         } catch (...) {
-            TRACE_ERROR(LOG_MODULE_SERVER, "error stopping network_client");
+            TRACE_ERROR(LOG_MODULE_SERVER, "error stopping client");
         }
     }
     m_clients.clear();

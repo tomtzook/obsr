@@ -7,7 +7,6 @@
 #include "storage/storage.h"
 #include "net/client.h"
 #include "net/server.h"
-#include "events/events.h"
 #include "util/time.h"
 
 namespace obsr {
@@ -54,8 +53,6 @@ private:
     std::shared_ptr<clock> m_clock;
     storage::listener_storage_ref m_listener_storage;
     std::shared_ptr<storage::storage> m_storage;
-    std::shared_ptr<events::looper> m_looper;
-    events::looper_thread m_looper_thread;
 
     std::shared_ptr<net::network_interface> m_net_interface;
 

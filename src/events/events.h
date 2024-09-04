@@ -7,6 +7,7 @@
 #include <thread>
 #include <atomic>
 #include <deque>
+#include <condition_variable>
 
 #include "obsr_types.h"
 #include "os/io.h"
@@ -93,13 +94,21 @@ public:
     using generic_callback = std::function<void(looper&)>;
     using io_callback = std::function<void(looper&, obsr::handle, event_types)>;
     using timer_callback = std::function<void(looper&, obsr::handle)>;
+
     enum class events_update_type {
         override,
         append,
         remove
     };
+    enum class execute_type {
+        async,
+        sync
+    };
 
     explicit looper(std::unique_ptr<poller>&& poller);
+    looper();
+
+    void signal_run();
 
     obsr::handle add(std::shared_ptr<os::resource> resource, event_types events, io_callback callback);
     // note: calling this from another thread while a callback is running causes a race with a potential
@@ -110,7 +119,7 @@ public:
     obsr::handle create_timer(std::chrono::milliseconds timeout, timer_callback callback);
     void stop_timer(obsr::handle handle);
 
-    void request_execute(generic_callback callback);
+    void request_execute(generic_callback callback, execute_type type = execute_type::async);
 
     void loop();
 
@@ -148,6 +157,7 @@ private:
     void execute_requests(std::unique_lock<std::mutex>& lock);
 
     std::mutex m_mutex;
+    std::condition_variable m_loop_finish;
     std::unique_ptr<poller> m_poller;
     handle_table<resource_data, 256> m_handles;
     std::unordered_map<os::descriptor, resource_data*> m_fd_map;
@@ -160,7 +170,7 @@ private:
 
 class looper_thread {
 public:
-    looper_thread(std::shared_ptr<looper>& looper);
+    explicit looper_thread(std::shared_ptr<looper>& looper);
     ~looper_thread();
 
 private:

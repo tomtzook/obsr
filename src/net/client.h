@@ -9,8 +9,6 @@
 
 namespace obsr::net {
 
-// todo: manage like a proper state machine
-
 class network_client : public network_interface {
 public:
     explicit network_client(std::shared_ptr<clock>& clock);
@@ -18,7 +16,7 @@ public:
     void configure_target(connection_info info);
 
     void attach_storage(std::shared_ptr<storage::storage> storage) override;
-    void start(events::looper* looper) override;
+    void start() override;
     void stop() override;
 
 private:
@@ -35,12 +33,14 @@ private:
     bool do_open_and_connect();
     void process_storage();
 
-    std::mutex m_mutex;
+    std::mutex m_mutex; // todo: use
     state m_state;
+
+    std::shared_ptr<events::looper> m_looper;
+    std::unique_ptr<events::looper_thread> m_looper_thread;
 
     std::shared_ptr<clock> m_clock;
     std::shared_ptr<storage::storage> m_storage;
-    events::looper* m_looper;
     connection_info m_conn_info;
     obsr::handle m_update_timer_handle;
 

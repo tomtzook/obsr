@@ -18,9 +18,10 @@ static constexpr auto update_time = std::chrono::milliseconds(200);
 network_client::network_client(std::shared_ptr<clock>& clock)
     : m_mutex()
     , m_state(state::idle)
+    , m_looper()
+    , m_looper_thread()
     , m_storage(nullptr)
     , m_clock(clock)
-    , m_looper(nullptr)
     , m_conn_info({"", 0})
     , m_update_timer_handle(empty_handle)
     , m_io()
@@ -39,6 +40,7 @@ network_client::network_client(std::shared_ptr<clock>& clock)
         m_clock_sync_timer.stop();
 
         m_state = state::opening;
+        m_connect_retry_timer.start();
     });
     m_io.on_message([this](const message_header& header, const uint8_t* buffer, size_t size)->void {
         auto type = static_cast<message_type>(header.type);
@@ -138,9 +140,7 @@ void network_client::attach_storage(std::shared_ptr<storage::storage> storage) {
     m_storage = std::move(storage);
 }
 
-void network_client::start(events::looper* looper) {
-    // todo: sync?
-
+void network_client::start() {
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
@@ -158,7 +158,9 @@ void network_client::start(events::looper* looper) {
     m_clock_sync_timer.stop();
     m_message_queue.clear();
 
-    m_looper = looper;
+    m_looper = std::make_shared<events::looper>();
+    m_looper_thread = std::make_unique<events::looper_thread>(m_looper);
+
     m_state = state::opening;
 
     auto update_callback = [this](events::looper&, obsr::handle)->void {
@@ -168,20 +170,24 @@ void network_client::start(events::looper* looper) {
 }
 
 void network_client::stop() {
-    // todo: sync?
     if (m_state == state::idle) {
         throw illegal_state_exception();
     }
 
-    if (m_update_timer_handle != empty_handle) {
-        m_looper->stop_timer(m_update_timer_handle);
-        m_update_timer_handle = empty_handle;
-    }
+    m_looper->request_execute([this](events::looper&)->void {
+        if (m_update_timer_handle != empty_handle) {
+            m_looper->stop_timer(m_update_timer_handle);
+            m_update_timer_handle = empty_handle;
+        }
 
-    // todo: could throw if already stopped
-    // todo: must be done in looper thread
-    m_io.stop();
-    m_state = state::idle;
+        // todo: could throw if already stopped
+        m_io.stop();
+        m_state = state::idle;
+    }, events::looper::execute_type::sync);
+
+    // will stop thread
+    m_looper_thread.reset();
+    m_looper.reset();
 }
 
 void network_client::update() {
@@ -229,13 +235,13 @@ void network_client::update() {
 
 bool network_client::do_open_and_connect() {
     try {
-        m_io.start(m_looper);
+        m_io.start(m_looper.get());
         m_io.connect(m_conn_info);
         m_state = state::connecting;
 
         return true;
     } catch (const std::exception& e) {
-        TRACE_ERROR(LOG_MODULE, "error while opening and starting network_client: what=%s", e.what());
+        TRACE_ERROR(LOG_MODULE, "error while opening and starting client: what=%s", e.what());
         m_io.stop(); // todo: could throw
 
         return false;
@@ -266,7 +272,7 @@ void network_client::process_storage() {
                     id
             ));
         } else {
-            // entry value_raw was updated
+            // entry value was updated
             auto value = entry.get_value();
             m_message_queue.enqueue(out_message::entry_update(
                     entry.get_last_update_timestamp(),
