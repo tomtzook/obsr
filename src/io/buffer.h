@@ -90,9 +90,9 @@ public:
         return write(reinterpret_cast<const uint8_t*>(t), size);
     }
 
-    void read_from(obsr::os::readable& readable);
-    inline void read_from(obsr::os::readable* readable) {
-        read_from(*readable);
+    bool read_from(obsr::os::readable& readable);
+    inline bool read_from(obsr::os::readable* readable) {
+        return read_from(*readable);
     }
 
     bool write_into(obsr::os::writable& writable);

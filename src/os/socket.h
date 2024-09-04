@@ -33,7 +33,7 @@ public:
     using error_code_t = int;
 
     base_socket();
-    explicit base_socket(int fd);
+    explicit base_socket(descriptor socket_descriptor);
 
     void setoption(sockopt_type opt, void* value, size_t size);
 
@@ -101,8 +101,9 @@ public:
 class socket : public base_socket, public readable, public writable {
 public:
     socket();
-    explicit socket(int fd);
+    explicit socket(descriptor socket_descriptor);
 
+    bool is_connecting() const;
     void connect(std::string_view ip, uint16_t port);
     void finalize_connect();
 

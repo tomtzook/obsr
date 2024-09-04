@@ -1,5 +1,4 @@
 
-#include "io/serialize.h"
 #include "os/io.h"
 #include "internal_except.h"
 #include "debug.h"
@@ -13,12 +12,12 @@ namespace obsr::net {
 #define LOG_MODULE_SERVER "serverio"
 
 reader::reader(size_t buffer_size)
-    : state_machine()
-    , m_read_buffer(buffer_size) {
+        : state_machine()
+        , m_read_buffer(buffer_size) {
 }
 
-void reader::update(obsr::os::readable* readable) {
-    m_read_buffer.read_from(readable);
+bool reader::update(obsr::os::readable* readable) {
+    return m_read_buffer.read_from(readable);
 }
 
 bool reader::process_state(read_state current_state, read_data& data) {
@@ -61,105 +60,113 @@ bool reader::process_state(read_state current_state, read_data& data) {
     }
 }
 
-socket_io::socket_io(const std::shared_ptr<io::nio_runner>& nio_runner, listener* listener)
-    : m_nio_runner(nio_runner)
-    , m_resource_handle(empty_handle)
+socket_io::socket_io()
+    : m_state(state::idle)
+    , m_listener(nullptr)
+    , m_looper(nullptr)
+    , m_looper_handle(empty_handle)
     , m_socket()
     , m_reader(1024)
     , m_write_buffer(1024)
     , m_next_message_index(0)
-    , m_state(state::idle)
-    , m_listener(listener) {
-
-}
+{}
 
 socket_io::~socket_io() {
-    std::unique_lock lock(m_mutex);
     if (m_state != state::idle) {
-        stop_internal(lock, io_stop_reason::deconstructed, false);
+        std::abort();
     }
 }
 
-bool socket_io::is_stopped() {
-    std::unique_lock lock(m_mutex);
-
-    return m_state == state::idle;
-}
-
-void socket_io::start(std::shared_ptr<obsr::os::socket> socket, bool connected) {
-    std::unique_lock lock(m_mutex);
-
+void socket_io::start(events::looper* looper,
+                      listener* listener) {
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
 
-    TRACE_INFO(LOG_MODULE_CLIENT, "start called");
-
-    m_reader.reset();
-    m_write_buffer.reset();
-    m_next_message_index = 0;
-    m_resource_handle = empty_handle;
-
+    auto socket = std::make_shared<obsr::os::socket>();
     try {
-        m_socket = std::move(socket);
-        m_socket->configure_blocking(false);
-
-        m_state = state::bound;
-
-        uint32_t flags = obsr::os::selector::poll_hung | obsr::os::selector::poll_error;
-        if (connected) {
-            flags |= obsr::os::selector::poll_in | obsr::os::selector::poll_out;
-            m_state = state::connected;
-        }
-
-        m_resource_handle = m_nio_runner->add(m_socket,
-                                              flags,
-                                              [this](obsr::os::resource& res, uint32_t flags)->void { on_ready_resource(flags); });
-    } catch (const std::exception& e) {
-        TRACE_ERROR(LOG_MODULE_CLIENT, "start failed: what=%s", e.what());
-        stop_internal(lock, io_stop_reason::open_error);
-
+        socket->setoption<os::sockopt_reuseport>(true);
+        socket->configure_blocking(false);
+    } catch (const io_exception&) {
+        socket->close();
+        socket.reset();
         throw;
     }
+
+    start(looper, listener, socket, false);
+}
+
+void socket_io::start(events::looper* looper,
+                      listener* listener,
+                      std::shared_ptr<obsr::os::socket> socket,
+                      bool connected) {
+    if (m_state != state::idle) {
+        throw illegal_state_exception();
+    }
+
+    m_looper = looper;
+    m_listener = listener;
+
+    m_socket = std::move(socket);
+    m_socket->configure_blocking(false);
+
+    m_state = state::bound;
+
+    events::event_types events = events::event_hung | events::event_error;
+    if (connected) {
+        events |= events::event_in | events::event_out;
+        m_state = state::connected;
+    }
+
+    auto callback = [this](events::looper& looper, obsr::handle handle, events::event_types events)->void {
+        if ((events & (events::event_hung | events::event_error)) != 0) {
+            on_hung_or_error();
+            return;
+        }
+
+        if ((events & events::event_in) != 0) {
+            on_read_ready();
+        }
+
+        if ((events & events::event_out) != 0) {
+            on_write_ready();
+        }
+    };
+
+    m_looper_handle = m_looper->add(m_socket, events, callback);
 }
 
 void socket_io::stop() {
-    std::unique_lock lock(m_mutex);
-
     if (m_state == state::idle) {
         throw illegal_state_exception();
     }
 
-    stop_internal(lock, io_stop_reason::external_call, false);
+    stop_internal();
 }
 
 void socket_io::connect(connection_info info) {
-    std::unique_lock lock(m_mutex);
-
     if (m_state == state::idle || m_state == state::connecting || m_state == state::connected) {
         throw illegal_state_exception();
     }
 
-    // remove_and_wait in flags since we can't read while connecting
-    m_nio_runner->remove_flags(m_resource_handle, obsr::os::selector::poll_in);
+    // remove in flags since we can't read while connecting
+    m_looper->request_updates(m_looper_handle, events::event_in, events::looper::events_update_type::remove);
     try {
         m_state = state::connecting;
         m_socket->connect(info.ip, info.port);
     } catch (const io_exception&) {
         TRACE_DEBUG(LOG_MODULE_CLIENT, "connect failed");
-        stop_internal(lock, io_stop_reason::connect_failed);
+        stop_internal();
 
         throw;
     }
 
-    m_nio_runner->add_flags(m_resource_handle, obsr::os::selector::poll_out);
+    m_looper->request_updates(m_looper_handle, events::event_out, events::looper::events_update_type::append);
 }
 
 bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
-    std::unique_lock lock(m_mutex);
-
     if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
-        TRACE_DEBUG(LOG_MODULE_CLIENT, "writevalue buffer does not have enough space");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "write buffer does not have enough space");
         return false;
     }
 
@@ -183,167 +190,104 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
             // break down communication. as such, we will terminate connection here.
             // todo: add ability for remote to deal with this safely.
             TRACE_ERROR(LOG_MODULE_CLIENT, "write attempt failed halfway, stopping");
-            stop_internal(lock, io_stop_reason::write_error);
+            stop_internal();
             return false;
         }
     }
 
-    m_nio_runner->add_flags(m_resource_handle, obsr::os::selector::poll_out);
+    m_looper->request_updates(m_looper_handle, events::event_out, events::looper::events_update_type::append);
 
     return true;
 }
 
-void socket_io::on_ready_resource(uint32_t flags) {
-    update_handler handler(*this);
-
-    if (handler.socket_closed()) {
-        return;
-    }
-
-    if ((flags & (obsr::os::selector::poll_hung | obsr::os::selector::poll_error)) != 0) {
-        handler.on_hung_or_error();
-    }
-
-    if ((flags & obsr::os::selector::poll_in) != 0) {
-        handler.on_read_ready();
-    }
-
-    if ((flags & obsr::os::selector::poll_out) != 0) {
-        handler.on_write_ready();
-    }
-}
-
-void socket_io::stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason reason, bool report) {
-    if (m_state == state::idle) {
-        return;
-    }
-
-    TRACE_INFO(LOG_MODULE_CLIENT, "stop called for reason=%d", static_cast<uint8_t>(reason));
-
-    if (m_resource_handle != empty_handle) {
-        try {
-            m_nio_runner->remove(m_resource_handle);
-        } catch (const std::exception& e) {
-            TRACE_ERROR(LOG_MODULE_CLIENT, "error while detaching from nio: what=%s", e.what());
-        }
-        m_resource_handle = empty_handle;
-    }
-
-    try {
-        m_socket->close();
-        m_socket.reset();
-    } catch (const std::exception& e) {
-        TRACE_ERROR(LOG_MODULE_CLIENT, "error while closing socket: what=%s", e.what());
-    }
-
-    m_state = state::idle;
-    TRACE_INFO(LOG_MODULE_CLIENT, "stop finished");
-
-    if (report) {
-        invoke_ptr(lock, m_listener, &listener::on_close);
-    }
-}
-
-socket_io::update_handler::update_handler(socket_io& io)
-    : m_io(io)
-    , m_lock(io.m_mutex)
-{}
-
-bool socket_io::update_handler::socket_closed() const {
-    return !static_cast<bool>(m_io.m_socket);
-}
-
-void socket_io::update_handler::on_read_ready() {
+void socket_io::on_read_ready() {
     TRACE_DEBUG(LOG_MODULE_CLIENT, "on read update");
 
-    const auto state = m_io.m_state;
-    if (state == state::connected) {
+    if (m_state == state::connected) {
         try {
-            m_io.m_reader.update(m_io.m_socket.get());
+            m_reader.update(m_socket.get());
         } catch (const eof_exception&) {
             // socket was closed
             TRACE_ERROR(LOG_MODULE_CLIENT, "read eof");
-            m_io.stop_internal(m_lock, io_stop_reason::read_eof);
-        } catch (const std::exception& e) {
+            stop_internal();
+        } catch (...) {
             // any other error
-            TRACE_ERROR(LOG_MODULE_CLIENT, "read error: what=%s", e.what());
-            m_io.stop_internal(m_lock, io_stop_reason::read_error);
+            TRACE_ERROR(LOG_MODULE_CLIENT, "read error");
+            stop_internal();
         }
 
         process_new_data();
     } else {
         // we shouldn't be here
-        m_io.m_nio_runner->remove_flags(m_io.m_resource_handle, obsr::os::selector::poll_in);
+        m_looper->request_updates(m_looper_handle, events::event_in, events::looper::events_update_type::remove);
     }
 }
 
-void socket_io::update_handler::on_write_ready() {
-    TRACE_DEBUG(LOG_MODULE_CLIENT, "on writevalue update");
+void socket_io::on_write_ready() {
+    TRACE_DEBUG(LOG_MODULE_CLIENT, "on write update");
 
-    const auto state = m_io.m_state;
-    if (state == state::connecting) {
+    if (m_state == state::connecting) {
         TRACE_INFO(LOG_MODULE_CLIENT, "connect finished");
 
         try {
-            m_io.m_socket->finalize_connect();
+            m_socket->finalize_connect();
         } catch (const io_exception&) {
             // connect failed
             TRACE_ERROR(LOG_MODULE_CLIENT, "connect failed");
-            m_io.stop_internal(m_lock, io_stop_reason::connect_failed);
+            stop_internal();
 
             return;
         }
 
-        m_io.m_state = state::connected;
+        m_state = state::connected;
         // we can start reading again
-        m_io.m_nio_runner->add_flags(m_io.m_resource_handle, obsr::os::selector::poll_in);
+        m_looper->request_updates(m_looper_handle, events::event_in, events::looper::events_update_type::append);
 
-        invoke_ptr(m_lock, m_io.m_listener, &listener::on_connected);
-    } else if (state == state::connected) {
+        invoke_ptr_nolock(m_listener, &listener::on_connected);
+    } else if (m_state == state::connected) {
         try {
             TRACE_DEBUG(LOG_MODULE_CLIENT, "writing to socket");
-            if (!m_io.m_write_buffer.write_into(m_io.m_socket.get())) {
-                TRACE_DEBUG(LOG_MODULE_CLIENT, "nothing more to writevalue");
-                // nothing more to writevalue
-                m_io.m_nio_runner->remove_flags(m_io.m_resource_handle, obsr::os::selector::poll_out);
+            if (!m_write_buffer.write_into(m_socket.get())) {
+                TRACE_DEBUG(LOG_MODULE_CLIENT, "nothing more to write");
+                // nothing more to write
+                m_looper->request_updates(m_looper_handle, events::event_out, events::looper::events_update_type::remove);
             }
         } catch (const io_exception&) {
-            TRACE_ERROR(LOG_MODULE_CLIENT, "writevalue error");
-            m_io.stop_internal(m_lock, io_stop_reason::write_error);
+            TRACE_ERROR(LOG_MODULE_CLIENT, "write error");
+            stop_internal();
         }
     } else {
         // we shouldn't be here
-        m_io.m_nio_runner->remove_flags(m_io.m_resource_handle, obsr::os::selector::poll_out);
+        m_looper->request_updates(m_looper_handle, events::event_out, events::looper::events_update_type::remove);
     }
 }
 
-void socket_io::update_handler::on_hung_or_error() {
-    TRACE_ERROR(LOG_MODULE_CLIENT, "received error/hung event. internal error=%d", m_io.m_socket->get_internal_error());
-    m_io.stop_internal(m_lock, io_stop_reason::poll_error);
+void socket_io::on_hung_or_error() {
+    TRACE_ERROR(LOG_MODULE_CLIENT, "received error/hung event. internal error=%d", m_socket->get_internal_error());
+    stop_internal();
 }
 
-void socket_io::update_handler::process_new_data() {
+void socket_io::process_new_data() {
     bool run;
     do {
         run = false;
-        m_io.m_reader.process();
+        m_reader.process();
 
-        if (m_io.m_reader.is_errored()) {
-            TRACE_ERROR(LOG_MODULE_CLIENT, "read update error %d", m_io.m_reader.error_code());
-            m_io.stop_internal(m_lock, io_stop_reason::reader_error);
-        } else if (m_io.m_reader.is_finished()) {
+        if (m_reader.is_errored()) {
+            TRACE_ERROR(LOG_MODULE_CLIENT, "read update error %d", m_reader.error_code());
+            stop_internal();
+        } else if (m_reader.is_finished()) {
             TRACE_DEBUG(LOG_MODULE_CLIENT, "new message processed");
-            auto& state = m_io.m_reader.data();
+            auto& state = m_reader.data();
 
-            invoke_ptr<socket_io::listener, const message_header&, const uint8_t*, size_t>(
-                    m_lock,
-                    m_io.m_listener,
+            invoke_ptr_nolock<listener, const message_header&, const uint8_t*, size_t>(
+                    m_listener,
                     &listener::on_new_message,
                     state.header,
                     state.message_buffer,
                     state.header.message_size);
 
-            m_io.m_reader.reset();
+            m_reader.reset();
 
             // read one message, there might be another
             run = true;
@@ -353,36 +297,56 @@ void socket_io::update_handler::process_new_data() {
     } while (run);
 }
 
-server_io::server_io(const std::shared_ptr<obsr::io::nio_runner>& nio_runner, listener* listener)
-    : m_nio_runner(nio_runner)
-    , m_resource_handle(empty_handle)
+void socket_io::stop_internal() {
+    if (m_state == state::idle) {
+        return;
+    }
+
+    TRACE_INFO(LOG_MODULE_CLIENT, "stop called");
+
+    try {
+        if (m_looper_handle != empty_handle) {
+            m_looper->remove(m_looper_handle);
+            m_looper_handle = empty_handle;
+        }
+    } catch (...) {
+        TRACE_ERROR(LOG_MODULE_CLIENT, "error while detaching from looper");
+    }
+
+    try {
+        m_socket->close();
+        m_socket.reset();
+    } catch (...) {
+        TRACE_ERROR(LOG_MODULE_CLIENT, "error while closing socket");
+    }
+
+    m_state = state::idle;
+    invoke_ptr_nolock(m_listener, &listener::on_close);
+}
+
+server_io::server_io()
+    : m_state(state::idle)
+    , m_listener(nullptr)
+    , m_looper(nullptr)
+    , m_looper_handle(empty_handle)
     , m_socket()
-    , m_mutex()
     , m_clients()
     , m_next_client_id(0)
-    , m_state(state::idle)
-    , m_listener(listener) {
+{}
 
-}
 server_io::~server_io() {
-    std::unique_lock lock(m_mutex);
     if (m_state != state::idle) {
-        stop_internal(lock, io_stop_reason::deconstructed, false);
+        std::abort();
     }
 }
 
-bool server_io::is_stopped() {
-    std::unique_lock lock(m_mutex);
-
-    return m_state == state::idle;
-}
-
-void server_io::start(uint16_t bind_port) {
-    std::unique_lock lock(m_mutex);
-
+void server_io::start(events::looper* looper, listener* listener, uint16_t bind_port) {
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
+
+    m_looper = looper;
+    m_listener = listener;
 
     TRACE_INFO(LOG_MODULE_SERVER, "start called");
 
@@ -395,34 +359,41 @@ void server_io::start(uint16_t bind_port) {
         m_socket->configure_blocking(false);
         m_socket->bind(bind_port);
         m_socket->listen(2);
-
-        m_state = state::open;
-
-        uint32_t flags = obsr::os::selector::poll_hung | obsr::os::selector::poll_error | obsr::os::selector::poll_in;
-        m_resource_handle = m_nio_runner->add(m_socket,
-                                              flags,
-                                              [this](obsr::os::resource& res, uint32_t flags)->void { on_ready_resource(flags); });
-    } catch (const std::exception& e) {
-        TRACE_ERROR(LOG_MODULE_CLIENT, "start failed: what=%s", e.what());
-        stop_internal(lock, io_stop_reason::open_error);
+    } catch (const io_exception&) {
+        if (m_socket) {
+            m_socket->close();
+            m_socket.reset();
+        }
 
         throw;
     }
+
+    m_state = state::open;
+
+    events::event_types events = events::event_hung | events::event_error | events::event_in;
+    auto callback = [this](events::looper& looper, obsr::handle handle, events::event_types events)->void {
+        if ((events & (events::event_hung | events::event_error)) != 0) {
+            on_hung_or_error();
+            return;
+        }
+
+        if ((events & events::event_in) != 0) {
+            on_read_ready();
+        }
+    };
+
+    m_looper_handle = m_looper->add(m_socket, events, callback);
 }
 
 void server_io::stop() {
-    std::unique_lock lock(m_mutex);
-
     if (m_state == state::idle) {
         throw illegal_state_exception();
     }
 
-    stop_internal(lock, io_stop_reason::external_call, false);
+    stop_internal();
 }
 
 bool server_io::write_to(client_id id, uint8_t type, const uint8_t* buffer, size_t size) {
-    std::unique_lock lock(m_mutex);
-
     if (m_state != state::open) {
         throw illegal_state_exception();
     }
@@ -435,48 +406,66 @@ bool server_io::write_to(client_id id, uint8_t type, const uint8_t* buffer, size
     return it->second->write(type, buffer, size);
 }
 
-void server_io::on_ready_resource(uint32_t flags) {
-    update_handler handler(*this);
+void server_io::on_read_ready() {
+    TRACE_DEBUG(LOG_MODULE_SERVER, "on read ready");
 
-    if (handler.socket_closed()) {
-        return;
-    }
+    client_id id = invalid_client_id;
+    try {
+        auto socket = m_socket->accept();
 
-    if ((flags & (obsr::os::selector::poll_hung | obsr::os::selector::poll_error)) != 0) {
-        handler.on_hung_or_error();
-    }
+        id = m_next_client_id++;
+        TRACE_INFO(LOG_MODULE_SERVER, "handling new server client %d", id);
 
-    if ((flags & obsr::os::selector::poll_in) != 0) {
-        handler.on_read_ready();
+        auto client = std::make_unique<server_io::client>(*this, id);
+        auto [it, inserted] = m_clients.emplace(id, std::move(client));
+        if (!inserted) {
+            TRACE_ERROR(LOG_MODULE_SERVER, "failed to store new client");
+            socket->close();
+            return;
+        }
+
+        it->second->start(m_looper, std::move(socket));
+        invoke_ptr_nolock(m_listener, &server_io::listener::on_client_connected, id);
+
+        TRACE_ERROR(LOG_MODULE_SERVER, "new client registered %d", id);
+    } catch (const io_exception&) {
+        TRACE_ERROR(LOG_MODULE_SERVER, "error with new server");
+
+        if (id != invalid_client_id) {
+            auto it = m_clients.find(id);
+            if (it != m_clients.end()) {
+                m_clients.erase(it);
+            }
+        }
     }
 }
 
-void server_io::stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason reason, bool report) {
+void server_io::on_hung_or_error() {
+    TRACE_ERROR(LOG_MODULE_SERVER, "received error/hung event. internal error=%d", m_socket->get_internal_error());
+    stop_internal();
+}
+
+void server_io::stop_internal() {
     if (m_state == state::idle) {
         return;
     }
 
-    TRACE_INFO(LOG_MODULE_SERVER, "stop called for reason=%d", static_cast<uint8_t>(reason));
+    TRACE_INFO(LOG_MODULE_SERVER, "stop called");
 
-    if (m_resource_handle != empty_handle) {
-        try {
-            // todo: if we finish stop_internal we have a race where the callback may be called
-            //  again after we exit. as such we could get a critical error due to accessing certain
-            //  memories
-            //  problem is: we have a potential for a deadlock because we are calling nio here with
-            //  our lock and it has its own lock
-            m_nio_runner->remove(m_resource_handle);
-        } catch (const std::exception& e) {
-            TRACE_ERROR(LOG_MODULE_SERVER, "error while detaching from nio: what=%s", e.what());
+    try {
+        if (m_looper_handle != empty_handle) {
+            m_looper->remove(m_looper_handle);
+            m_looper_handle = empty_handle;
         }
-        m_resource_handle = empty_handle;
+    } catch (...) {
+        TRACE_ERROR(LOG_MODULE_SERVER, "error while detaching from looper");
     }
 
     for (auto& [id, client] : m_clients) {
         try {
-            client->stop();
-        } catch (const std::exception& e) {
-            TRACE_ERROR(LOG_MODULE_SERVER, "error stopping client id=%d: what=%s", id, e.what());
+            client->stop(); // todo: make sure this isn't calling our close callback
+        } catch (...) {
+            TRACE_ERROR(LOG_MODULE_SERVER, "error stopping client");
         }
     }
     m_clients.clear();
@@ -484,90 +473,36 @@ void server_io::stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason
     try {
         m_socket->close();
         m_socket.reset();
-    } catch (const std::exception& e) {
-        TRACE_ERROR(LOG_MODULE_SERVER, "error while closing socket: what=%s", e.what());
+    } catch (...) {
+        TRACE_ERROR(LOG_MODULE_SERVER, "error while closing socket");
     }
 
     m_state = state::idle;
-    TRACE_INFO(LOG_MODULE_SERVER, "stop finished");
-
-    if (report) {
-        invoke_ptr(lock, m_listener, &listener::on_close);
-    }
+    invoke_ptr_nolock(m_listener, &listener::on_close);
 }
 
-server_io::update_handler::update_handler(server_io& io)
-    : m_io(io)
-    , m_lock(io.m_mutex)
-{}
-
-bool server_io::update_handler::socket_closed() const {
-    return !static_cast<bool>(m_io.m_socket);
-}
-
-void server_io::update_handler::on_read_ready() {
-    TRACE_DEBUG(LOG_MODULE_SERVER, "on read ready");
-
-    client_id id = -1;
-    try {
-        auto socket = m_io.m_socket->accept();
-
-        id = m_io.m_next_client_id++;
-        TRACE_INFO(LOG_MODULE_SERVER, "handling new server client %d", id);
-
-        auto client = std::make_unique<client_data>(m_io, id);
-        auto [it, inserted] = m_io.m_clients.emplace(id, std::move(client));
-        if (!inserted) {
-            TRACE_ERROR(LOG_MODULE_SERVER, "failed to store new client");
-            socket->close();
-            return;
-        }
-
-        it->second->attach(std::move(socket));
-        invoke_ptr(m_lock, m_io.m_listener, &server_io::listener::on_client_connected, id);
-
-        TRACE_ERROR(LOG_MODULE_SERVER, "new server registered %d", id);
-    } catch (const io_exception&) {
-        TRACE_ERROR(LOG_MODULE_SERVER, "error with new server");
-
-        if (id != -1) {
-            auto it = m_io.m_clients.find(id);
-            if (it != m_io.m_clients.end()) {
-                m_io.m_clients.erase(it);
-            }
-        }
-    }
-}
-
-void server_io::update_handler::on_hung_or_error() {
-    TRACE_ERROR(LOG_MODULE_SERVER, "received error/hung event. internal error=%d", m_io.m_socket->get_internal_error());
-    m_io.stop_internal(m_lock, io_stop_reason::poll_error);
-}
-
-server_io::client_data::client_data(server_io& parent, client_id id)
+server_io::client::client(server_io& parent, client_id id)
     : m_parent(parent)
     , m_id(id)
-    , m_io(m_parent.m_nio_runner, this) {
+    , m_io()
+    , m_closing(false)
+{}
+
+void server_io::client::start(events::looper* looper, std::shared_ptr<obsr::os::socket> socket) {
+    m_io.start(looper, this, std::move(socket), true);
 }
 
-void server_io::client_data::attach(std::unique_ptr<os::socket>&& socket) {
-    std::shared_ptr<obsr::os::socket> socket_shared{std::move(socket)};
-
-    m_io.start(socket_shared, true);
-}
-
-bool server_io::client_data::write(uint8_t type, const uint8_t* buffer, size_t size) {
-    return m_io.write(type, buffer, size);
-}
-
-void server_io::client_data::stop() {
+void server_io::client::stop() {
+    m_closing = true;
     m_io.stop();
 }
 
-void server_io::client_data::on_new_message(const message_header& header, const uint8_t* buffer, size_t size)  {
-    std::unique_lock lock(m_parent.m_mutex);
-    invoke_ptr<server_io::listener, client_id, const message_header&, const uint8_t*, size_t>(
-            lock,
+bool server_io::client::write(uint8_t type, const uint8_t* buffer, size_t size) {
+    return m_io.write(type, buffer, size);
+}
+
+void server_io::client::on_new_message(const message_header& header, const uint8_t* buffer, size_t size) {
+    invoke_ptr_nolock<server_io::listener, client_id, const message_header&, const uint8_t*, size_t>(
             m_parent.m_listener,
             &server_io::listener::on_new_message,
             m_id,
@@ -576,13 +511,22 @@ void server_io::client_data::on_new_message(const message_header& header, const 
             size);
 }
 
-void server_io::client_data::on_connected() {
-    // not used as we already initialize it as connected
+void server_io::client::on_connected() {
+    invoke_ptr_nolock<server_io::listener, client_id>(
+            m_parent.m_listener,
+            &server_io::listener::on_client_connected,
+            m_id);
 }
 
-void server_io::client_data::on_close() {
-    std::unique_lock lock(m_parent.m_mutex);
-    invoke_ptr(lock, m_parent.m_listener, &server_io::listener::on_client_disconnected, m_id);
+void server_io::client::on_close() {
+    if (m_closing) {
+        return;
+    }
+
+    invoke_ptr_nolock<server_io::listener, client_id>(
+            m_parent.m_listener,
+            &server_io::listener::on_client_disconnected,
+            m_id);
 }
 
 }

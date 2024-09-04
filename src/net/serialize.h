@@ -8,6 +8,19 @@
 
 namespace obsr::net {
 
+#pragma pack(push, 1)
+struct message_header {
+    static constexpr uint8_t message_magic = 0x29;
+    static constexpr uint8_t current_version = 0x1;
+
+    uint8_t magic;
+    uint8_t version;
+    uint32_t index;
+    uint8_t type;
+    uint32_t message_size;
+};
+#pragma pack(pop)
+
 enum class message_type {
     no_type,
     entry_create = 1,

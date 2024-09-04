@@ -27,8 +27,8 @@ base_socket::base_socket()
     configure_blocking(true);
 }
 
-base_socket::base_socket(int fd)
-    : resource(fd) {
+base_socket::base_socket(descriptor socket_descriptor)
+    : resource(socket_descriptor) {
 }
 
 void base_socket::setoption(sockopt_type opt, void* value, size_t size) {
@@ -37,7 +37,7 @@ void base_socket::setoption(sockopt_type opt, void* value, size_t size) {
 
     const auto sockopt = sockopt_natives[static_cast<size_t>(opt)];
 
-    if (::setsockopt(fd(), sockopt.level, sockopt.opt, value, size)) {
+    if (::setsockopt(get_descriptor(), sockopt.level, sockopt.opt, value, size)) {
         handle_call_error();
     }
 }
@@ -45,7 +45,7 @@ void base_socket::setoption(sockopt_type opt, void* value, size_t size) {
 void base_socket::configure_blocking(bool blocking) {
     throw_if_disabled();
 
-    auto fd = this->fd();
+    auto fd = this->get_descriptor();
     auto flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) {
         handle_call_error();
@@ -68,7 +68,7 @@ void base_socket::bind(const std::string& ip, uint16_t port) {
     addr.sin_port = ::htons(port);
     ::inet_pton(AF_INET, ip.c_str(), &addr.sin_addr);
 
-    if (::bind(fd(), reinterpret_cast<sockaddr*>(&addr), sizeof(addr))) {
+    if (::bind(get_descriptor(), reinterpret_cast<sockaddr*>(&addr), sizeof(addr))) {
         handle_call_error();
     }
 }
@@ -82,7 +82,7 @@ void base_socket::bind(uint16_t port) {
     addr.sin_port = ::htons(port);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if (::bind(fd(), reinterpret_cast<sockaddr*>(&addr), sizeof(addr))) {
+    if (::bind(get_descriptor(), reinterpret_cast<sockaddr*>(&addr), sizeof(addr))) {
         handle_call_error();
     }
 }
@@ -95,7 +95,7 @@ base_socket::error_code_t base_socket::get_internal_error() {
     // todo: exposing this is breaking system abstraction
     int code;
     socklen_t len = sizeof(code);
-    if (::getsockopt(fd(), SOL_SOCKET, SO_ERROR, &code, &len)) {
+    if (::getsockopt(get_descriptor(), SOL_SOCKET, SO_ERROR, &code, &len)) {
         handle_call_error();
     }
 
@@ -147,7 +147,7 @@ void server_socket::listen(size_t backlog_size) {
     throw_if_closed();
     throw_if_disabled();
 
-    if (::listen(fd(), static_cast<int>(backlog_size))) {
+    if (::listen(get_descriptor(), static_cast<int>(backlog_size))) {
         handle_call_error();
     }
 }
@@ -159,7 +159,7 @@ std::unique_ptr<socket> server_socket::accept() {
     sockaddr_in addr{};
     socklen_t addr_len = sizeof(addr);
 
-    const auto new_fd = ::accept(fd(), reinterpret_cast<sockaddr*>(&addr), &addr_len);
+    const auto new_fd = ::accept(get_descriptor(), reinterpret_cast<sockaddr*>(&addr), &addr_len);
     if (new_fd < 0) {
         handle_call_error();
     }
@@ -172,10 +172,14 @@ socket::socket()
     , m_waiting_connection(false)
 {}
 
-socket::socket(int fd)
-    : base_socket(fd)
+socket::socket(descriptor socket_descriptor)
+    : base_socket(socket_descriptor)
     , m_waiting_connection(false)
 {}
+
+bool socket::is_connecting() const {
+    return m_waiting_connection;
+}
 
 void socket::connect(std::string_view ip, uint16_t port) {
     throw_if_closed();
@@ -188,7 +192,7 @@ void socket::connect(std::string_view ip, uint16_t port) {
     addr.sin_port = ::htons(port);
     ::inet_pton(AF_INET, ip_c.c_str(), &addr.sin_addr);
 
-    if (::connect(fd(), reinterpret_cast<sockaddr*>(&addr), sizeof(addr))) {
+    if (::connect(get_descriptor(), reinterpret_cast<sockaddr*>(&addr), sizeof(addr))) {
         const auto error_code = get_call_error();
         if (error_code == EINPROGRESS && !is_blocking()) {
             // while in non-blocking mode, socket operations may return inprogress as a result
@@ -223,7 +227,7 @@ size_t socket::read(uint8_t* buffer, size_t buffer_size) {
         return 0;
     }
 
-    const auto result = ::read(fd(), buffer, buffer_size);
+    const auto result = ::read(get_descriptor(), buffer, buffer_size);
     if (result == 0) {
         throw eof_exception();
     } else if (result < 0) {
@@ -244,7 +248,7 @@ size_t socket::write(const uint8_t* buffer, size_t size) {
     throw_if_closed();
     throw_if_disabled();
 
-    const auto result = ::write(fd(), buffer, size);
+    const auto result = ::write(get_descriptor(), buffer, size);
     if (result < 0) {
         handle_call_error();
     }

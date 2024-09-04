@@ -7,7 +7,6 @@
 #include "storage/storage.h"
 #include "net/client.h"
 #include "net/server.h"
-#include "io/nio.h"
 #include "util/time.h"
 #include "updater.h"
 
@@ -54,7 +53,6 @@ private:
     std::mutex m_mutex;
     std::shared_ptr<clock> m_clock;
     updater m_updater;
-    std::shared_ptr<io::nio_runner> m_nio_runner;
     storage::listener_storage_ref m_listener_storage;
     std::shared_ptr<storage::storage> m_storage;
 

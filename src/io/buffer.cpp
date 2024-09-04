@@ -187,27 +187,32 @@ bool buffer::write(const uint8_t* buffer, size_t size) {
     return true;
 }
 
-void buffer::read_from(obsr::os::readable& readable) {
+bool buffer::read_from(obsr::os::readable& readable) {
     if (m_write_pos >= m_read_pos) {
         auto space = (m_size - m_write_pos);
         auto read = readable.read(m_buffer + m_write_pos, space);
         if (read < space) {
             m_write_pos += read;
-            return;
+            return true;
         }
 
         space = (m_read_pos);
         if (space >= 1) {
             read = readable.read(m_buffer, space);
             m_write_pos = read;
+            return true;
         } else {
             m_write_pos = m_read_pos;
+            return false;
         }
     } else {
         const auto space = (m_read_pos - m_write_pos);
         if (space >= 1) {
             auto read = readable.read(m_buffer + m_write_pos, space);
             m_write_pos += read;
+            return true;
+        } else {
+            return false;
         }
     }
 }

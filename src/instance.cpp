@@ -18,7 +18,6 @@ instance::instance()
     : m_mutex()
     , m_clock(std::make_shared<clock>())
     , m_updater()
-    , m_nio_runner(std::make_shared<io::nio_runner>())
     , m_listener_storage(std::make_shared<storage::listener_storage>())
     , m_storage(std::make_shared<storage::storage>(m_listener_storage, m_clock))
     , m_net_interface()
@@ -140,7 +139,7 @@ void instance::start_server(uint16_t bind_port) {
         throw illegal_state_exception();
     }
 
-    auto server = std::make_shared<net::server>(m_nio_runner, m_clock);
+    /*auto server = std::make_shared<net::server>(m_nio_runner, m_clock);
     try {
         configure_net(server);
         server->start(bind_port);
@@ -150,7 +149,7 @@ void instance::start_server(uint16_t bind_port) {
         throw;
     }
 
-    m_net_interface = server;
+    m_net_interface = server;*/
 }
 
 void instance::start_client(std::string_view address, uint16_t server_port) {
@@ -158,7 +157,7 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
         throw illegal_state_exception();
     }
 
-    auto client = std::make_shared<net::client>(m_nio_runner, m_clock);
+    /*auto client = std::make_shared<net::client>(m_nio_runner, m_clock);
     try {
         configure_net(client);
         client->start({address, server_port});
@@ -168,7 +167,7 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
         throw;
     }
 
-    m_net_interface = client;
+    m_net_interface = client;*/
 }
 
 void instance::stop_network() {

@@ -4,6 +4,10 @@ project(obsr C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_compile_definitions(-DDEBUG=1)
+endif()
+
 set(INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 
@@ -38,8 +42,6 @@ add_library(obsr STATIC
         src/io/buffer.cpp
         src/net/io.h
         src/net/io.cpp
-        src/io/nio.h
-        src/io/nio.cpp
         src/debug.h
         src/debug.cpp
         src/util/state.h
@@ -53,12 +55,22 @@ add_library(obsr STATIC
         src/updater.h
         src/updater.cpp
         src/net/net.h
-        src/util/clock.h)
+        src/os/poller.h
+        src/os/poller.cpp
+        src/events/events.h
+        src/events/events.cpp
+        src/os/signal.h
+        src/os/signal.cpp
+        src/events/signal.h)
 target_include_directories(obsr
         PUBLIC ${INCLUDES}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
         )
 target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt)
+
+add_executable(test1 test1.cpp)
+target_include_directories(test1 PRIVATE src)
+target_link_libraries(test1 obsr)
 
 add_executable(test4_server test4_server.cpp)
 target_link_libraries(test4_server obsr)

@@ -5,23 +5,11 @@
 
 #include "os/socket.h"
 #include "io/buffer.h"
-#include "io/nio.h"
 #include "util/state.h"
+#include "net/serialize.h"
+#include "events/events.h"
 
 namespace obsr::net {
-
-#pragma pack(push, 1)
-struct message_header {
-    static constexpr uint8_t message_magic = 0x29;
-    static constexpr uint8_t current_version = 0x1;
-
-    uint8_t magic;
-    uint8_t version;
-    uint32_t index;
-    uint8_t type;
-    uint32_t message_size;
-};
-#pragma pack(pop)
 
 struct connection_info {
     std::string_view ip;
@@ -49,7 +37,7 @@ class reader : public state_machine<read_state, read_state::header, read_data> {
 public:
     explicit reader(size_t buffer_size);
 
-    void update(obsr::os::readable* readable);
+    bool update(obsr::os::readable* readable);
 
 protected:
     bool process_state(read_state current_state, read_data& data) override;
@@ -58,18 +46,7 @@ private:
     obsr::io::buffer m_read_buffer;
 };
 
-enum class io_stop_reason {
-    read_eof,
-    read_error,
-    write_error,
-    open_error,
-    deconstructed,
-    external_call,
-    connect_failed,
-    poll_error,
-    reader_error
-};
-
+// must be used from inside the looper
 class socket_io {
 public:
     class listener {
@@ -79,16 +56,18 @@ public:
         virtual void on_close() = 0;
     };
 
-    socket_io(const std::shared_ptr<io::nio_runner>& nio_runner, listener* listener);
+    socket_io();
     ~socket_io();
 
-    bool is_stopped();
-
-    void start(std::shared_ptr<obsr::os::socket> socket, bool connected = false);
+    void start(events::looper* looper,
+               listener* listener);
+    void start(events::looper* looper,
+               listener* listener,
+               std::shared_ptr<obsr::os::socket> socket,
+               bool connected = false);
     void stop();
 
     void connect(connection_info info);
-
     bool write(uint8_t type, const uint8_t* buffer, size_t size);
 
 private:
@@ -98,43 +77,29 @@ private:
         connecting,
         connected
     };
-    class update_handler {
-    public:
-        explicit update_handler(socket_io& io);
 
-        bool socket_closed() const;
+    void on_read_ready();
+    void on_write_ready();
+    void on_hung_or_error();
+    void process_new_data();
 
-        void on_read_ready();
-        void on_write_ready();
-        void on_hung_or_error();
+    void stop_internal();
 
-    private:
-        void process_new_data();
-
-        socket_io& m_io;
-        std::unique_lock<std::mutex> m_lock;
-    };
-
-    void on_ready_resource(uint32_t flags);
-    void stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason reason, bool report = true);
-
-    std::shared_ptr<obsr::io::nio_runner> m_nio_runner;
-    obsr::handle m_resource_handle;
+    state m_state;
+    listener* m_listener;
+    events::looper* m_looper;
+    obsr::handle m_looper_handle;
 
     std::shared_ptr<obsr::os::socket> m_socket;
-    std::mutex m_mutex;
-
     reader m_reader;
     obsr::io::buffer m_write_buffer;
-    state m_state;
     uint32_t m_next_message_index;
-
-    listener* m_listener;
 };
 
 class server_io {
 public:
     using client_id = uint16_t;
+    static constexpr client_id invalid_client_id = static_cast<client_id>(-1);
 
     class listener {
     public:
@@ -144,40 +109,29 @@ public:
         virtual void on_close() = 0;
     };
 
-    server_io(const std::shared_ptr<obsr::io::nio_runner>& nio_runner, listener* listener);
+    server_io();
     ~server_io();
 
-    bool is_stopped();
-
-    void start(uint16_t bind_port);
+    void start(events::looper* looper, listener* listener, uint16_t bind_port);
     void stop();
 
     bool write_to(client_id id, uint8_t type, const uint8_t* buffer, size_t size);
 
 private:
-    class update_handler {
-    public:
-        explicit update_handler(server_io& io);
-
-        bool socket_closed() const;
-
-        void on_read_ready();
-        void on_hung_or_error();
-
-    private:
-        server_io& m_io;
-        std::unique_lock<std::mutex> m_lock;
+    enum class state {
+        idle,
+        open
     };
-    struct client_data : public socket_io::listener {
+    struct client : public socket_io::listener {
     public:
-        client_data(server_io& parent, client_id id);
+        client(server_io& parent, client_id id);
 
-        void attach(std::unique_ptr<os::socket>&& socket);
-        bool write(uint8_t type, const uint8_t* buffer, size_t size);
-
+        void start(events::looper* looper, std::shared_ptr<obsr::os::socket> socket);
         void stop();
 
-        // events from server
+        bool write(uint8_t type, const uint8_t* buffer, size_t size);
+
+        // from listener
         void on_new_message(const message_header& header, const uint8_t* buffer, size_t size) override;
         void on_connected() override;
         void on_close() override;
@@ -186,26 +140,23 @@ private:
         server_io& m_parent;
         client_id m_id;
         socket_io m_io;
-    };
-    enum class state {
-        idle,
-        open
+        bool m_closing;
     };
 
-    void on_ready_resource(uint32_t flags);
-    void stop_internal(std::unique_lock<std::mutex>& lock, io_stop_reason reason, bool report = true);
+    void on_read_ready();
+    void on_hung_or_error();
 
-    std::shared_ptr<obsr::io::nio_runner> m_nio_runner;
-    obsr::handle m_resource_handle;
+    void stop_internal();
+
+    state m_state;
+    listener* m_listener;
+    events::looper* m_looper;
+    obsr::handle m_looper_handle;
 
     std::shared_ptr<obsr::os::server_socket> m_socket;
-    std::mutex m_mutex;
 
-    std::unordered_map<uint32_t, std::unique_ptr<client_data>> m_clients;
+    std::unordered_map<client_id, std::unique_ptr<client>> m_clients;
     client_id m_next_client_id;
-    state m_state;
-
-    listener* m_listener;
 };
 
 }
