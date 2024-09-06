@@ -106,10 +106,9 @@ public:
         return out_message();
     }
 
-    static inline out_message entry_create(std::chrono::milliseconds send_time, storage::entry_id id, std::string_view name, obsr::value&& value) {
+    static inline out_message entry_create(std::chrono::milliseconds send_time, std::string_view name, obsr::value&& value) {
         out_message message(message_type::entry_create);
         message.m_send_time = send_time;
-        message.m_id = id;
         message.m_name = name;
         message.m_value = std::move(value);
 
@@ -199,7 +198,7 @@ public:
     void reset();
 
     bool entry_id_assign(storage::entry_id id, std::string_view name);
-    bool entry_created(std::chrono::milliseconds send_time, storage::entry_id id, std::string_view name, const value& value);
+    bool entry_created(std::chrono::milliseconds send_time, std::string_view name, const value& value);
     bool entry_updated(std::chrono::milliseconds send_time, storage::entry_id id, const value& value);
     bool entry_deleted(std::chrono::milliseconds send_time, storage::entry_id id);
     bool time_sync_request(std::chrono::milliseconds send_time);

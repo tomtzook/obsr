@@ -27,7 +27,7 @@ network_client::network_client(std::shared_ptr<clock>& clock)
     , m_parser()
     , m_message_queue() {
     m_io.on_connect([this]()->void {
-        std::lock_guard lock(m_mutex);
+        std::unique_lock lock(m_mutex);
 
         TRACE_DEBUG(LOG_MODULE, "connected to server, starting first time sync");
         m_message_queue.clear();
@@ -37,7 +37,7 @@ network_client::network_client(std::shared_ptr<clock>& clock)
         m_state = state::in_handshake_time_sync;
     });
     m_io.on_close([this]()->void {
-        std::lock_guard lock(m_mutex);
+        std::unique_lock lock(m_mutex);
 
         m_connect_retry_timer.stop();
         m_clock_sync_timer.stop();
@@ -46,7 +46,7 @@ network_client::network_client(std::shared_ptr<clock>& clock)
         m_connect_retry_timer.start();
     });
     m_io.on_message([this](const message_header& header, const uint8_t* buffer, size_t size)->void {
-        std::lock_guard lock(m_mutex);
+        std::unique_lock lock(m_mutex);
 
         auto type = static_cast<message_type>(header.type);
         m_parser.set_data(type, buffer, size);
@@ -62,16 +62,6 @@ network_client::network_client(std::shared_ptr<clock>& clock)
 
         auto parse_data = m_parser.data();
         switch (type) {
-            case message_type::entry_create:
-                TRACE_DEBUG(LOG_MODULE, "ENTRY CREATE from server: id=%d, name=%s", parse_data.id, parse_data.name.c_str());
-                invoke_sharedptr_nolock<storage::storage, storage::entry_id, std::string_view, const obsr::value&, std::chrono::milliseconds>(
-                        m_storage,
-                        &storage::storage::on_entry_created,
-                        parse_data.id,
-                        parse_data.name,
-                        parse_data.value,
-                        parse_data.send_time);
-                break;
             case message_type::entry_update:
                 TRACE_DEBUG(LOG_MODULE, "ENTRY UPDATE from server: id=%d", parse_data.id);
                 invoke_sharedptr_nolock<storage::storage, storage::entry_id, const obsr::value&, std::chrono::milliseconds>(
@@ -119,6 +109,7 @@ network_client::network_client(std::shared_ptr<clock>& clock)
                 }
                 break;
             }
+            case message_type::entry_create:
             case message_type::no_type:
             default:
                 break;
@@ -130,7 +121,7 @@ network_client::network_client(std::shared_ptr<clock>& clock)
 }
 
 void network_client::configure_target(connection_info info) {
-    std::lock_guard lock(m_mutex);
+    std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
         throw illegal_state_exception();
@@ -140,7 +131,7 @@ void network_client::configure_target(connection_info info) {
 }
 
 void network_client::attach_storage(std::shared_ptr<storage::storage> storage) {
-    std::lock_guard lock(m_mutex);
+    std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
         throw illegal_state_exception();
@@ -150,7 +141,7 @@ void network_client::attach_storage(std::shared_ptr<storage::storage> storage) {
 }
 
 void network_client::start(events::looper* looper) {
-    std::lock_guard lock(m_mutex);
+    std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
         throw illegal_state_exception();
@@ -182,13 +173,16 @@ void network_client::start(events::looper* looper) {
 }
 
 void network_client::stop() {
-    std::lock_guard lock(m_mutex);
+    std::unique_lock lock(m_mutex);
 
     if (m_state == state::idle) {
         throw illegal_state_exception();
     }
 
+    lock.unlock();
     m_looper->request_execute([this](events::looper&)->void {
+        std::unique_lock lock(m_mutex);
+
         if (m_update_timer_handle != empty_handle) {
             m_looper->stop_timer(m_update_timer_handle);
             m_update_timer_handle = empty_handle;
@@ -196,6 +190,7 @@ void network_client::stop() {
 
         m_io.stop();
     }, events::looper::execute_type::sync);
+    lock.lock();
 
     m_state = state::idle;
 }
@@ -267,7 +262,6 @@ void network_client::process_storage() {
             auto value = entry.get_value();
             m_message_queue.enqueue(out_message::entry_create(
                     m_clock->now(),
-                    id,
                     entry.get_path(),
                     std::move(value)
             ));

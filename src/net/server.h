@@ -69,6 +69,12 @@ private:
     storage::entry_id assign_id_to_entry(std::string_view name);
     void enqueue_message_for_clients(const out_message& message, server_io::client_id id_to_skip = server_io::invalid_client_id);
     void enqueue_message_for_client(server_io::client_id id, const out_message& message, uint8_t flags = 0);
+    void publish_and_update_entry_for_clients(
+            storage::entry_id entry_id,
+            const std::string& name,
+            obsr::value&& value,
+            std::chrono::milliseconds value_time,
+            server_io::client_id id_to_skip = server_io::invalid_client_id);
 
     void handle_do_handshake_for_client(server_io::client_id id);
 

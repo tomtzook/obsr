@@ -102,7 +102,6 @@ bool message_parser::select_next_state(parse_state current_state) {
         }
         case parse_state::read_id: {
             switch (m_type) {
-                case message_type::entry_create:
                 case message_type::entry_id_assign:
                     return move_to_state(parse_state::read_name);
                 case message_type::entry_update:
@@ -144,6 +143,7 @@ bool message_parser::select_next_state(parse_state current_state) {
         case parse_state::read_send_time: {
             switch (m_type) {
                 case message_type::entry_create:
+                    return move_to_state(parse_state::read_name);
                 case message_type::entry_update:
                 case message_type::entry_delete:
                     return move_to_state(parse_state::read_id);
@@ -196,12 +196,8 @@ bool message_serializer::entry_id_assign(storage::entry_id id, std::string_view 
     return true;
 }
 
-bool message_serializer::entry_created(std::chrono::milliseconds send_time, storage::entry_id id, std::string_view name, const value& value) {
+bool message_serializer::entry_created(std::chrono::milliseconds send_time, std::string_view name, const value& value) {
     if (!io::write64(m_buffer, send_time.count())) {
-        return false;
-    }
-
-    if (!io::write16(m_buffer, id)) {
         return false;
     }
 
@@ -338,7 +334,6 @@ bool message_queue::write_entry_created(const out_message& message) {
     m_serializer.reset();
 
     if (!m_serializer.entry_created(message.send_time(),
-                                    message.id(),
                                     message.name(),
                                     message.value())) {
         return false;

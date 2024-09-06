@@ -76,7 +76,7 @@ network_server::network_server(std::shared_ptr<clock>& clock)
     , m_id_assignments()
     , m_open_retry_timer() {
     m_io.on_connect([this](server_io::client_id id)->void {
-        std::lock_guard lock(m_mutex);
+        std::unique_lock lock(m_mutex);
 
         auto client_u = std::make_unique<server_client>(id, m_io, m_clock);
         auto [it, _] = m_clients.emplace(id, std::move(client_u));
@@ -85,7 +85,7 @@ network_server::network_server(std::shared_ptr<clock>& clock)
         client->set_state(server_client::state::in_handshake);
     });
     m_io.on_disconnect([this](server_io::client_id id)->void {
-        std::lock_guard lock(m_mutex);
+        std::unique_lock lock(m_mutex);
 
         auto it = m_clients.find(id);
         if (it != m_clients.end()) {
@@ -93,14 +93,14 @@ network_server::network_server(std::shared_ptr<clock>& clock)
         }
     });
     m_io.on_close([this]()->void {
-        std::lock_guard lock(m_mutex);
+        std::unique_lock lock(m_mutex);
 
         m_clients.clear();
 
         m_state = state::opening;
     });
     m_io.on_message([this](server_io::client_id id, const message_header& header, const uint8_t* buffer, size_t size)->void {
-        std::lock_guard lock(m_mutex);
+        std::unique_lock lock(m_mutex);
 
         auto type = static_cast<message_type>(header.type);
         m_parser.set_data(type, buffer, size);
@@ -116,21 +116,14 @@ network_server::network_server(std::shared_ptr<clock>& clock)
 
         TRACE_DEBUG(LOG_MODULE, "received new message from client=%d of m_type=%d", id, type);
 
-        auto message_to_others = out_message::empty();
-
         auto parse_data = m_parser.data();
         switch (type) {
-            case message_type::entry_create:
+            case message_type::entry_create: {
                 if (parse_data.id == storage::id_not_assigned) {
                     parse_data.id = assign_id_to_entry(parse_data.name);
                 }
 
-                // todo: don't send create to clients, send assign and update?
-                //  if that is the case, exclude id from create since only clients report it without id
-                message_to_others = out_message::entry_create(parse_data.send_time,
-                                                              parse_data.id,
-                                                              parse_data.name,
-                                                              obsr::value(parse_data.value));
+                auto value = obsr::value(parse_data.value);
                 invoke_sharedptr_nolock<storage::storage, storage::entry_id, std::string_view, const obsr::value&, std::chrono::milliseconds>(
                         m_storage,
                         &storage::storage::on_entry_created,
@@ -138,30 +131,51 @@ network_server::network_server(std::shared_ptr<clock>& clock)
                         parse_data.name,
                         parse_data.value,
                         parse_data.send_time);
+
+                publish_and_update_entry_for_clients(
+                        parse_data.id,
+                        parse_data.name,
+                        std::move(value),
+                        parse_data.send_time,
+                        id);
                 break;
-            case message_type::entry_update:
-                message_to_others = out_message::entry_update(parse_data.send_time,
-                                                              parse_data.id,
-                                                              obsr::value(parse_data.value));
+            }
+            case message_type::entry_update: {
+                auto value = obsr::value(parse_data.value);
+
                 invoke_sharedptr_nolock<storage::storage, storage::entry_id, const obsr::value&, std::chrono::milliseconds>(
                         m_storage,
                         &storage::storage::on_entry_updated,
                         parse_data.id,
                         parse_data.value,
                         parse_data.send_time);
+
+                auto message_to_others = out_message::entry_update(
+                        parse_data.send_time,
+                        parse_data.id,
+                        std::move(value));
+                enqueue_message_for_clients(message_to_others, id);
                 break;
-            case message_type::entry_delete:
-                message_to_others = out_message::entry_deleted(parse_data.send_time, parse_data.id);
+            }
+            case message_type::entry_delete: {
                 invoke_sharedptr_nolock<storage::storage, storage::entry_id, std::chrono::milliseconds>(
                         m_storage,
                         &storage::storage::on_entry_deleted,
                         parse_data.id,
                         parse_data.send_time);
+
+                auto message_to_others = out_message::entry_deleted(
+                        parse_data.send_time,
+                        parse_data.id);
+                enqueue_message_for_clients(message_to_others, id);
                 break;
+            }
             case message_type::time_sync_request: {
                 const auto now = m_clock->now();
                 enqueue_message_for_client(id,
-                                           out_message::time_sync_response(now, parse_data.send_time),
+                                           out_message::time_sync_response(
+                                                   now,
+                                                   parse_data.send_time),
                                            message_queue::flag_immediate);
                 break;
             }
@@ -174,18 +188,13 @@ network_server::network_server(std::shared_ptr<clock>& clock)
                 // clients should not send this
             case message_type::no_type:
             default:
-                message_to_others = out_message::empty();
                 break;
-        }
-
-        if (message_to_others.type() != message_type::no_type) {
-            enqueue_message_for_clients(message_to_others, id);
         }
     });
 }
 
 void network_server::configure_bind(uint16_t bind_port) {
-    std::lock_guard lock(m_mutex);
+    std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
         throw illegal_state_exception();
@@ -195,7 +204,7 @@ void network_server::configure_bind(uint16_t bind_port) {
 }
 
 void network_server::attach_storage(std::shared_ptr<storage::storage> storage) {
-    std::lock_guard lock(m_mutex);
+    std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
         throw illegal_state_exception();
@@ -205,7 +214,7 @@ void network_server::attach_storage(std::shared_ptr<storage::storage> storage) {
 }
 
 void network_server::start(events::looper* looper) {
-    std::lock_guard lock(m_mutex);
+    std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
         throw illegal_state_exception();
@@ -234,13 +243,16 @@ void network_server::start(events::looper* looper) {
 }
 
 void network_server::stop() {
-    std::lock_guard lock(m_mutex);
+    std::unique_lock lock(m_mutex);
 
     if (m_state == state::idle) {
         throw illegal_state_exception();
     }
 
+    lock.unlock();
     m_looper->request_execute([this](events::looper&)->void {
+        std::unique_lock lock(m_mutex);
+
         if (m_update_timer_handle != empty_handle) {
             m_looper->stop_timer(m_update_timer_handle);
             m_update_timer_handle = empty_handle;
@@ -248,6 +260,7 @@ void network_server::stop() {
 
         m_io.stop();
     }, events::looper::execute_type::sync);
+    lock.lock();
 
     m_state = state::idle;
 }
@@ -298,7 +311,6 @@ bool network_server::do_open() {
 
 void network_server::process_updates() {
     m_storage->act_on_dirty_entries([this](const storage::storage_entry& entry) -> bool {
-        // todo: moving to a "push" methodology will solve this better
         auto id = entry.get_net_id();
 
         if (id == storage::id_not_assigned) {
@@ -363,6 +375,23 @@ void network_server::enqueue_message_for_client(server_io::client_id id, const o
     }
 
     it->second->enqueue(message, flags);
+}
+
+void network_server::publish_and_update_entry_for_clients(
+        storage::entry_id entry_id,
+        const std::string& name,
+        obsr::value&& value,
+        std::chrono::milliseconds value_time,
+        server_io::client_id id_to_skip) {
+    const auto message = out_message::entry_update(value_time, entry_id, std::move(value));
+    for (auto& [id, client] : m_clients) {
+        if (id == id_to_skip) {
+            continue;
+        }
+
+        client->publish(id, name);
+        client->enqueue(message);
+    }
 }
 
 void network_server::handle_do_handshake_for_client(server_io::client_id id) {
