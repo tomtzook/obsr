@@ -8,8 +8,6 @@ namespace obsr {
 
 #define LOG_MODULE "instance"
 
-static constexpr auto net_update_period = std::chrono::milliseconds(100);
-
 object_data::object_data(const std::string_view& path)
     : path(path) {
 }
@@ -19,6 +17,8 @@ instance::instance()
     , m_clock(std::make_shared<clock>())
     , m_listener_storage(std::make_shared<storage::listener_storage>())
     , m_storage(std::make_shared<storage::storage>(m_listener_storage, m_clock))
+    , m_looper(std::make_shared<events::looper>())
+    , m_looper_thread(m_looper)
     , m_net_interface()
     , m_objects()
     , m_object_paths()
@@ -178,7 +178,7 @@ void instance::stop_network() {
 
 void instance::start_net(const std::shared_ptr<net::network_interface>& network_interface) {
     network_interface->attach_storage(m_storage);
-    network_interface->start();
+    network_interface->start(m_looper.get());
 }
 
 void instance::stop_net(const std::shared_ptr<net::network_interface>& network_interface) {

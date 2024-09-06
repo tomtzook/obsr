@@ -11,7 +11,7 @@
 #define TRACE_SINK_LINUX_SYSLOG 1
 
 #ifndef TRACE_LEVEL
-#define TRACE_LEVEL TRACE_LEVEL_INFO
+#define TRACE_LEVEL TRACE_LEVEL_DEBUG
 #endif
 
 #ifndef TRACE_SINK
@@ -68,7 +68,7 @@ __attribute__((destructor())) void destruct_trace()  {
 }
 
 bool can_log(log_level level) {
-    return level >= log_level::log_level_info;
+    return level >= s_base_level;
 }
 
 void trace_impl(log_level level, const char* format, ...) {

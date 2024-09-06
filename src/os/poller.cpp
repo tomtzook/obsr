@@ -85,7 +85,6 @@ void resource_poller::set(resource& resource, events::event_types events) {
         handle_error();
     }
 }
-// todo: new major redesign to work with new event system!!!
 
 void resource_poller::remove(resource& resource) {
     const auto descriptor = resource.get_descriptor();

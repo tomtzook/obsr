@@ -52,11 +52,19 @@ public:
     void configure_bind(uint16_t bind_port);
 
     void attach_storage(std::shared_ptr<storage::storage> storage) override;
-    void start() override;
+    void start(events::looper* looper) override;
     void stop() override;
 
 private:
+    enum class state {
+        idle,
+        opening,
+        in_use
+    };
+
     void update();
+    bool do_open();
+    void process_updates();
 
     storage::entry_id assign_id_to_entry(std::string_view name);
     void enqueue_message_for_clients(const out_message& message, server_io::client_id id_to_skip = server_io::invalid_client_id);
@@ -65,13 +73,13 @@ private:
     void handle_do_handshake_for_client(server_io::client_id id);
 
     std::mutex m_mutex; // todo: use
-
-    std::shared_ptr<events::looper> m_looper;
-    std::unique_ptr<events::looper_thread> m_looper_thread;
+    state m_state;
 
     std::shared_ptr<clock> m_clock;
     std::shared_ptr<storage::storage> m_storage;
     uint16_t m_bind_port;
+
+    events::looper* m_looper;
     obsr::handle m_update_timer_handle;
 
     server_io m_io;
@@ -80,6 +88,8 @@ private:
     storage::entry_id m_next_entry_id;
     std::map<server_io::client_id, std::unique_ptr<server_client>> m_clients;
     std::map<storage::entry_id, std::string> m_id_assignments;
+
+    timer m_open_retry_timer;
 };
 
 }

@@ -10,6 +10,7 @@ namespace obsr::net {
 
 #define LOG_MODULE "server"
 
+static constexpr auto open_retry_time = std::chrono::milliseconds(1000);
 static constexpr auto update_time = std::chrono::milliseconds(200);
 
 server_client::server_client(server_io::client_id id, server_io& parent, const std::shared_ptr<clock>& clock)
@@ -62,17 +63,18 @@ void server_client::update() {
 
 network_server::network_server(std::shared_ptr<clock>& clock)
     : m_mutex()
-    , m_looper()
-    , m_looper_thread()
+    , m_state(state::idle)
     , m_clock(clock)
     , m_storage()
     , m_bind_port(0)
+    , m_looper(nullptr)
     , m_update_timer_handle(empty_handle)
     , m_io()
     , m_parser()
     , m_next_entry_id(0)
     , m_clients()
-    , m_id_assignments() {
+    , m_id_assignments()
+    , m_open_retry_timer() {
     m_io.on_connect([this](server_io::client_id id)->void {
         auto client_u = std::make_unique<server_client>(id, m_io, m_clock);
         auto [it, _] = m_clients.emplace(id, std::move(client_u));
@@ -87,7 +89,7 @@ network_server::network_server(std::shared_ptr<clock>& clock)
         }
     });
     m_io.on_close([this]()->void {
-
+        //m_state = state::opening;
     });
     m_io.on_message([this](server_io::client_id id, const message_header& header, const uint8_t* buffer, size_t size)->void {
         auto type = static_cast<message_type>(header.type);
@@ -173,16 +175,26 @@ network_server::network_server(std::shared_ptr<clock>& clock)
 }
 
 void network_server::configure_bind(uint16_t bind_port) {
-    // todo: throw if idle
+    if (m_state != state::idle) {
+        throw illegal_state_exception();
+    }
+
     m_bind_port = bind_port;
 }
 
 void network_server::attach_storage(std::shared_ptr<storage::storage> storage) {
-    // todo: throw if idle
+    if (m_state != state::idle) {
+        throw illegal_state_exception();
+    }
+
     m_storage = storage;
 }
 
-void network_server::start() {
+void network_server::start(events::looper* looper) {
+    if (m_state != state::idle) {
+        throw illegal_state_exception();
+    }
+
     if (!m_storage) {
         throw illegal_state_exception();
     }
@@ -195,13 +207,9 @@ void network_server::start() {
     m_clients.clear();
     m_storage->clear_net_ids();
 
-    m_looper = std::make_shared<events::looper>();
-    m_looper_thread = std::make_unique<events::looper_thread>(m_looper);
+    m_looper = looper;
 
-    m_looper->request_execute([this](events::looper&)->void {
-        m_io.start(m_looper.get(), m_bind_port);
-        // todo: retry?
-    });
+    m_state = state::opening;
 
     auto update_callback = [this](events::looper&, obsr::handle)->void {
         update();
@@ -210,27 +218,67 @@ void network_server::start() {
 }
 
 void network_server::stop() {
+    if (m_state == state::idle) {
+        throw illegal_state_exception();
+    }
+
     m_looper->request_execute([this](events::looper&)->void {
         if (m_update_timer_handle != empty_handle) {
             m_looper->stop_timer(m_update_timer_handle);
             m_update_timer_handle = empty_handle;
         }
 
-        // todo: could throw if already stopped
         m_io.stop();
     }, events::looper::execute_type::sync);
 
-    // will stop thread
-    m_looper_thread.reset();
-    m_looper.reset();
+    m_state = state::idle;
 }
 
 void network_server::update() {
-    if (m_clients.empty()) {
+    if (m_state == state::idle) {
         // no clients, no need to update the information
         return;
     }
 
+    switch (m_state) {
+        case state::opening: {
+            if (m_open_retry_timer.is_running() && !m_open_retry_timer.has_elapsed(open_retry_time)) {
+                break;
+            }
+
+            if (do_open()) {
+                m_open_retry_timer.stop();
+            } else {
+                m_open_retry_timer.start();
+            }
+
+            break;
+        }
+        case state::in_use:
+            if (!m_clients.empty()) {
+                process_updates();
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+bool network_server::do_open() {
+    try {
+        m_io.start(m_looper, m_bind_port);
+        m_state = state::in_use;
+
+        return true;
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE, "error while opening and starting server: what=%s", e.what());
+        m_io.stop();
+
+        return false;
+    }
+}
+
+void network_server::process_updates() {
     m_storage->act_on_dirty_entries([this](const storage::storage_entry& entry) -> bool {
         // todo: moving to a "push" methodology will solve this better
         auto id = entry.get_net_id();

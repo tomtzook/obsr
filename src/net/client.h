@@ -16,7 +16,7 @@ public:
     void configure_target(connection_info info);
 
     void attach_storage(std::shared_ptr<storage::storage> storage) override;
-    void start() override;
+    void start(events::looper* looper) override;
     void stop() override;
 
 private:
@@ -36,12 +36,11 @@ private:
     std::mutex m_mutex; // todo: use
     state m_state;
 
-    std::shared_ptr<events::looper> m_looper;
-    std::unique_ptr<events::looper_thread> m_looper_thread;
-
     std::shared_ptr<clock> m_clock;
     std::shared_ptr<storage::storage> m_storage;
     connection_info m_conn_info;
+
+    events::looper* m_looper;
     obsr::handle m_update_timer_handle;
 
     socket_io m_io;

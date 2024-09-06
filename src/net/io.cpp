@@ -98,9 +98,12 @@ void socket_io::start(events::looper* looper) {
     try {
         socket->setoption<os::sockopt_reuseport>(true);
         socket->configure_blocking(false);
-    } catch (const io_exception&) {
+    } catch (const io_exception& e) {
+        TRACE_ERROR(LOG_MODULE_CLIENT, "failed creating socket: code=%d", e.get_code());
+
         socket->close();
         socket.reset();
+
         throw;
     }
 
@@ -147,7 +150,7 @@ void socket_io::start(events::looper* looper,
 
 void socket_io::stop() {
     if (m_state == state::idle) {
-        throw illegal_state_exception();
+        return;
     }
 
     stop_internal();
@@ -163,8 +166,8 @@ void socket_io::connect(connection_info info) {
     try {
         m_state = state::connecting;
         m_socket->connect(info.ip, info.port);
-    } catch (const io_exception&) {
-        TRACE_DEBUG(LOG_MODULE_CLIENT, "connect failed");
+    } catch (const io_exception& e) {
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "connect failed: code=%d", e.get_code());
         stop_internal();
 
         throw;
@@ -240,9 +243,9 @@ void socket_io::on_write_ready() {
 
         try {
             m_socket->finalize_connect();
-        } catch (const io_exception&) {
+        } catch (const io_exception& e) {
             // connect failed
-            TRACE_ERROR(LOG_MODULE_CLIENT, "connect failed");
+            TRACE_ERROR(LOG_MODULE_CLIENT, "connect failed: code=%d", e.get_code());
             stop_internal();
 
             return;
@@ -261,8 +264,8 @@ void socket_io::on_write_ready() {
                 // nothing more to write
                 m_looper->request_updates(m_looper_handle, events::event_out, events::looper::events_update_type::remove);
             }
-        } catch (const io_exception&) {
-            TRACE_ERROR(LOG_MODULE_CLIENT, "write error");
+        } catch (const io_exception& e) {
+            TRACE_ERROR(LOG_MODULE_CLIENT, "write error: code=%d", e.get_code());
             stop_internal();
         }
     } else {
@@ -382,7 +385,9 @@ void server_io::start(events::looper* looper, uint16_t bind_port) {
         m_socket->configure_blocking(false);
         m_socket->bind(bind_port);
         m_socket->listen(2);
-    } catch (const io_exception&) {
+    } catch (const io_exception& e) {
+        TRACE_ERROR(LOG_MODULE_SERVER, "start failed: code=%d", e.get_code());
+
         if (m_socket) {
             m_socket->close();
             m_socket.reset();
@@ -451,8 +456,8 @@ void server_io::on_read_ready() {
         invoke_func_nolock(m_callbacks.on_connect, id);
 
         TRACE_ERROR(LOG_MODULE_SERVER, "new client registered %d", id);
-    } catch (const io_exception&) {
-        TRACE_ERROR(LOG_MODULE_SERVER, "error with new server");
+    } catch (const io_exception& e) {
+        TRACE_ERROR(LOG_MODULE_SERVER, "error with new server: code=%d", e.get_code());
 
         if (id != invalid_client_id) {
             auto it = m_clients.find(id);

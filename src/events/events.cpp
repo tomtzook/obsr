@@ -9,6 +9,10 @@
 
 namespace obsr::events {
 
+static constexpr auto initial_poll_timeout = std::chrono::milliseconds(1000);
+static constexpr auto min_poll_timeout = std::chrono::milliseconds(100);
+static constexpr size_t max_events_for_process = 20;
+
 polled_events::polled_events(event_data* data)
     : m_data(data)
 {}
@@ -31,7 +35,7 @@ looper::looper(std::unique_ptr<poller>&& poller)
     , m_execute_requests()
     , m_run_signal(std::make_shared<os::signal>())
     , m_timer_handles()
-    , m_timeout(1000) {
+    , m_timeout(initial_poll_timeout) {
     add(m_run_signal, event_in, [this](looper& looper, obsr::handle handle, event_types events)->void {
         m_run_signal->clear();
     });
@@ -113,7 +117,7 @@ void looper::request_updates(obsr::handle handle, event_types events, events_upd
 obsr::handle looper::create_timer(std::chrono::milliseconds timeout, timer_callback callback) {
     std::unique_lock lock(m_mutex);
 
-    if (timeout.count() < 100) { // todo const
+    if (timeout < min_poll_timeout) {
         throw illegal_state_exception();
     }
 
@@ -168,7 +172,7 @@ void looper::loop() {
 
     lock.unlock();
     // todo: max events and milliseconds
-    auto result = m_poller->poll(20, m_timeout);
+    auto result = m_poller->poll(max_events_for_process, m_timeout);
     lock.lock();
 
     process_events(lock, result);
