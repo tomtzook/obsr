@@ -89,7 +89,7 @@ network_server::network_server(std::shared_ptr<clock>& clock)
         }
     });
     m_io.on_close([this]()->void {
-        //m_state = state::opening;
+        m_state = state::opening;
     });
     m_io.on_message([this](server_io::client_id id, const message_header& header, const uint8_t* buffer, size_t size)->void {
         auto type = static_cast<message_type>(header.type);
