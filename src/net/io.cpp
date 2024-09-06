@@ -157,7 +157,7 @@ void socket_io::stop() {
         return;
     }
 
-    stop_internal();
+    stop_internal(false);
 }
 
 void socket_io::connect(connection_info info) {
@@ -312,7 +312,7 @@ void socket_io::process_new_data() {
     } while (run);
 }
 
-void socket_io::stop_internal() {
+void socket_io::stop_internal(bool notify) {
     if (m_state == state::idle) {
         return;
     }
@@ -336,7 +336,10 @@ void socket_io::stop_internal() {
     }
 
     m_state = state::idle;
-    invoke_func_nolock(m_callbacks.on_close);
+
+    if (notify) {
+        invoke_func_nolock(m_callbacks.on_close);
+    }
 }
 
 server_io::server_io()
@@ -422,7 +425,7 @@ void server_io::stop() {
         throw illegal_state_exception();
     }
 
-    stop_internal();
+    stop_internal(false);
 }
 
 bool server_io::write_to(client_id id, uint8_t type, const uint8_t* buffer, size_t size) {
@@ -477,7 +480,7 @@ void server_io::on_hung_or_error() {
     stop_internal();
 }
 
-void server_io::stop_internal() {
+void server_io::stop_internal(bool notify) {
     if (m_state == state::idle) {
         return;
     }
@@ -510,7 +513,10 @@ void server_io::stop_internal() {
     }
 
     m_state = state::idle;
-    invoke_func_nolock(m_callbacks.on_close);
+
+    if (notify) {
+        invoke_func_nolock(m_callbacks.on_close);
+    }
 }
 
 server_io::client::client(server_io& parent, client_id id)

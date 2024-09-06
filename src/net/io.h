@@ -82,7 +82,7 @@ private:
     void on_hung_or_error();
     void process_new_data();
 
-    void stop_internal();
+    void stop_internal(bool notify = true);
 
     state m_state;
     events::looper* m_looper;
@@ -148,7 +148,7 @@ private:
     void on_read_ready();
     void on_hung_or_error();
 
-    void stop_internal();
+    void stop_internal(bool notify = true);
 
     state m_state;
     events::looper* m_looper;
