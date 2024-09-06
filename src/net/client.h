@@ -33,7 +33,7 @@ private:
     bool do_open_and_connect();
     void process_storage();
 
-    std::mutex m_mutex; // todo: use
+    std::mutex m_mutex;
     state m_state;
 
     std::shared_ptr<clock> m_clock;

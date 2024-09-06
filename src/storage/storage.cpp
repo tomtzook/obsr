@@ -434,8 +434,6 @@ void storage::delete_entry_internal(entry entry,
     }
 
     if (timestamp.count() == 0) {
-        // todo: if this is done before clock sync with server then we have a problem!
-        //      receive rtt2 from net to update all local send_time
         timestamp = m_clock->now();
     }
     data->set_last_update_timestamp(timestamp);

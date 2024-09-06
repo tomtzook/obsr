@@ -76,6 +76,8 @@ network_server::network_server(std::shared_ptr<clock>& clock)
     , m_id_assignments()
     , m_open_retry_timer() {
     m_io.on_connect([this](server_io::client_id id)->void {
+        std::lock_guard lock(m_mutex);
+
         auto client_u = std::make_unique<server_client>(id, m_io, m_clock);
         auto [it, _] = m_clients.emplace(id, std::move(client_u));
 
@@ -83,15 +85,23 @@ network_server::network_server(std::shared_ptr<clock>& clock)
         client->set_state(server_client::state::in_handshake);
     });
     m_io.on_disconnect([this](server_io::client_id id)->void {
+        std::lock_guard lock(m_mutex);
+
         auto it = m_clients.find(id);
         if (it != m_clients.end()) {
             m_clients.erase(it);
         }
     });
     m_io.on_close([this]()->void {
+        std::lock_guard lock(m_mutex);
+
+        m_clients.clear();
+
         m_state = state::opening;
     });
     m_io.on_message([this](server_io::client_id id, const message_header& header, const uint8_t* buffer, size_t size)->void {
+        std::lock_guard lock(m_mutex);
+
         auto type = static_cast<message_type>(header.type);
         m_parser.set_data(type, buffer, size);
         m_parser.process();
@@ -175,6 +185,8 @@ network_server::network_server(std::shared_ptr<clock>& clock)
 }
 
 void network_server::configure_bind(uint16_t bind_port) {
+    std::lock_guard lock(m_mutex);
+
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
@@ -183,6 +195,8 @@ void network_server::configure_bind(uint16_t bind_port) {
 }
 
 void network_server::attach_storage(std::shared_ptr<storage::storage> storage) {
+    std::lock_guard lock(m_mutex);
+
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
@@ -191,6 +205,8 @@ void network_server::attach_storage(std::shared_ptr<storage::storage> storage) {
 }
 
 void network_server::start(events::looper* looper) {
+    std::lock_guard lock(m_mutex);
+
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
@@ -218,6 +234,8 @@ void network_server::start(events::looper* looper) {
 }
 
 void network_server::stop() {
+    std::lock_guard lock(m_mutex);
+
     if (m_state == state::idle) {
         throw illegal_state_exception();
     }

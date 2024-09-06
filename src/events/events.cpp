@@ -1,6 +1,7 @@
 
 #include <utility>
 
+#include "debug.h"
 #include "internal_except.h"
 #include "os/signal.h"
 #include "events.h"
@@ -8,6 +9,8 @@
 #include "os/poller.h"
 
 namespace obsr::events {
+
+#define LOG_MODULE "looper"
 
 static constexpr auto initial_poll_timeout = std::chrono::milliseconds(1000);
 static constexpr auto min_poll_timeout = std::chrono::milliseconds(100);
@@ -56,7 +59,7 @@ obsr::handle looper::add(std::shared_ptr<os::resource> resource, event_types eve
 
     auto it = m_fd_map.find(descriptor);
     if (it != m_fd_map.end()) {
-        throw illegal_state_exception();
+        throw illegal_argument_exception();
     }
 
     auto handle = m_handles.allocate_new();
@@ -78,7 +81,7 @@ void looper::remove(obsr::handle handle) {
     std::unique_lock lock(m_mutex);
 
     if (!m_handles.has(handle)) {
-        throw illegal_state_exception();
+        throw illegal_argument_exception();
     }
 
     auto data = m_handles.release(handle);
@@ -92,7 +95,7 @@ void looper::request_updates(obsr::handle handle, event_types events, events_upd
     std::unique_lock lock(m_mutex);
 
     if (!m_handles.has(handle)) {
-        throw illegal_state_exception(); // todo: throw illegal argument
+        throw illegal_argument_exception();
     }
 
     update_type update_type;
@@ -118,7 +121,7 @@ obsr::handle looper::create_timer(std::chrono::milliseconds timeout, timer_callb
     std::unique_lock lock(m_mutex);
 
     if (timeout < min_poll_timeout) {
-        throw illegal_state_exception();
+        throw illegal_argument_exception();
     }
 
     auto handle = m_timer_handles.allocate_new();
@@ -140,7 +143,7 @@ void looper::stop_timer(obsr::handle handle) {
     std::unique_lock lock(m_mutex);
 
     if (!m_handles.has(handle)) {
-        throw illegal_state_exception();
+        throw illegal_argument_exception();
     }
 
     auto data = m_timer_handles[handle];
@@ -171,7 +174,6 @@ void looper::loop() {
     process_updates();
 
     lock.unlock();
-    // todo: max events and milliseconds
     auto result = m_poller->poll(max_events_for_process, m_timeout);
     lock.lock();
 
@@ -236,7 +238,7 @@ void looper::process_events(std::unique_lock<std::mutex>& lock, polled_events& e
         try {
             data->callback(*this, data->handle, adjusted_flags);
         } catch (...) {
-            // todo: handle
+            TRACE_ERROR(LOG_MODULE, "Error in io callback");
         }
         lock.lock();
     }
@@ -259,7 +261,9 @@ void looper::process_timers(std::unique_lock<std::mutex>& lock) {
         lock.unlock();
         try {
             data.callback(*this, handle);
-        } catch (...) {}
+        } catch (...) {
+            TRACE_ERROR(LOG_MODULE, "Error in timer callback");
+        }
         lock.lock();
 
         data.next_timestamp = now + data.timeout;
@@ -278,7 +282,7 @@ void looper::execute_requests(std::unique_lock<std::mutex>& lock) {
         try {
             request.callback(*this);
         } catch (...) {
-            // todo: handle
+            TRACE_ERROR(LOG_MODULE, "Error in request callback");
         }
         lock.lock();
 

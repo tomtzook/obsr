@@ -36,4 +36,8 @@ class illegal_state_exception : public exception {
 
 };
 
+class illegal_argument_exception : public exception {
+
+};
+
 }

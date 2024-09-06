@@ -133,6 +133,8 @@ void instance::delete_listener(listener listener) {
 }
 
 void instance::start_server(uint16_t bind_port) {
+    std::unique_lock guard(m_mutex);
+
     if (m_net_interface) {
         throw illegal_state_exception();
     }
@@ -151,6 +153,8 @@ void instance::start_server(uint16_t bind_port) {
 }
 
 void instance::start_client(std::string_view address, uint16_t server_port) {
+    std::unique_lock guard(m_mutex);
+
     if (m_net_interface) {
         throw illegal_state_exception();
     }
@@ -170,6 +174,8 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
 }
 
 void instance::stop_network() {
+    std::unique_lock guard(m_mutex);
+
     if (m_net_interface) {
         stop_net(m_net_interface);
         m_net_interface.reset();

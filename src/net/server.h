@@ -72,7 +72,7 @@ private:
 
     void handle_do_handshake_for_client(server_io::client_id id);
 
-    std::mutex m_mutex; // todo: use
+    std::mutex m_mutex;
     state m_state;
 
     std::shared_ptr<clock> m_clock;

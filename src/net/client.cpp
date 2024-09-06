@@ -27,6 +27,8 @@ network_client::network_client(std::shared_ptr<clock>& clock)
     , m_parser()
     , m_message_queue() {
     m_io.on_connect([this]()->void {
+        std::lock_guard lock(m_mutex);
+
         TRACE_DEBUG(LOG_MODULE, "connected to server, starting first time sync");
         m_message_queue.clear();
 
@@ -35,6 +37,8 @@ network_client::network_client(std::shared_ptr<clock>& clock)
         m_state = state::in_handshake_time_sync;
     });
     m_io.on_close([this]()->void {
+        std::lock_guard lock(m_mutex);
+
         m_connect_retry_timer.stop();
         m_clock_sync_timer.stop();
 
@@ -42,6 +46,8 @@ network_client::network_client(std::shared_ptr<clock>& clock)
         m_connect_retry_timer.start();
     });
     m_io.on_message([this](const message_header& header, const uint8_t* buffer, size_t size)->void {
+        std::lock_guard lock(m_mutex);
+
         auto type = static_cast<message_type>(header.type);
         m_parser.set_data(type, buffer, size);
         m_parser.process();
@@ -124,6 +130,8 @@ network_client::network_client(std::shared_ptr<clock>& clock)
 }
 
 void network_client::configure_target(connection_info info) {
+    std::lock_guard lock(m_mutex);
+
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
@@ -132,6 +140,8 @@ void network_client::configure_target(connection_info info) {
 }
 
 void network_client::attach_storage(std::shared_ptr<storage::storage> storage) {
+    std::lock_guard lock(m_mutex);
+
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
@@ -140,6 +150,8 @@ void network_client::attach_storage(std::shared_ptr<storage::storage> storage) {
 }
 
 void network_client::start(events::looper* looper) {
+    std::lock_guard lock(m_mutex);
+
     if (m_state != state::idle) {
         throw illegal_state_exception();
     }
@@ -162,12 +174,16 @@ void network_client::start(events::looper* looper) {
     m_state = state::opening;
 
     auto update_callback = [this](events::looper&, obsr::handle)->void {
+        std::lock_guard lock(m_mutex);
+
         update();
     };
     m_update_timer_handle = m_looper->create_timer(update_time, update_callback);
 }
 
 void network_client::stop() {
+    std::lock_guard lock(m_mutex);
+
     if (m_state == state::idle) {
         throw illegal_state_exception();
     }

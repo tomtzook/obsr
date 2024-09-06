@@ -495,7 +495,7 @@ void server_io::stop_internal() {
 
     for (auto& [id, client] : m_clients) {
         try {
-            client->stop(); // todo: make sure this isn't calling our close callback
+            client->stop();
         } catch (...) {
             TRACE_ERROR(LOG_MODULE_SERVER, "error stopping client");
         }
