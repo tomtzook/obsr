@@ -109,6 +109,17 @@ std::optional<obsr::value> readvalue(readable_buffer& buf, value_type type) {
 
             return value::make_double(value);
         }
+        case value_type::integer32_array: {
+            uint8_t temp_buffer[256];
+            size_t size = sizeof(temp_buffer);
+            if (!readraw(buf, temp_buffer, size)) {
+                return {};
+            }
+
+            std::span<const int32_t> span{reinterpret_cast<int32_t*>(temp_buffer),
+                                          size / sizeof(int32_t)};
+            return value::make_int32_array(span);
+        }
         case value_type::empty:
             return value::make();
         default:
@@ -163,6 +174,10 @@ bool writevalue(writable_buffer& buf, const value& value) {
             return writef32(buf, value.get_float());
         case value_type::floating_point64:
             return writef64(buf, value.get_double());
+        case value_type::integer32_array: {
+            auto arr = value.get_int32_array();
+            return writeraw(buf, reinterpret_cast<const uint8_t*>(arr.data()), arr.size_bytes());
+        }
         default:
             return true;
     }

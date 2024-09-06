@@ -6,6 +6,8 @@
 #include <string>
 #include <chrono>
 #include <cassert>
+#include <span>
+#include <memory>
 
 namespace obsr {
 
@@ -27,7 +29,8 @@ enum class value_type : uint8_t {
     integer32,
     integer64,
     floating_point32,
-    floating_point64
+    floating_point64,
+    integer32_array
 };
 
 class value {
@@ -57,7 +60,7 @@ public:
 
     [[nodiscard]] inline bool get_boolean_or(bool default_val) const {
         if (m_type == value_type::boolean) {
-            return m_value.boolean;
+            return get_boolean();
         }
         return default_val;
     }
@@ -69,19 +72,19 @@ public:
 
     [[nodiscard]] inline int32_t get_int32() const {
         assert(m_type == value_type::integer32);
-        return m_value.integer;
+        return m_value.integer32;
     }
 
     [[nodiscard]] inline int32_t get_int32_or(int32_t default_val) const {
         if (m_type == value_type::integer32) {
-            return m_value.integer;
+            return get_int32();
         }
         return default_val;
     }
 
     inline void set_int32(int32_t value) {
         m_type = value_type::integer32;
-        m_value.integer = value;
+        m_value.integer32 = value;
     }
 
     [[nodiscard]] inline int64_t get_int64() const {
@@ -91,7 +94,7 @@ public:
 
     [[nodiscard]] inline int64_t get_int64_or(int64_t default_val) const {
         if (m_type == value_type::integer64) {
-            return m_value.integer64;
+            return get_int64();
         }
         return default_val;
     }
@@ -103,19 +106,19 @@ public:
 
     [[nodiscard]] inline float get_float() const {
         assert(m_type == value_type::floating_point32);
-        return m_value.floating_point;
+        return m_value.floating_point32;
     }
 
     [[nodiscard]] inline float get_float_or(float default_val) const {
         if (m_type == value_type::floating_point32) {
-            return m_value.floating_point;
+            return get_float();
         }
         return default_val;
     }
 
     inline void set_float(float value) {
         m_type = value_type::floating_point32;
-        m_value.floating_point = value;
+        m_value.floating_point32 = value;
     }
 
     [[nodiscard]] inline double get_double() const {
@@ -125,7 +128,7 @@ public:
 
     [[nodiscard]] inline double get_double_or(double default_val) const {
         if (m_type == value_type::floating_point64) {
-            return m_value.floating_point64;
+            return get_double();
         }
         return default_val;
     }
@@ -133,6 +136,20 @@ public:
     inline void set_double(double value) {
         m_type = value_type::floating_point64;
         m_value.floating_point64 = value;
+    }
+
+    [[nodiscard]] inline std::span<const int32_t> get_int32_array() const {
+        assert(m_type == value_type::integer32_array);
+        return {m_value.integer32_array.arr, m_value.integer32_array.size};
+    }
+
+    inline void set_int32_array(std::span<const int32_t> value) {
+        m_type = value_type::integer32_array;
+
+        auto data = create_array(value);
+        m_value.integer32_array.arr = data.get();
+        m_value.integer32_array.size = value.size();
+        m_data = std::move(data);
     }
 
     static inline value make() {
@@ -168,7 +185,22 @@ public:
         val.set_double(value);
         return std::move(val);
     }
+
+    static inline value make_int32_array(std::span<const int32_t> value) {
+        obsr::value val(value_type::integer32_array);
+        val.set_int32_array(value);
+        return std::move(val);
+    }
+
 private:
+    template<typename t_>
+    static std::shared_ptr<t_[]> create_array(std::span<const t_> value) {
+        auto data = std::shared_ptr<t_[]>(new t_[value.size()]);
+        std::copy(value.begin(), value.end(), data.get());
+
+        return data;
+    }
+
     explicit value(value_type type)
         : m_type(type)
         , m_value()
@@ -177,11 +209,16 @@ private:
     value_type m_type;
     union {
         bool boolean;
-        int32_t integer;
+        int32_t integer32;
         int64_t integer64;
-        float floating_point;
+        float floating_point32;
         double floating_point64;
+        struct {
+            int32_t* arr;
+            size_t size;
+        } integer32_array;
     } m_value;
+    std::shared_ptr<void> m_data;
 };
 
 enum class event_type {
