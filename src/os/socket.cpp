@@ -6,6 +6,7 @@
 
 #include <cstring>
 
+#include "util/time.h"
 #include "internal_except.h"
 #include "socket.h"
 

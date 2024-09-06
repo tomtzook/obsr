@@ -25,8 +25,12 @@ bool reader::process_state(read_state current_state, read_data& data) {
         case read_state::header: {
             auto& header = data.header;
             do {
-                // todo: optimization for locating magic
-                auto success = m_read_buffer.read(header);
+                auto success = m_read_buffer.find_and_seek_read(message_header::message_magic);
+                if (!success) {
+                    return try_later();
+                }
+
+                success = m_read_buffer.read(header);
                 if (!success) {
                     return try_later();
                 }
@@ -289,8 +293,8 @@ void socket_io::process_new_data() {
             TRACE_ERROR(LOG_MODULE_CLIENT, "read update error %d", m_reader.error_code());
             stop_internal();
         } else if (m_reader.is_finished()) {
-            TRACE_DEBUG(LOG_MODULE_CLIENT, "new message processed");
             auto& state = m_reader.data();
+            TRACE_DEBUG(LOG_MODULE_CLIENT, "new message processed %d", state.header.index);
 
             invoke_func_nolock<const message_header&, const uint8_t*, size_t>(
                     m_callbacks.on_message,

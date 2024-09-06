@@ -64,6 +64,7 @@ public:
 
     void reset();
 
+    bool find_and_seek_read(uint8_t byte);
     void seek_read(size_t offset);
 
     bool read(uint8_t* buffer, size_t size) override;

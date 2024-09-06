@@ -114,6 +114,43 @@ void buffer::reset() {
     m_write_pos = 0;
 }
 
+bool buffer::find_and_seek_read(uint8_t byte) {
+    if (m_write_pos < m_read_pos) {
+        const auto space_to_max = (m_size - m_read_pos);
+        auto ptr = ::memchr(m_buffer + m_read_pos, byte, space_to_max);
+        if (ptr != nullptr) {
+            const auto offset = static_cast<uint8_t*>(ptr) - m_buffer;
+            m_read_pos = offset;
+            return true;
+        }
+
+        if (m_write_pos < 1) {
+            return false;
+        }
+
+        ptr = ::memchr(m_buffer, byte, m_write_pos);
+        if (ptr == nullptr) {
+            m_read_pos = m_write_pos;
+            return false;
+        }
+
+        const auto offset = static_cast<uint8_t*>(ptr) - m_buffer;
+        m_read_pos = offset;
+        return true;
+    } else {
+        const auto space = (m_write_pos - m_read_pos);
+        auto ptr = ::memchr(m_buffer + m_read_pos, byte, space);
+        if (ptr == nullptr) {
+            m_read_pos = m_write_pos;
+            return false;
+        }
+
+        const auto offset = static_cast<uint8_t*>(ptr) - m_buffer;
+        m_read_pos = offset;
+        return true;
+    }
+}
+
 void buffer::seek_read(size_t offset) {
     if (m_write_pos < m_read_pos) {
         const auto space_to_max = (m_size - m_read_pos);
@@ -132,6 +169,10 @@ void buffer::seek_read(size_t offset) {
 }
 
 bool buffer::read(uint8_t* buffer, size_t size) {
+    if (size > m_size) {
+        return false;
+    }
+
     if (m_write_pos < m_read_pos) {
         const auto space_to_max = (m_size - m_read_pos);
         if (size < space_to_max) {
@@ -141,7 +182,7 @@ bool buffer::read(uint8_t* buffer, size_t size) {
                 return false;
             }
 
-            memcpy(buffer, m_buffer + m_read_pos, size);
+            memcpy(buffer, m_buffer + m_read_pos, space_to_max);
             memcpy(buffer + space_to_max, m_buffer, size - space_to_max);
         }
     } else {
@@ -160,6 +201,10 @@ bool buffer::read(uint8_t* buffer, size_t size) {
 }
 
 bool buffer::write(const uint8_t* buffer, size_t size) {
+    if (size > m_size) {
+        return false;
+    }
+
     if (m_write_pos >= m_read_pos) {
         const auto space_to_max = (m_size - m_write_pos);
         if (size < space_to_max) {
@@ -196,13 +241,13 @@ bool buffer::read_from(obsr::os::readable& readable) {
             return true;
         }
 
-        space = (m_read_pos);
+        space = (m_read_pos - 1);
         if (space >= 1) {
             read = readable.read(m_buffer, space);
             m_write_pos = read;
             return true;
         } else {
-            m_write_pos = m_read_pos;
+            m_write_pos = space;
             return false;
         }
     } else {
@@ -218,6 +263,10 @@ bool buffer::read_from(obsr::os::readable& readable) {
 }
 
 bool buffer::write_into(obsr::os::writable& writable) {
+    if (m_write_pos == m_read_pos) {
+        return false;
+    }
+
     if (m_write_pos < m_read_pos) {
         auto space = (m_size - m_read_pos);
         if (space < 1) {
@@ -230,7 +279,7 @@ bool buffer::write_into(obsr::os::writable& writable) {
             return true;
         }
 
-        space = m_read_pos;
+        space = m_write_pos;
         written = writable.write(m_buffer, space);
         m_read_pos = written;
     } else {

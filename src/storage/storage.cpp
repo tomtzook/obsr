@@ -345,9 +345,11 @@ void storage::set_entry_internal(entry entry,
                                  std::chrono::milliseconds timestamp) {
     auto data = m_entries[entry];
 
-    if (timestamp.count() != 0 && data->get_last_update_timestamp() > timestamp) {
+    const auto last_update = data->get_last_update_timestamp();
+    if (timestamp.count() != 0 && last_update > timestamp) {
         // this new update is too stale
-        TRACE_DEBUG(LOG_MODULE, "received stale set entry request");
+        TRACE_DEBUG(LOG_MODULE, "received stale set entry request: current=%lu, received=%lu",
+                    last_update.count(), timestamp.count());
         return;
     }
 
@@ -407,9 +409,11 @@ void storage::delete_entry_internal(entry entry,
                                     std::chrono::milliseconds timestamp) {
     auto data = m_entries[entry];
 
-    if (timestamp.count() != 0 && data->get_last_update_timestamp() > timestamp) {
+    const auto last_update = data->get_last_update_timestamp();
+    if (timestamp.count() != 0 && last_update > timestamp) {
         // this new update is too stale
-        TRACE_DEBUG(LOG_MODULE, "received stale delete entry request");
+        TRACE_DEBUG(LOG_MODULE, "received stale delete entry request: current=%lu, received=%lu",
+                    last_update.count(), timestamp.count());
         return;
     }
 
