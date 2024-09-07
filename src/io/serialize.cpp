@@ -50,8 +50,30 @@ std::optional<double> deserializer::readf64() {
     return read<double>(m_buffer);
 }
 
+std::optional<size_t> deserializer::read_size() {
+    size_t value = 0;
+    uint64_t shift = 0;
+
+    while (true) {
+        const auto byte_opt = read8();
+        if (!byte_opt) {
+            return {};
+        }
+
+        const auto byte = byte_opt.value();
+        value |= (byte & 0x7f) << shift;
+        if (!(byte & 0x80)) {
+            break;
+        }
+
+        shift += 7;
+    }
+
+    return value;
+}
+
 std::optional<std::span<uint8_t>> deserializer::read_raw() {
-    const auto sizeOpt = read64();
+    const auto sizeOpt = read_size();
     if (!sizeOpt) {
         return {};
     }
@@ -206,9 +228,24 @@ bool serializer::writef64(double value) {
     return write(m_buffer, value);
 }
 
+bool serializer::write_size(size_t value) {
+    do {
+        uint8_t byte = value & 0x7f;
+        value >>= 7;
+        if (value != 0) {
+            byte |= 0x80;
+        }
+
+        if (!write8(byte)) {
+            return false;
+        }
+    } while (value != 0);
+
+    return true;
+}
+
 bool serializer::write_raw(const uint8_t* ptr, size_t size) {
-    // todo: improve as to not write the full 64bit always
-    if (!write64(size)) {
+    if (!write_size(size)) {
         return false;
     }
 

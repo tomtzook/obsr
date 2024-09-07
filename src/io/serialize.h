@@ -18,6 +18,7 @@ public:
     std::optional<uint64_t> read64();
     std::optional<float> readf32();
     std::optional<double> readf64();
+    std::optional<size_t> read_size();
     std::optional<std::span<uint8_t>> read_raw();
     std::optional<std::string_view> read_str();
     std::optional<obsr::value> read_value(value_type type);
@@ -51,6 +52,7 @@ public:
     bool write64(uint64_t value);
     bool writef32(float value);
     bool writef64(double value);
+    bool write_size(size_t value);
     bool write_raw(const uint8_t* ptr, size_t size);
     bool write_str(std::string_view str);
     bool write_value(const value& value);

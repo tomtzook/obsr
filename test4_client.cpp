@@ -34,6 +34,14 @@ int main() {
                     case obsr::value_type::integer64:
                         printf("%ld\n", value.get_int64());
                         break;
+                    case obsr::value_type::integer32_array: {
+                        auto arr = value.get_int32_array();
+                        for (int32_t i : arr) {
+                            printf("%d, ", i);
+                        }
+                        printf("\n");
+                        break;
+                    }
                     default:
                         printf("other\n");
                         break;
