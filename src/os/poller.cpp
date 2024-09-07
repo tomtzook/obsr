@@ -101,7 +101,7 @@ void resource_poller::remove(resource& resource) {
 events::polled_events resource_poller::poll(size_t max_events, std::chrono::milliseconds timeout) {
     if (max_events > events_buffer_size) {
         // todo: dynamically change the buffer size
-        throw illegal_state_exception();
+        throw illegal_argument_exception();
     }
 
     auto events = reinterpret_cast<epoll_event*>(m_events);
@@ -109,8 +109,7 @@ events::polled_events resource_poller::poll(size_t max_events, std::chrono::mill
     if (count < 0) {
         int error = errno;
         if (error == EINTR) {
-            // todo: timeout has occurred
-            //  maybe do special handling
+            // timeout has occurred
             m_data.set_count(0);
             return {&m_data};
         } else {

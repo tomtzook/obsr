@@ -8,6 +8,7 @@
 #include <cassert>
 #include <span>
 #include <memory>
+#include <utility>
 
 namespace obsr {
 
@@ -25,12 +26,16 @@ enum class entry_flag : uint8_t {
 
 enum class value_type : uint8_t {
     empty,
+    raw,
     boolean,
     integer32,
     integer64,
     floating_point32,
     floating_point64,
-    integer32_array
+    integer32_array,
+    integer64_array,
+    floating_point32_array,
+    floating_point64_array
 };
 
 class value {
@@ -51,6 +56,28 @@ public:
 
     void clear() {
         m_type = value_type::empty;
+        m_data.reset();
+    }
+
+    [[nodiscard]] inline std::span<const uint8_t> get_raw() const {
+        assert(m_type == value_type::raw);
+        return {m_value.raw.ptr, m_value.raw.size};
+    }
+
+    [[nodiscard]] inline std::span<const uint8_t> get_raw_or(std::span<const uint8_t> default_val) const {
+        if (m_type == value_type::raw) {
+            return get_raw();
+        }
+        return default_val;
+    }
+
+    inline void set_raw(std::span<const uint8_t> value) {
+        m_type = value_type::raw;
+
+        auto data = create_array(value);
+        m_value.raw.ptr = data.get();
+        m_value.raw.size = value.size();
+        m_data = std::move(data);
     }
 
     [[nodiscard]] inline bool get_boolean() const {
@@ -143,6 +170,13 @@ public:
         return {m_value.integer32_array.arr, m_value.integer32_array.size};
     }
 
+    [[nodiscard]] inline std::span<const int32_t> get_int32_array_or(std::span<const int32_t> default_val) const {
+        if (m_type == value_type::integer32_array) {
+            return get_int32_array();
+        }
+        return default_val;
+    }
+
     inline void set_int32_array(std::span<const int32_t> value) {
         m_type = value_type::integer32_array;
 
@@ -152,8 +186,81 @@ public:
         m_data = std::move(data);
     }
 
+    [[nodiscard]] inline std::span<const int64_t> get_int64_array() const {
+        assert(m_type == value_type::integer64_array);
+        return {m_value.integer64_array.arr, m_value.integer64_array.size};
+    }
+
+    [[nodiscard]] inline std::span<const int64_t> get_int64_array_or(std::span<const int64_t> default_val) const {
+        if (m_type == value_type::integer64_array) {
+            return get_int64_array();
+        }
+        return default_val;
+    }
+
+    inline void set_int64_array(std::span<const int64_t> value) {
+        m_type = value_type::integer64_array;
+
+        auto data = create_array(value);
+        m_value.integer64_array.arr = data.get();
+        m_value.integer64_array.size = value.size();
+        m_data = std::move(data);
+    }
+
+    [[nodiscard]] inline std::span<const float> get_float_array() const {
+        assert(m_type == value_type::floating_point32_array);
+        return {m_value.floating_point32_array.arr, m_value.floating_point32_array.size};
+    }
+
+    [[nodiscard]] inline std::span<const float> get_float_array_or(std::span<const float> default_val) const {
+        if (m_type == value_type::floating_point32_array) {
+            return get_float_array();
+        }
+        return default_val;
+    }
+
+    inline void set_float_array(std::span<const float> value) {
+        m_type = value_type::integer64_array;
+
+        auto data = create_array(value);
+        m_value.floating_point32_array.arr = data.get();
+        m_value.floating_point32_array.size = value.size();
+        m_data = std::move(data);
+    }
+
+    [[nodiscard]] inline std::span<const double> get_double_array() const {
+        assert(m_type == value_type::floating_point64_array);
+        return {m_value.floating_point64_array.arr, m_value.floating_point64_array.size};
+    }
+
+    [[nodiscard]] inline std::span<const double> get_double_array_or(std::span<const double> default_val) const {
+        if (m_type == value_type::floating_point64_array) {
+            return get_double_array();
+        }
+        return default_val;
+    }
+
+    inline void set_double_array(std::span<const double> value) {
+        m_type = value_type::integer64_array;
+
+        auto data = create_array(value);
+        m_value.floating_point64_array.arr = data.get();
+        m_value.floating_point64_array.size = value.size();
+        m_data = std::move(data);
+    }
+
     static inline value make() {
         return obsr::value{value_type::empty};
+    }
+
+    static inline value make_raw(std::span<const uint8_t> value) {
+        obsr::value val(value_type::raw);
+        val.set_raw(value);
+        return std::move(val);
+    }
+
+    static inline value make_raw(const void* ptr, size_t size) {
+        return make_raw({reinterpret_cast<const uint8_t*>(ptr), size});
     }
 
     static inline value make_boolean(bool value) {
@@ -192,6 +299,40 @@ public:
         return std::move(val);
     }
 
+    static inline value make_int32_array(std::initializer_list<int32_t> value) {
+        return make_int32_array(std::span(value.begin(), value.end()));
+    }
+
+    static inline value make_int64_array(std::span<const int64_t> value) {
+        obsr::value val(value_type::integer64_array);
+        val.set_int64_array(value);
+        return std::move(val);
+    }
+
+    static inline value make_int64_array(std::initializer_list<int64_t> value) {
+        return make_int64_array(std::span(value.begin(), value.end()));
+    }
+
+    static inline value make_float_array(std::span<const float> value) {
+        obsr::value val(value_type::floating_point32_array);
+        val.set_float_array(value);
+        return std::move(val);
+    }
+
+    static inline value make_float_array(std::initializer_list<float> value) {
+        return make_float_array(std::span(value.begin(), value.end()));
+    }
+
+    static inline value make_double_array(std::span<const double> value) {
+        obsr::value val(value_type::floating_point64_array);
+        val.set_double_array(value);
+        return std::move(val);
+    }
+
+    static inline value make_double_array(std::initializer_list<double> value) {
+        return make_double_array(std::span(value.begin(), value.end()));
+    }
+
 private:
     template<typename t_>
     static std::shared_ptr<t_[]> create_array(std::span<const t_> value) {
@@ -204,10 +345,15 @@ private:
     explicit value(value_type type)
         : m_type(type)
         , m_value()
+        , m_data()
     {}
 
     value_type m_type;
     union {
+        struct {
+            uint8_t* ptr;
+            size_t size;
+        } raw;
         bool boolean;
         int32_t integer32;
         int64_t integer64;
@@ -217,6 +363,18 @@ private:
             int32_t* arr;
             size_t size;
         } integer32_array;
+        struct {
+            int64_t* arr;
+            size_t size;
+        } integer64_array;
+        struct {
+            float* arr;
+            size_t size;
+        } floating_point32_array;
+        struct {
+            double* arr;
+            size_t size;
+        } floating_point64_array;
     } m_value;
     std::shared_ptr<void> m_data;
 };
@@ -236,12 +394,12 @@ public:
         , m_old_value(value::make())
         , m_value(value::make())
     {}
-    event(std::chrono::milliseconds timestamp, event_type type, std::string_view path, const value& old_value, const value& value)
+    event(std::chrono::milliseconds timestamp, event_type type, std::string_view path, value old_value, value value)
         : m_timestamp(timestamp)
         , m_type(type)
         , m_path(path)
-        , m_old_value(old_value)
-        , m_value(value)
+        , m_old_value(std::move(old_value))
+        , m_value(std::move(value))
     {}
     event(const event& other) = default;
     event(event&& other) = default;

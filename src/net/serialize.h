@@ -3,6 +3,7 @@
 #include <cstddef>
 
 #include "io/buffer.h"
+#include "io/serialize.h"
 #include "util/state.h"
 #include "storage/storage.h"
 
@@ -53,10 +54,7 @@ struct parse_data {
     std::chrono::milliseconds send_time;
 
     storage::entry_id id;
-
     std::string name;
-    uint8_t name_buffer[1024];
-
     value_type type;
     obsr::value value = obsr::value::make();
     std::chrono::milliseconds time_value;
@@ -186,6 +184,7 @@ private:
 
     message_type m_type;
     io::readonly_buffer m_buffer;
+    io::deserializer m_deserializer;
 };
 
 class message_serializer {
@@ -205,6 +204,7 @@ public:
     bool time_sync_response(std::chrono::milliseconds send_time, std::chrono::milliseconds request_time);
 private:
     io::linear_buffer m_buffer;
+    io::serializer m_serializer;
 };
 
 class message_queue {

@@ -204,7 +204,6 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
         if (!m_write_buffer.write(buffer, size)) {
             // this means we have probably sent a message with an header but no data. this will seriously
             // break down communication. as such, we will terminate connection here.
-            // todo: add ability for remote to deal with this safely.
             TRACE_ERROR(LOG_MODULE_CLIENT, "write attempt failed halfway, stopping");
             stop_internal();
             return false;

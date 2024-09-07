@@ -12,7 +12,7 @@
 namespace obsr::net {
 
 struct connection_info {
-    std::string_view ip;
+    std::string ip;
     uint16_t port;
 };
 

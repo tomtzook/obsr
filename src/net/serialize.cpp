@@ -11,6 +11,7 @@ message_parser::message_parser()
     : state_machine()
     , m_type(static_cast<message_type>(-1))
     , m_buffer()
+    , m_deserializer(&m_buffer)
 {}
 
 void message_parser::set_data(message_type type, const uint8_t* buffer, size_t size) {
@@ -25,55 +26,58 @@ bool message_parser::process_state(parse_state current_state, parse_data& data) 
             return select_next_state(current_state);
         }
         case parse_state::read_id: {
-            if (!io::read16(m_buffer, data.id)) {
+            const auto value_opt = m_deserializer.read16();
+            if (!value_opt) {
                 return error(error_read_data);
             }
 
+            data.id = value_opt.value();
             return select_next_state(current_state);
         }
         case parse_state::read_name: {
-            size_t size = sizeof(data.name_buffer);
-            if (!io::readraw(m_buffer, data.name_buffer, size)) {
+            const auto value_opt = m_deserializer.read_str();
+            if (!value_opt) {
                 return error(error_read_data);
             }
 
-            data.name = std::string(reinterpret_cast<char*>(data.name_buffer), size);
-
+            const auto value = value_opt.value();
+            data.name = std::string(value);
             return select_next_state(current_state);
         }
         case parse_state::read_value_type: {
-            if (!io::read8(m_buffer, reinterpret_cast<uint8_t&>(data.type))) {
+            const auto value_opt = m_deserializer.read8();
+            if (!value_opt) {
                 return error(error_read_data);
             }
 
+            data.type = static_cast<value_type>(value_opt.value());
             return select_next_state(current_state);
         }
         case parse_state::read_value: {
-            auto value_opt = io::readvalue(m_buffer, data.type);
+            const auto value_opt = m_deserializer.read_value(data.type);
             if (!value_opt) {
                 return error(error_read_data);
             }
 
             data.value = std::move(value_opt.value());
-
             return select_next_state(current_state);
         }
         case parse_state::read_send_time: {
-            uint64_t value;
-            if (!io::read64(m_buffer, value)) {
+            const auto value_opt = m_deserializer.read64();
+            if (!value_opt) {
                 return error(error_read_data);
             }
 
-            data.send_time = std::chrono::milliseconds(value);
+            data.send_time = std::chrono::milliseconds(value_opt.value());
             return select_next_state(current_state);
         }
         case parse_state::read_time_value: {
-            uint64_t value;
-            if (!io::read64(m_buffer, value)) {
+            const auto value_opt = m_deserializer.read64();
+            if (!value_opt) {
                 return error(error_read_data);
             }
 
-            data.time_value = std::chrono::milliseconds(value);
+            data.time_value = std::chrono::milliseconds(value_opt.value());
             return select_next_state(current_state);
         }
         default:
@@ -170,6 +174,7 @@ bool message_parser::select_next_state(parse_state current_state) {
 
 message_serializer::message_serializer()
     : m_buffer(writer_buffer_size)
+    , m_serializer(&m_buffer)
 {}
 
 const uint8_t* message_serializer::data() const {
@@ -185,11 +190,11 @@ void message_serializer::reset() {
 }
 
 bool message_serializer::entry_id_assign(storage::entry_id id, std::string_view name) {
-    if (!io::write16(m_buffer, id)) {
+    if (!m_serializer.write16(id)) {
         return false;
     }
 
-    if (!io::writeraw(m_buffer, reinterpret_cast<const uint8_t*>(name.data()), name.size())) {
+    if (!m_serializer.write_str(name)) {
         return false;
     }
 
@@ -197,19 +202,19 @@ bool message_serializer::entry_id_assign(storage::entry_id id, std::string_view 
 }
 
 bool message_serializer::entry_created(std::chrono::milliseconds send_time, std::string_view name, const value& value) {
-    if (!io::write64(m_buffer, send_time.count())) {
+    if (!m_serializer.write64(send_time.count())) {
         return false;
     }
 
-    if (!io::writeraw(m_buffer, reinterpret_cast<const uint8_t*>(name.data()), name.size())) {
+    if (!m_serializer.write_str(name)) {
         return false;
     }
 
-    if (!io::write8(m_buffer, static_cast<uint8_t>(value.get_type()))) {
+    if (!m_serializer.write8(static_cast<uint8_t>(value.get_type()))) {
         return false;
     }
 
-    if (!io::writevalue(m_buffer, value)) {
+    if (!m_serializer.write_value(value)) {
         return false;
     }
 
@@ -217,19 +222,19 @@ bool message_serializer::entry_created(std::chrono::milliseconds send_time, std:
 }
 
 bool message_serializer::entry_updated(std::chrono::milliseconds send_time, storage::entry_id id, const value& value) {
-    if (!io::write64(m_buffer, send_time.count())) {
+    if (!m_serializer.write64(send_time.count())) {
         return false;
     }
 
-    if (!io::write16(m_buffer, id)) {
+    if (!m_serializer.write16(id)) {
         return false;
     }
 
-    if (!io::write8(m_buffer, static_cast<uint8_t>(value.get_type()))) {
+    if (!m_serializer.write8(static_cast<uint8_t>(value.get_type()))) {
         return false;
     }
 
-    if (!io::writevalue(m_buffer, value)) {
+    if (!m_serializer.write_value(value)) {
         return false;
     }
 
@@ -237,11 +242,11 @@ bool message_serializer::entry_updated(std::chrono::milliseconds send_time, stor
 }
 
 bool message_serializer::entry_deleted(std::chrono::milliseconds send_time, storage::entry_id id) {
-    if (!io::write64(m_buffer, send_time.count())) {
+    if (!m_serializer.write64(send_time.count())) {
         return false;
     }
 
-    if (!io::write16(m_buffer, id)) {
+    if (!m_serializer.write16(id)) {
         return false;
     }
 
@@ -249,7 +254,7 @@ bool message_serializer::entry_deleted(std::chrono::milliseconds send_time, stor
 }
 
 bool message_serializer::time_sync_request(std::chrono::milliseconds send_time) {
-    if (!io::write64(m_buffer, static_cast<uint64_t>(send_time.count()))) {
+    if (!m_serializer.write64(static_cast<uint64_t>(send_time.count()))) {
         return false;
     }
 
@@ -257,11 +262,11 @@ bool message_serializer::time_sync_request(std::chrono::milliseconds send_time) 
 }
 
 bool message_serializer::time_sync_response(std::chrono::milliseconds send_time, std::chrono::milliseconds request_time) {
-    if (!io::write64(m_buffer, static_cast<uint64_t>(send_time.count()))) {
+    if (!m_serializer.write64(static_cast<uint64_t>(send_time.count()))) {
         return false;
     }
 
-    if (!io::write64(m_buffer, static_cast<uint64_t>(request_time.count()))) {
+    if (!m_serializer.write64(static_cast<uint64_t>(request_time.count()))) {
         return false;
     }
 

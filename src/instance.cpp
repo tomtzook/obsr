@@ -161,8 +161,7 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
 
     auto network_client = std::make_shared<net::network_client>(m_clock);
     try {
-        // todo: could have a bug with this address since it may not be tied to a string in the data section
-        network_client->configure_target({address, server_port});
+        network_client->configure_target({std::string(address), server_port});
         start_net(network_client);
     } catch (const std::exception& e) {
         TRACE_ERROR(LOG_MODULE, "error while starting network client: what=%s", e.what());
