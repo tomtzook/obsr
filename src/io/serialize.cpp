@@ -24,6 +24,8 @@ bool write(writable_buffer* buf, const t_& value) {
 
 deserializer::deserializer(readable_buffer* buffer)
     : m_buffer(buffer)
+    , m_data()
+    , m_data_size(0)
 {}
 
 std::optional<uint8_t> deserializer::read8() {
@@ -198,6 +200,7 @@ void deserializer::expand_buffer(size_t size) {
     }
 
     m_data.reset(new uint8_t[size]);
+    m_data_size = size;
 }
 
 serializer::serializer(writable_buffer* buffer)
