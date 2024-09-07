@@ -73,12 +73,12 @@ std::optional<size_t> deserializer::read_size() {
 }
 
 std::optional<std::span<uint8_t>> deserializer::read_raw() {
-    const auto sizeOpt = read_size();
-    if (!sizeOpt) {
+    const auto size_opt = read_size();
+    if (!size_opt) {
         return {};
     }
 
-    const auto size = sizeOpt.value();
+    const auto size = size_opt.value();
     expand_buffer(size);
 
     if (!m_buffer->read(m_data.get(), size)) {
