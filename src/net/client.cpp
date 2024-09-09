@@ -127,7 +127,7 @@ void network_client::configure_target(connection_info info) {
         throw illegal_state_exception();
     }
 
-    m_conn_info = info;
+    m_conn_info = std::move(info);
 }
 
 void network_client::attach_storage(std::shared_ptr<storage::storage> storage) {

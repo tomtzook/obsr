@@ -111,14 +111,14 @@ events::polled_events resource_poller::poll(size_t max_events, std::chrono::mill
         if (error == EINTR) {
             // timeout has occurred
             m_data.set_count(0);
-            return {&m_data};
+            return events::polled_events{&m_data};
         } else {
             throw io_exception(error);
         }
     }
 
     m_data.set_count(count);
-    return {&m_data};
+    return events::polled_events{&m_data};
 }
 
 void resource_poller::handle_error() {

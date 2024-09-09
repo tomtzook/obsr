@@ -54,7 +54,7 @@ bool message_parser::process_state(parse_state current_state, parse_data& data) 
             return select_next_state(current_state);
         }
         case parse_state::read_value: {
-            const auto value_opt = m_deserializer.read_value(data.type);
+            auto value_opt = m_deserializer.read_value(data.type);
             if (!value_opt) {
                 return error(error_read_data);
             }

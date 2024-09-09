@@ -160,7 +160,7 @@ void socket_io::stop() {
     stop_internal(false);
 }
 
-void socket_io::connect(connection_info info) {
+void socket_io::connect(const connection_info& info) {
     if (m_state == state::idle || m_state == state::connecting || m_state == state::connected) {
         throw illegal_state_exception();
     }
@@ -202,7 +202,7 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
 
     if (buffer != nullptr && size > 0) {
         if (!m_write_buffer.write(buffer, size)) {
-            // this means we have probably sent a message with an header but no data. this will seriously
+            // this means we have probably sent a message with a header but no data. this will seriously
             // break down communication. as such, we will terminate connection here.
             TRACE_ERROR(LOG_MODULE_CLIENT, "write attempt failed halfway, stopping");
             stop_internal();

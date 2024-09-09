@@ -66,7 +66,7 @@ public:
                bool connected = false);
     void stop();
 
-    void connect(connection_info info);
+    void connect(const connection_info& info);
     bool write(uint8_t type, const uint8_t* buffer, size_t size);
 
 private:

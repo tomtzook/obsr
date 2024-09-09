@@ -21,7 +21,7 @@ public:
 private:
     class event_data : public events::event_data {
     public:
-        event_data(void* events);
+        explicit event_data(void* events);
 
         size_t count() const override;
         void set_count(size_t count);

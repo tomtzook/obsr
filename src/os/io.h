@@ -33,11 +33,13 @@ private:
 
 class readable {
 public:
+    virtual ~readable() = default;
     virtual size_t read(uint8_t* buffer, size_t buffer_size) = 0;
 };
 
 class writable {
 public:
+    virtual ~writable() = default;
     virtual size_t write(const uint8_t* buffer, size_t size) = 0;
 };
 

@@ -12,6 +12,7 @@ public:
         , m_error_code(0)
         , m_user_state(first_)
     {}
+    virtual ~state_machine() = default;
 
     bool is_finished() const {
         return m_state == overall_state::end;

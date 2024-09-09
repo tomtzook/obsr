@@ -221,7 +221,6 @@ public:
     // todo: optimize by only writing the latest message for an entry (not including publish)
     // todo: try and switch to sending only the latest state instead of queueing every change
     //      only relevant if we can't keep up with changes
-    // todo: entry create should be a client only message without id to report new entry needing id assignment
     void enqueue(const out_message& message, uint8_t flags = 0);
     void clear();
 

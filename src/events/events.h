@@ -27,13 +27,15 @@ enum event_type : event_types {
 
 class event_data {
 public:
+    virtual ~event_data() = default;
+
     virtual size_t count() const = 0;
 
     virtual os::descriptor get_descriptor(size_t index) const = 0;
     virtual event_types get_events(size_t index) const = 0;
 };
 
-class polled_events {
+class polled_events final {
 public:
     class iterator {
     public:
@@ -69,7 +71,7 @@ public:
         size_t m_index;
     };
 
-    polled_events(event_data* data);
+    explicit polled_events(event_data* data);
 
     iterator begin() const;
     iterator end() const;
@@ -89,7 +91,7 @@ public:
     virtual polled_events poll(size_t max_events, std::chrono::milliseconds timeout) = 0;
 };
 
-class looper {
+class looper final {
 public:
     using generic_callback = std::function<void(looper&)>;
     using io_callback = std::function<void(looper&, obsr::handle, event_types)>;
@@ -168,7 +170,7 @@ private:
     std::chrono::milliseconds m_timeout;
 };
 
-class looper_thread {
+class looper_thread final {
 public:
     explicit looper_thread(std::shared_ptr<looper>& looper);
     ~looper_thread();

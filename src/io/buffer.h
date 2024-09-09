@@ -11,11 +11,13 @@ namespace obsr::io {
 
 class readable_buffer {
 public:
+    virtual ~readable_buffer() = default;
     virtual bool read(uint8_t* buffer, size_t size) = 0;
 };
 
 class writable_buffer {
 public:
+    virtual ~writable_buffer() = default;
     virtual bool write(const uint8_t* buffer, size_t size) = 0;
 };
 
@@ -35,8 +37,8 @@ private:
 
 class linear_buffer : public writable_buffer {
 public:
-    linear_buffer(size_t size);
-    ~linear_buffer();
+    explicit linear_buffer(size_t size);
+    ~linear_buffer() override;
 
     const uint8_t* data() const;
     size_t pos() const;
@@ -53,8 +55,8 @@ private:
 
 class buffer : public readable_buffer, public writable_buffer {
 public:
-    buffer(size_t size);
-    ~buffer();
+    explicit buffer(size_t size);
+    ~buffer() override;
 
     size_t read_available() const;
     size_t write_available() const;

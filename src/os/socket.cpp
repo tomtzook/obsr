@@ -29,7 +29,9 @@ base_socket::base_socket()
 }
 
 base_socket::base_socket(descriptor socket_descriptor)
-    : resource(socket_descriptor) {
+    : resource(socket_descriptor)
+    , m_disabled(false)
+    , m_is_blocking(true) {
 }
 
 void base_socket::setoption(sockopt_type opt, void* value, size_t size) {
