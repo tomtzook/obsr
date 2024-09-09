@@ -59,7 +59,7 @@ obsr::handle looper::add(std::shared_ptr<os::resource> resource, event_types eve
 
     auto it = m_fd_map.find(descriptor);
     if (it != m_fd_map.end()) {
-        throw illegal_argument_exception();
+        throw illegal_argument_exception("resource already added");
     }
 
     auto handle = m_handles.allocate_new();
@@ -81,7 +81,7 @@ void looper::remove(obsr::handle handle) {
     std::unique_lock lock(m_mutex);
 
     if (!m_handles.has(handle)) {
-        throw illegal_argument_exception();
+        throw no_such_handle_exception(handle);
     }
 
     auto data = m_handles.release(handle);
@@ -95,7 +95,7 @@ void looper::request_updates(obsr::handle handle, event_types events, events_upd
     std::unique_lock lock(m_mutex);
 
     if (!m_handles.has(handle)) {
-        throw illegal_argument_exception();
+        throw no_such_handle_exception(handle);
     }
 
     update_type update_type;
@@ -121,7 +121,7 @@ obsr::handle looper::create_timer(std::chrono::milliseconds timeout, timer_callb
     std::unique_lock lock(m_mutex);
 
     if (timeout < min_poll_timeout) {
-        throw illegal_argument_exception();
+        throw illegal_argument_exception("timeout too small");
     }
 
     auto handle = m_timer_handles.allocate_new();
@@ -143,7 +143,7 @@ void looper::stop_timer(obsr::handle handle) {
     std::unique_lock lock(m_mutex);
 
     if (!m_handles.has(handle)) {
-        throw illegal_argument_exception();
+        throw no_such_handle_exception(handle);
     }
 
     auto data = m_timer_handles[handle];

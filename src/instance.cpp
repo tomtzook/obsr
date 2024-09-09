@@ -136,7 +136,7 @@ void instance::start_server(uint16_t bind_port) {
     std::unique_lock guard(m_mutex);
 
     if (m_net_interface) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("network interface already open");
     }
 
     auto network_server = std::make_shared<net::network_server>(m_clock);
@@ -156,7 +156,7 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
     std::unique_lock guard(m_mutex);
 
     if (m_net_interface) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("network interface already open");
     }
 
     auto network_client = std::make_shared<net::network_client>(m_clock);

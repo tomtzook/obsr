@@ -197,7 +197,7 @@ void network_server::configure_bind(uint16_t bind_port) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("server running, cannot reconfigure");
     }
 
     m_bind_port = bind_port;
@@ -207,7 +207,7 @@ void network_server::attach_storage(std::shared_ptr<storage::storage> storage) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("server running, cannot reconfigure");
     }
 
     m_storage = storage;
@@ -217,15 +217,15 @@ void network_server::start(events::looper* looper) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("server already running");
     }
 
     if (!m_storage) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("server cannot start without storage being attached");
     }
 
     if (m_bind_port == 0) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("server cannot start without binding being configured");
     }
 
     m_next_entry_id = 0;
@@ -246,7 +246,7 @@ void network_server::stop() {
     std::unique_lock lock(m_mutex);
 
     if (m_state == state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("not running");
     }
 
     lock.unlock();

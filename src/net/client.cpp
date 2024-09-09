@@ -124,7 +124,7 @@ void network_client::configure_target(connection_info info) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("client running, cannot reconfigure");
     }
 
     m_conn_info = std::move(info);
@@ -134,7 +134,7 @@ void network_client::attach_storage(std::shared_ptr<storage::storage> storage) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("client running, cannot reconfigure");
     }
 
     m_storage = std::move(storage);
@@ -144,15 +144,15 @@ void network_client::start(events::looper* looper) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("already running");
     }
 
     if (!m_storage) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("cannot start without attached storage");
     }
 
     if (m_conn_info.port == 0) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("cannot start without target info");
     }
 
     m_storage->clear_net_ids();
@@ -176,7 +176,7 @@ void network_client::stop() {
     std::unique_lock lock(m_mutex);
 
     if (m_state == state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("not running");
     }
 
     lock.unlock();

@@ -5,11 +5,6 @@
 
 namespace obsr {
 
-invalid_handle_exception::invalid_handle_exception(handle handle)
-    : m_handle(handle) {
-
-}
-
 no_such_handle_exception::no_such_handle_exception(handle handle)
     : m_handle(handle) {
 

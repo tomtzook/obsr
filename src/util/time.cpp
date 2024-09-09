@@ -50,7 +50,7 @@ bool timer::is_running() const {
 
 bool timer::has_elapsed(std::chrono::milliseconds time) const {
     if (m_start.count() < 1) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("expected time bigger than 0");
     }
 
     const auto now = time_now();

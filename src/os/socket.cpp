@@ -129,7 +129,7 @@ void base_socket::check_internal_error(error_code_t code) {
 
 void base_socket::throw_if_disabled() {
     if (m_disabled) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("socket disabled");
     }
 }
 

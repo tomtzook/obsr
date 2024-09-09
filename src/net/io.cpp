@@ -97,7 +97,7 @@ void socket_io::on_message(on_message_cb callback) {
 
 void socket_io::start(events::looper* looper) {
     if (m_state != state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("io already started");
     }
 
     auto socket = std::make_shared<obsr::os::socket>();
@@ -120,7 +120,7 @@ void socket_io::start(events::looper* looper,
                       std::shared_ptr<obsr::os::socket> socket,
                       bool connected) {
     if (m_state != state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("io already started");
     }
 
     m_looper = looper;
@@ -164,7 +164,7 @@ void socket_io::stop() {
 
 void socket_io::connect(const connection_info& info) {
     if (m_state == state::idle || m_state == state::connecting || m_state == state::connected) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("io not running or already connecting/connected");
     }
 
     // remove in flags since we can't read while connecting
@@ -378,7 +378,7 @@ void server_io::on_message(on_message_cb callback) {
 
 void server_io::start(events::looper* looper, uint16_t bind_port) {
     if (m_state != state::idle) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("io already started");
     }
 
     m_looper = looper;
@@ -424,7 +424,7 @@ void server_io::start(events::looper* looper, uint16_t bind_port) {
 
 void server_io::stop() {
     if (m_state == state::idle) {
-        throw illegal_state_exception();
+        return;
     }
 
     stop_internal(false);
@@ -432,12 +432,12 @@ void server_io::stop() {
 
 bool server_io::write_to(client_id id, uint8_t type, const uint8_t* buffer, size_t size) {
     if (m_state != state::open) {
-        throw illegal_state_exception();
+        throw illegal_state_exception("io not started");
     }
 
     auto it = m_clients.find(id);
     if (it == m_clients.end()) {
-        throw illegal_state_exception();
+        throw illegal_argument_exception("no such client");
     }
 
     return it->second->write(type, buffer, size);
