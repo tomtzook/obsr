@@ -34,6 +34,8 @@ bool reader::process_state(read_state current_state, read_data& data) {
                 if (!success) {
                     return try_later();
                 }
+
+                header_convert_host(header);
             } while (header.magic != message_header::message_magic ||
                      header.version != message_header::current_version);
 
@@ -194,6 +196,7 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
             type,
             static_cast<uint32_t>(size)
     };
+    header_convert_net(header);
 
     if (!m_write_buffer.write(reinterpret_cast<uint8_t*>(&header), sizeof(header))) {
         TRACE_DEBUG(LOG_MODULE_CLIENT, "write failed to buffer at start");

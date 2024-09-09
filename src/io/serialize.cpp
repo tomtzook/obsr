@@ -1,4 +1,5 @@
 
+#include "util/bits.h"
 #include "serialize.h"
 
 
@@ -7,14 +8,15 @@ namespace obsr::io {
 // todo: are floating point bits storage the same across arches?
 
 template<typename t_>
-std::optional<t_> read(readable_buffer* buf) {
+bool read(readable_buffer* buf, t_& value_out) {
     t_ value;
     bool res = buf->read(reinterpret_cast<uint8_t*>(&value), sizeof(t_));
     if (!res) {
-        return {};
+        return false;
     }
 
-    return std::move(value);
+    value_out = std::move(value);
+    return true;
 }
 
 template<typename t_>
@@ -29,27 +31,70 @@ deserializer::deserializer(readable_buffer* buffer)
 {}
 
 std::optional<uint8_t> deserializer::read8() {
-    return read<uint8_t>(m_buffer);
+    uint8_t value;
+    if (!read(m_buffer, value)) {
+        return {};
+    }
+
+    return {value};
 }
 
 std::optional<uint16_t> deserializer::read16() {
-    return read<uint16_t>(m_buffer);
+    uint16_t value;
+    if (!read(m_buffer, value)) {
+        return {};
+    }
+
+    value = obsr::bits::host16(value);
+    return {value};
 }
 
 std::optional<uint32_t> deserializer::read32() {
-    return read<uint32_t>(m_buffer);
+    uint32_t value;
+    if (!read(m_buffer, value)) {
+        return {};
+    }
+
+    value = obsr::bits::host32(value);
+    return {value};
 }
 
 std::optional<uint64_t> deserializer::read64() {
-    return read<uint64_t>(m_buffer);
+    uint64_t value;
+    if (!read(m_buffer, value)) {
+        return {};
+    }
+
+    value = obsr::bits::host64(value);
+    return {value};
 }
 
 std::optional<float> deserializer::readf32() {
-    return read<float>(m_buffer);
+    auto opt = read32();
+    if (!opt) {
+        return opt;
+    }
+
+    union {
+        float f;
+        uint32_t i;
+    } mem{};
+    mem.i = opt.value();
+    return {mem.f};
 }
 
 std::optional<double> deserializer::readf64() {
-    return read<double>(m_buffer);
+    auto opt = read64();
+    if (!opt) {
+        return opt;
+    }
+
+    union {
+        double d;
+        uint32_t i;
+    } mem{};
+    mem.i = opt.value();
+    return {mem.d};
 }
 
 std::optional<size_t> deserializer::read_size() {
@@ -99,6 +144,94 @@ std::optional<std::string_view> deserializer::read_str() {
     const auto value = value_opt.value();
     static_assert(sizeof(char) == sizeof(uint8_t), "char is uint8");
     return {{reinterpret_cast<const char*>(value.data()), value.size()}};
+}
+
+std::optional<std::span<int32_t>> deserializer::read_arr_i32() {
+    const auto size_opt = read_size();
+    if (!size_opt) {
+        return {};
+    }
+
+    const auto size = size_opt.value();
+    expand_buffer(size * sizeof(int32_t));
+
+    auto arr = reinterpret_cast<int32_t*>(m_data.get());
+    for (int i = 0; i < size; ++i) {
+        const auto value_opt = read32();
+        if (!value_opt) {
+            return {};
+        }
+
+        arr[i] = value_opt.value();
+    }
+
+    return {{arr, size}};
+}
+
+std::optional<std::span<int64_t>> deserializer::read_arr_i64() {
+    const auto size_opt = read_size();
+    if (!size_opt) {
+        return {};
+    }
+
+    const auto size = size_opt.value();
+    expand_buffer(size * sizeof(int64_t));
+
+    auto arr = reinterpret_cast<int64_t*>(m_data.get());
+    for (int i = 0; i < size; ++i) {
+        const auto value_opt = read64();
+        if (!value_opt) {
+            return {};
+        }
+
+        arr[i] = value_opt.value();
+    }
+
+    return {{arr, size}};
+}
+
+std::optional<std::span<float>> deserializer::read_arr_f32() {
+    const auto size_opt = read_size();
+    if (!size_opt) {
+        return {};
+    }
+
+    const auto size = size_opt.value();
+    expand_buffer(size * sizeof(float));
+
+    auto arr = reinterpret_cast<float*>(m_data.get());
+    for (int i = 0; i < size; ++i) {
+        const auto value_opt = readf32();
+        if (!value_opt) {
+            return {};
+        }
+
+        arr[i] = value_opt.value();
+    }
+
+    return {{arr, size}};
+}
+
+std::optional<std::span<double>> deserializer::read_arr_f64() {
+    const auto size_opt = read_size();
+    if (!size_opt) {
+        return {};
+    }
+
+    const auto size = size_opt.value();
+    expand_buffer(size * sizeof(double));
+
+    auto arr = reinterpret_cast<double*>(m_data.get());
+    for (int i = 0; i < size; ++i) {
+        const auto value_opt = readf64();
+        if (!value_opt) {
+            return {};
+        }
+
+        arr[i] = value_opt.value();
+    }
+
+    return {{arr, size}};
 }
 
 std::optional<obsr::value> deserializer::read_value(value_type type) {
@@ -152,7 +285,7 @@ std::optional<obsr::value> deserializer::read_value(value_type type) {
             return value::make_double(static_cast<double>(value_opt.value()));
         }
         case value_type::integer32_array: {
-            const auto value_opt = read_arr<int32_t>();
+            const auto value_opt = read_arr_i32();
             if (!value_opt) {
                 return {};
             }
@@ -161,7 +294,7 @@ std::optional<obsr::value> deserializer::read_value(value_type type) {
             return value::make_int32_array(value);
         }
         case value_type::integer64_array: {
-            const auto value_opt = read_arr<int64_t>();
+            const auto value_opt = read_arr_i64();
             if (!value_opt) {
                 return {};
             }
@@ -170,7 +303,7 @@ std::optional<obsr::value> deserializer::read_value(value_type type) {
             return value::make_int64_array(value);
         }
         case value_type::floating_point32_array: {
-            const auto value_opt = read_arr<float>();
+            const auto value_opt = read_arr_f32();
             if (!value_opt) {
                 return {};
             }
@@ -179,7 +312,7 @@ std::optional<obsr::value> deserializer::read_value(value_type type) {
             return value::make_float_array(value);
         }
         case value_type::floating_point64_array: {
-            const auto value_opt = read_arr<double>();
+            const auto value_opt = read_arr_f64();
             if (!value_opt) {
                 return {};
             }
@@ -212,23 +345,38 @@ bool serializer::write8(uint8_t value) {
 }
 
 bool serializer::write16(uint16_t value) {
+    value = obsr::bits::net16(value);
     return write(m_buffer, value);
 }
 
 bool serializer::write32(uint32_t value) {
+    value = obsr::bits::net32(value);
     return write(m_buffer, value);
 }
 
 bool serializer::write64(uint64_t value) {
+    value = obsr::bits::net64(value);
     return write(m_buffer, value);
 }
 
 bool serializer::writef32(float value) {
-    return write(m_buffer, value);
+    union {
+        float f;
+        uint32_t i;
+    } mem{};
+    mem.f = value;
+
+    return write32(mem.i);
 }
 
 bool serializer::writef64(double value) {
-    return write(m_buffer, value);
+    union {
+        double d;
+        uint64_t i;
+    } mem{};
+    mem.d = value;
+
+    return write64(mem.i);
 }
 
 bool serializer::write_size(size_t value) {
@@ -259,6 +407,62 @@ bool serializer::write_str(std::string_view str) {
     return write_raw(reinterpret_cast<const uint8_t*>(str.data()), str.size());
 }
 
+bool serializer::write_arr_i32(std::span<const int32_t> arr) {
+    if (!write_size(arr.size())) {
+        return false;
+    }
+
+    for (auto value : arr) {
+        if (!write32(static_cast<uint32_t>(value))) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool serializer::write_arr_i64(std::span<const int64_t> arr) {
+    if (!write_size(arr.size())) {
+        return false;
+    }
+
+    for (auto value : arr) {
+        if (!write64(static_cast<uint64_t>(value))) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool serializer::write_arr_f32(std::span<const float> arr) {
+    if (!write_size(arr.size())) {
+        return false;
+    }
+
+    for (auto value : arr) {
+        if (!writef32(value)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool serializer::write_arr_f64(std::span<const double> arr) {
+    if (!write_size(arr.size())) {
+        return false;
+    }
+
+    for (auto value : arr) {
+        if (!writef64(value)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool serializer::write_value(const value& value) {
     switch (value.get_type()) {
         case value_type::raw: {
@@ -282,19 +486,19 @@ bool serializer::write_value(const value& value) {
         }
         case value_type::integer32_array: {
             auto arr = value.get_int32_array();
-            return write_arr(arr);
+            return write_arr_i32(arr);
         }
         case value_type::integer64_array: {
             auto arr = value.get_int64_array();
-            return write_arr(arr);
+            return write_arr_i64(arr);
         }
         case value_type::floating_point32_array: {
             auto arr = value.get_float_array();
-            return write_arr(arr);
+            return write_arr_f32(arr);
         }
         case value_type::floating_point64_array: {
             auto arr = value.get_double_array();
-            return write_arr(arr);
+            return write_arr_f64(arr);
         }
         case value_type::empty:
             return true;

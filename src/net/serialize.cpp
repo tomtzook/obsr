@@ -1,11 +1,22 @@
 
 #include "io/serialize.h"
+#include "util/bits.h"
 
 #include "serialize.h"
 
 namespace obsr::net {
 
 static constexpr size_t writer_buffer_size = 512;
+
+void header_convert_net(message_header& header) {
+    header.index = obsr::bits::net32(header.index);
+    header.message_size = obsr::bits::net32(header.message_size);
+}
+
+void header_convert_host(message_header& header) {
+    header.index = obsr::bits::host32(header.index);
+    header.message_size = obsr::bits::host32(header.message_size);
+}
 
 message_parser::message_parser()
     : state_machine()

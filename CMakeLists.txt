@@ -59,7 +59,8 @@ add_library(obsr STATIC
         src/events/events.cpp
         src/os/signal.h
         src/os/signal.cpp
-        src/events/signal.h)
+        src/events/signal.h
+        src/util/bits.h)
 target_include_directories(obsr
         PUBLIC ${INCLUDES}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src

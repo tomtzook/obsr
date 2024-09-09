@@ -60,6 +60,9 @@ struct parse_data {
     std::chrono::milliseconds time_value;
 };
 
+void header_convert_net(message_header& header);
+void header_convert_host(message_header& header);
+
 struct out_message {
 public:
     explicit out_message(message_type type = message_type::no_type)

@@ -21,18 +21,11 @@ public:
     std::optional<size_t> read_size();
     std::optional<std::span<uint8_t>> read_raw();
     std::optional<std::string_view> read_str();
+    std::optional<std::span<int32_t>> read_arr_i32();
+    std::optional<std::span<int64_t>> read_arr_i64();
+    std::optional<std::span<float>> read_arr_f32();
+    std::optional<std::span<double>> read_arr_f64();
     std::optional<obsr::value> read_value(value_type type);
-
-    template<typename t_>
-    inline std::optional<std::span<t_>> read_arr() {
-        const auto value_opt = read_raw();
-        if (!value_opt) {
-            return {};
-        }
-
-        const auto value = value_opt.value();
-        return {{reinterpret_cast<t_*>(value.data()), value.size_bytes() / sizeof(t_)}};
-    }
 
 private:
     void expand_buffer(size_t size);
@@ -55,12 +48,11 @@ public:
     bool write_size(size_t value);
     bool write_raw(const uint8_t* ptr, size_t size);
     bool write_str(std::string_view str);
+    bool write_arr_i32(std::span<const int32_t> arr);
+    bool write_arr_i64(std::span<const int64_t> arr);
+    bool write_arr_f32(std::span<const float> arr);
+    bool write_arr_f64(std::span<const double> arr);
     bool write_value(const value& value);
-
-    template<typename t_>
-    inline bool write_arr(std::span<const t_> arr) {
-        return write_raw(reinterpret_cast<const uint8_t*>(arr.data()), arr.size_bytes());
-    }
 
 private:
     writable_buffer* m_buffer;
