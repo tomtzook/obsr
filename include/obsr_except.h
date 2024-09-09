@@ -45,4 +45,11 @@ class cannot_delete_root_exception : public exception {
 
 };
 
+class data_exceeds_size_limits_exception : public exception {
+public:
+    const char * what() const noexcept override {
+        return "provided data exceeds size limits and cannot be used";
+    }
+};
+
 }

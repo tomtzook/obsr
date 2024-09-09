@@ -1,11 +1,21 @@
 
+#include "debug.h"
 #include "util/bits.h"
 #include "serialize.h"
 
 
 namespace obsr::io {
 
-// todo: are floating point bits storage the same across arches?
+#define LOG_MODULE "serialization"
+
+static bool is_within_size_limits(size_t size) {
+    if (size >= UINT8_MAX) {
+        TRACE_ERROR(LOG_MODULE, "requested buffer/array too big: %lu", size);
+        return false;
+    }
+
+    return true;
+}
 
 template<typename t_>
 bool read(readable_buffer* buf, t_& value_out) {
@@ -98,25 +108,7 @@ std::optional<double> deserializer::readf64() {
 }
 
 std::optional<size_t> deserializer::read_size() {
-    size_t value = 0;
-    uint64_t shift = 0;
-
-    while (true) {
-        const auto byte_opt = read8();
-        if (!byte_opt) {
-            return {};
-        }
-
-        const auto byte = byte_opt.value();
-        value |= (byte & 0x7f) << shift;
-        if (!(byte & 0x80)) {
-            break;
-        }
-
-        shift += 7;
-    }
-
-    return value;
+    return read8();
 }
 
 std::optional<std::span<uint8_t>> deserializer::read_raw() {
@@ -162,7 +154,7 @@ std::optional<std::span<int32_t>> deserializer::read_arr_i32() {
             return {};
         }
 
-        arr[i] = value_opt.value();
+        arr[i] = static_cast<int32_t>(value_opt.value());
     }
 
     return {{arr, size}};
@@ -184,7 +176,7 @@ std::optional<std::span<int64_t>> deserializer::read_arr_i64() {
             return {};
         }
 
-        arr[i] = value_opt.value();
+        arr[i] = static_cast<int64_t >(value_opt.value());
     }
 
     return {{arr, size}};
@@ -380,19 +372,11 @@ bool serializer::writef64(double value) {
 }
 
 bool serializer::write_size(size_t value) {
-    do {
-        uint8_t byte = value & 0x7f;
-        value >>= 7;
-        if (value != 0) {
-            byte |= 0x80;
-        }
+    if (!is_within_size_limits(value)) {
+        return false;
+    }
 
-        if (!write8(byte)) {
-            return false;
-        }
-    } while (value != 0);
-
-    return true;
+    return write8(value);
 }
 
 bool serializer::write_raw(const uint8_t* ptr, size_t size) {

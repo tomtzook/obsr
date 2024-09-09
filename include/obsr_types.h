@@ -336,11 +336,15 @@ public:
 private:
     template<typename t_>
     static std::shared_ptr<t_[]> create_array(std::span<const t_> value) {
+        verify_within_size_limits(value.size());
+
         auto data = std::shared_ptr<t_[]>(new t_[value.size()]);
         std::copy(value.begin(), value.end(), data.get());
 
         return data;
     }
+
+    static void verify_within_size_limits(size_t size);
 
     explicit value(value_type type)
         : m_type(type)
