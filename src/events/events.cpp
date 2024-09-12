@@ -237,8 +237,10 @@ void looper::process_events(std::unique_lock<std::mutex>& lock, polled_events& e
         lock.unlock();
         try {
             data->callback(*this, data->handle, adjusted_flags);
+        } catch (const std::exception& e) {
+            TRACE_ERROR(LOG_MODULE, "Error in io callback: what=%s", e.what());
         } catch (...) {
-            TRACE_ERROR(LOG_MODULE, "Error in io callback");
+            TRACE_ERROR(LOG_MODULE, "Error in io callback: unknown");
         }
         lock.lock();
     }
@@ -261,8 +263,10 @@ void looper::process_timers(std::unique_lock<std::mutex>& lock) {
         lock.unlock();
         try {
             data.callback(*this, handle);
+        } catch (const std::exception& e) {
+            TRACE_ERROR(LOG_MODULE, "Error in timer callback: what=%s", e.what());
         } catch (...) {
-            TRACE_ERROR(LOG_MODULE, "Error in timer callback");
+            TRACE_ERROR(LOG_MODULE, "Error in timer callback: unknown");
         }
         lock.lock();
 
@@ -281,8 +285,10 @@ void looper::execute_requests(std::unique_lock<std::mutex>& lock) {
         lock.unlock();
         try {
             request.callback(*this);
+        } catch (const std::exception& e) {
+            TRACE_ERROR(LOG_MODULE, "Error in request callback: what=%s", e.what());
         } catch (...) {
-            TRACE_ERROR(LOG_MODULE, "Error in request callback");
+            TRACE_ERROR(LOG_MODULE, "Error in request callback: unknown");
         }
         lock.lock();
 

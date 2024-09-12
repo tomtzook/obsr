@@ -1,10 +1,13 @@
 
 #include <utility>
 
+#include "debug.h"
 #include "util/time.h"
 #include "listener_storage.h"
 
 namespace obsr::storage {
+
+#define LOG_MODULE "listener_storage"
 
 listener_data::listener_data(listener_callback callback, const std::string_view& prefix)
     : m_callback(std::move(callback))
@@ -106,7 +109,11 @@ void listener_storage::thread_main() {
                 lock.unlock();
                 try {
                     listener.invoke(event);
-                } catch (...) {}
+                } catch (const std::exception& e) {
+                    TRACE_ERROR(LOG_MODULE, "Error in listener callback: what=%s", e.what());
+                } catch (...) {
+                    TRACE_ERROR(LOG_MODULE, "Error in listener callback: unknown");
+                }
                 lock.lock();
             }
 

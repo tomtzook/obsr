@@ -14,7 +14,7 @@ public:
     struct iterator {
     public:
         using iterator_category = std::forward_iterator_tag;
-        using difference_type   = std::ptrdiff_t;
+        using difference_type   = std::ptrdiff_t; // todo: this is wrong
         using value_type        = type_;
         using pointer           = value_type*;
         using reference         = value_type&;

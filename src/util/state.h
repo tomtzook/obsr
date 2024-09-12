@@ -54,7 +54,6 @@ public:
     }
 
 protected:
-
     virtual bool process_state(state_ current_state, data_& data) = 0;
 
     inline bool move_to_state(state_ state) {

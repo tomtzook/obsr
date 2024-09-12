@@ -12,8 +12,8 @@ namespace obsr::net {
 #define LOG_MODULE_SERVER "serverio"
 
 reader::reader(size_t buffer_size)
-        : state_machine()
-        , m_read_buffer(buffer_size) {
+    : state_machine()
+    , m_read_buffer(buffer_size) {
 }
 
 bool reader::update(obsr::os::readable* readable) {
@@ -326,15 +326,19 @@ void socket_io::stop_internal(bool notify) {
             m_looper->remove(m_looper_handle);
             m_looper_handle = empty_handle;
         }
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE_SERVER, "Error while detaching from looper: what=%s", e.what());
     } catch (...) {
-        TRACE_ERROR(LOG_MODULE_CLIENT, "error while detaching from looper");
+        TRACE_ERROR(LOG_MODULE_CLIENT, "Error while detaching from looper: unknown");
     }
 
     try {
         m_socket->close();
         m_socket.reset();
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE_SERVER, "Error while closing socket: what=%s", e.what());
     } catch (...) {
-        TRACE_ERROR(LOG_MODULE_CLIENT, "error while closing socket");
+        TRACE_ERROR(LOG_MODULE_CLIENT, "Error while closing socket: unknown");
     }
 
     m_state = state::idle;
@@ -494,15 +498,19 @@ void server_io::stop_internal(bool notify) {
             m_looper->remove(m_looper_handle);
             m_looper_handle = empty_handle;
         }
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE_SERVER, "Error while detaching from looper: what=%s", e.what());
     } catch (...) {
-        TRACE_ERROR(LOG_MODULE_SERVER, "error while detaching from looper");
+        TRACE_ERROR(LOG_MODULE_SERVER, "Error while detaching from looper: unknown");
     }
 
     for (auto& [id, client] : m_clients) {
         try {
             client->stop();
+        } catch (const std::exception& e) {
+            TRACE_ERROR(LOG_MODULE_SERVER, "Error stopping client: what=%s", e.what());
         } catch (...) {
-            TRACE_ERROR(LOG_MODULE_SERVER, "error stopping client");
+            TRACE_ERROR(LOG_MODULE_SERVER, "Error stopping client: unknown");
         }
     }
     m_clients.clear();
@@ -510,8 +518,10 @@ void server_io::stop_internal(bool notify) {
     try {
         m_socket->close();
         m_socket.reset();
+    } catch (const std::exception& e) {
+        TRACE_ERROR(LOG_MODULE_SERVER, "Error while closing socket: what=%s", e.what());
     } catch (...) {
-        TRACE_ERROR(LOG_MODULE_SERVER, "error while closing socket");
+        TRACE_ERROR(LOG_MODULE_SERVER, "Error while closing socket: unknown");
     }
 
     m_state = state::idle;
