@@ -297,6 +297,7 @@ public:
         obsr::value val(value_type::integer32_array);
         val.set_int32_array(value);
         return std::move(val);
+
     }
 
     static inline value make_int32_array(std::initializer_list<int32_t> value) {
@@ -438,7 +439,7 @@ private:
     event_type m_type;
     std::string m_path;
 
-    // available for value_raw change events
+    // available for value change events
     obsr::value m_old_value;
     obsr::value m_value;
 };
