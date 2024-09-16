@@ -169,3 +169,27 @@ std::ostream& operator<<(std::ostream& os, const obsr::value& value) {
 
     return os;
 }
+
+std::ostream& operator<<(std::ostream& os, obsr::event_type type) {
+    switch (type) {
+        case obsr::event_type::created:
+            os << "created";
+            break;
+        case obsr::event_type::deleted:
+            os << "deleted";
+            break;
+        case obsr::event_type::value_changed:
+            os << "value_changed";
+            break;
+    }
+
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const obsr::event& event) {
+    os << "event type=" << event.get_type()
+        << ", at=0x" << std::hex << event.get_timestamp().count()
+        << ", path=" << event.get_path();
+
+    return os;
+}

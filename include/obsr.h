@@ -33,5 +33,8 @@ void stop_network();
 
 }
 
+// these are textual and should not be used to store in file or send
 std::ostream& operator<<(std::ostream& os, obsr::value_type type);
 std::ostream& operator<<(std::ostream& os, const obsr::value& value);
+std::ostream& operator<<(std::ostream& os, obsr::event_type type);
+std::ostream& operator<<(std::ostream& os, const obsr::event& event);
