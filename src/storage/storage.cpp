@@ -148,15 +148,26 @@ uint32_t storage::probe(entry entry) {
     return data->get_flags() & ~flag_internal_mask;
 }
 
-std::optional<obsr::value> storage::get_entry_value(entry entry) {
+std::string storage::get_entry_path(entry entry) {
     std::unique_lock guard(m_mutex);
 
     auto data = m_entries[entry];
-    if (does_entry_have_value(data)) {
-        return data->get_value();
+    return std::string(data->get_path());
+}
+
+std::optional<obsr::value> storage::get_entry_value(entry entry) {
+    std::unique_lock guard(m_mutex);
+
+    if (!m_entries.has(entry)) {
+        return std::nullopt;
     }
 
-    return {};
+    auto data = m_entries[entry];
+    if (!does_entry_have_value(data)) {
+        return std::nullopt;
+    }
+
+    return data->get_value();
 }
 
 void storage::set_entry_value(entry entry, const obsr::value& value) {

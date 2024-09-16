@@ -14,12 +14,28 @@ object get_root() {
     return s_instance.get_root();
 }
 
+object get_object(std::string_view path) {
+    return s_instance.get_object(path);
+}
+
+entry get_entry(std::string_view path) {
+    return s_instance.get_entry(path);
+}
+
 object get_child(object obj, std::string_view name) {
     return s_instance.get_child(obj, name);
 }
 
 entry get_entry(object obj, std::string_view name) {
     return s_instance.get_entry(obj, name);
+}
+
+object get_parent_for_object(object obj) {
+    return s_instance.get_parent_for_object(obj);
+}
+
+object get_parent_for_entry(entry entry) {
+    return s_instance.get_parent_for_entry(entry);
 }
 
 void delete_object(object obj) {

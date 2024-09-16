@@ -1,6 +1,7 @@
 #pragma once
 
 #include <exception>
+#include <utility>
 
 #include "obsr_types.h"
 
@@ -75,6 +76,73 @@ public:
     [[nodiscard]] const char* what() const noexcept override {
         return "provided data exceeds size limits and cannot be used";
     }
+};
+
+class no_parent_exception : public exception {
+public:
+    [[nodiscard]] const char* what() const noexcept override {
+        return "no parent for object as it is root";
+    }
+};
+
+class invalid_path_exception : public exception {
+public:
+    explicit invalid_path_exception(std::string  path)
+        : m_path(std::move(path))
+    {}
+    explicit invalid_path_exception(std::string_view path)
+        : m_path(path)
+    {}
+
+    [[nodiscard]] const std::string& get_path() const {
+        return m_path;
+    }
+
+    [[nodiscard]] const char* what() const noexcept override {
+        return "requested path is badly formatted";
+    }
+
+private:
+    std::string m_path;
+};
+
+class invalid_name_exception : public exception {
+public:
+    explicit invalid_name_exception(std::string  name)
+        : m_name(std::move(name))
+    {}
+    explicit invalid_name_exception(std::string_view name)
+        : m_name(name)
+    {}
+
+    [[nodiscard]] const std::string& get_name() const {
+        return m_name;
+    }
+
+    [[nodiscard]] const char* what() const noexcept override {
+        return "requested name contains invalid parameters";
+    }
+
+private:
+    std::string m_name;
+};
+
+class entry_does_not_exist_exception : public exception {
+public:
+    explicit entry_does_not_exist_exception(obsr::entry entry)
+        : m_entry(entry)
+    {}
+
+    [[nodiscard]] obsr::entry get_entry() const {
+        return m_entry;
+    }
+
+    [[nodiscard]] const char* what() const noexcept override {
+        return "entry does not exist";
+    }
+
+private:
+    obsr::entry m_entry;
 };
 
 }

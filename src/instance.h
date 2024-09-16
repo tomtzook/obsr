@@ -26,9 +26,14 @@ public:
     std::chrono::milliseconds time();
 
     object get_root();
+    object get_object(std::string_view path);
+    entry get_entry(std::string_view path);
 
     object get_child(object obj, std::string_view name);
     entry get_entry(object obj, std::string_view name);
+
+    object get_parent_for_object(object obj);
+    object get_parent_for_entry(entry entry);
 
     void delete_object(object obj);
     void delete_entry(entry entry);
@@ -49,6 +54,9 @@ public:
 private:
     void start_net(const std::shared_ptr<net::network_interface>& network_interface);
     void stop_net(const std::shared_ptr<net::network_interface>& network_interface);
+
+    object get_or_create_child(object parent, std::string_view name);
+    object get_or_create_object(std::string_view path);
 
     std::mutex m_mutex;
     std::shared_ptr<clock> m_clock;

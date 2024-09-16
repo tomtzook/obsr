@@ -8,6 +8,25 @@ namespace obsr {
 
 #define LOG_MODULE "instance"
 
+static std::optional<std::string> get_parent_path(const std::string& path) {
+    const auto index = path.rfind('/');
+    if (index == std::string::npos) {
+        return std::nullopt;
+    }
+
+    return path.substr(0, index);
+}
+
+static void verify_valid_name(std::string_view name) {
+    if (name.empty()) {
+        throw invalid_name_exception(name);
+    }
+
+    if (name.find('/') != std::string_view::npos) {
+        throw invalid_name_exception(name);
+    }
+}
+
 object_data::object_data(const std::string_view& path)
     : path(path) {
 }
@@ -39,30 +58,87 @@ object instance::get_root() {
     return m_root;
 }
 
+object instance::get_object(std::string_view path) {
+    std::unique_lock guard(m_mutex);
+
+    if (path.empty()) {
+        return m_root;
+    }
+
+    return get_or_create_object(path);
+}
+
+entry instance::get_entry(std::string_view path) {
+    std::unique_lock guard(m_mutex);
+
+    std::string path_owned(path);
+    const auto ppath_opt = get_parent_path(path_owned);
+    if (!ppath_opt) {
+        throw invalid_path_exception(path);
+    }
+
+    const auto& ppath = ppath_opt.value();
+    get_or_create_object(ppath); // create object hierarchy
+
+    return m_storage->get_or_create_entry(path);
+}
+
 object instance::get_child(object obj, std::string_view name) {
     std::unique_lock guard(m_mutex);
 
-    auto data = m_objects[obj];
-    const auto path = fmt::format("{}/{}", data->path, name);
+    verify_valid_name(name);
 
-    auto it = m_object_paths.find(path);
-    if (it == m_object_paths.end()) {
-        const auto handle = m_objects.allocate_new(path);
-        m_object_paths.emplace(path, handle);
-
-        return handle;
-    } else {
-        return it->second;
-    }
+    return get_or_create_child(obj, name);
 }
 
 entry instance::get_entry(object obj, std::string_view name) {
     std::unique_lock guard(m_mutex);
 
+    verify_valid_name(name);
+
     auto data = m_objects[obj];
     const auto path = fmt::format("{}/{}", data->path, name);
 
     return m_storage->get_or_create_entry(path);
+}
+
+object instance::get_parent_for_object(object obj) {
+    std::unique_lock guard(m_mutex);
+
+    auto data = m_objects[obj];
+    auto path_opt = get_parent_path(data->path);
+    if (!path_opt) {
+        throw no_parent_exception();
+    }
+
+    const auto path = path_opt.value();
+    if (path.empty()) {
+        return m_root;
+    }
+
+    // todo: what happens with deleted objects?? we don't delete objects actually
+    auto it = m_object_paths.find(path);
+    assert(it != m_object_paths.end());
+
+    return it->second;
+}
+
+object instance::get_parent_for_entry(entry entry) {
+    std::unique_lock guard(m_mutex);
+
+    auto entry_path = m_storage->get_entry_path(entry);
+    auto path_opt = get_parent_path(entry_path);
+    assert(path_opt.has_value());
+
+    const auto path = path_opt.value();
+    if (path.empty()) {
+        return m_root;
+    }
+
+    auto it = m_object_paths.find(path_opt.value());
+    assert(it != m_object_paths.end());
+
+    return it->second;
 }
 
 void instance::delete_object(object obj) {
@@ -94,11 +170,11 @@ obsr::value instance::get_value(entry entry) {
     std::unique_lock guard(m_mutex);
 
     auto opt = m_storage->get_entry_value(entry);
-    if (opt) {
-        return std::move(opt.value());
+    if (!opt) {
+        throw entry_does_not_exist_exception(entry);
     }
 
-    return value::make();
+    return std::move(opt.value());
 }
 
 void instance::set_value(entry entry, const obsr::value& value) {
@@ -188,6 +264,48 @@ void instance::start_net(const std::shared_ptr<net::network_interface>& network_
 
 void instance::stop_net(const std::shared_ptr<net::network_interface>& network_interface) {
     network_interface->stop();
+}
+
+object instance::get_or_create_child(object parent, std::string_view name) {
+    auto data = m_objects[parent];
+    const auto path = fmt::format("{}/{}", data->path, name);
+
+    auto it = m_object_paths.find(path);
+    if (it == m_object_paths.end()) {
+        const auto handle = m_objects.allocate_new(path);
+        m_object_paths.emplace(path, handle);
+
+        return handle;
+    } else {
+        return it->second;
+    }
+}
+
+object instance::get_or_create_object(std::string_view path) {
+    size_t pos = 0;
+    size_t len = path.length();
+
+    obsr::object current = m_root;
+    size_t index;
+    do {
+        index = path.find('/', pos + 1);
+        if (index < len) {
+            const auto name = path.substr(pos + 1, index - pos - 1);
+            pos = index;
+
+            current = get_or_create_child(current, name);
+        } else {
+            // this is the leaf
+            const auto name = path.substr(pos + 1);
+            if (name.empty()) {
+                throw invalid_path_exception(path);
+            }
+
+            return get_or_create_child(current, name);
+        }
+    } while (index < len);
+
+    throw invalid_path_exception(path);
 }
 
 }

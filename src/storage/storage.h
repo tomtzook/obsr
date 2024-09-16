@@ -79,6 +79,7 @@ public:
     void delete_entries(const std::string_view& path);
 
     uint32_t probe(entry entry);
+    std::string get_entry_path(entry entry);
     std::optional<obsr::value> get_entry_value(entry entry);
     void set_entry_value(entry entry, const obsr::value& value);
     void clear_entry(entry entry);
