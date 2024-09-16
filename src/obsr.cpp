@@ -188,7 +188,7 @@ std::ostream& operator<<(std::ostream& os, obsr::event_type type) {
 
 std::ostream& operator<<(std::ostream& os, const obsr::event& event) {
     os << "event type=" << event.get_type()
-        << ", at=0x" << std::hex << event.get_timestamp().count()
+        << ", at=" << event.get_timestamp().count()
         << ", path=" << event.get_path();
 
     return os;
