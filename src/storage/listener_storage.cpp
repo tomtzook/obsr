@@ -16,14 +16,14 @@ listener_data::listener_data(listener_callback callback, const std::string_view&
 }
 
 bool listener_data::in_path(const std::string_view& path) const {
-    return m_prefix.find(path) >= 0;
+    return m_prefix.find(path) != std::string::npos;
 }
 
 void listener_data::invoke(const event& event) const {
     if (event.get_timestamp() < m_creation_timestamp) {
         return;
     }
-    if (event.get_path().find(m_prefix) < 0) {
+    if (event.get_path().find(m_prefix) == std::string::npos) {
         return;
     }
 

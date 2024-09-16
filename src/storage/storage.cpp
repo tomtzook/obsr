@@ -24,7 +24,7 @@ storage_entry::storage_entry(entry handle, const std::string_view& path)
 }
 
 bool storage_entry::is_in(const std::string_view& path) const {
-    return m_path.find(path) >= 0;
+    return m_path.find(path) != std::string::npos;
 }
 
 std::string_view storage_entry::get_path() const {
