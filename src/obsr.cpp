@@ -71,3 +71,101 @@ void stop_network() {
 }
 
 }
+
+template<typename t_>
+std::ostream& operator<<(std::ostream& os, std::span<const t_> arr) {
+    os << "[";
+
+    for (int i = 0; i < arr.size(); ++i) {
+        if (i > 0) {
+            os << ',';
+        }
+
+        os << arr.data()[i];
+    }
+
+    os << "]";
+
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, obsr::value_type type) {
+    switch (type) {
+        case obsr::value_type::empty:
+            os << "empty";
+            break;
+        case obsr::value_type::raw:
+            os << "raw";
+            break;
+        case obsr::value_type::boolean:
+            os << "bool";
+            break;
+        case obsr::value_type::integer32:
+            os << "int32";
+            break;
+        case obsr::value_type::integer64:
+            os << "int64";
+            break;
+        case obsr::value_type::floating_point32:
+            os << "float";
+            break;
+        case obsr::value_type::floating_point64:
+            os << "double";
+            break;
+        case obsr::value_type::integer32_array:
+            os << "int32_arr";
+            break;
+        case obsr::value_type::integer64_array:
+            os << "int64_arr";
+            break;
+        case obsr::value_type::floating_point32_array:
+            os << "float_arr";
+            break;
+        case obsr::value_type::floating_point64_array:
+            os << "double_arr";
+            break;
+    }
+
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const obsr::value& value) {
+    switch (value.get_type()) {
+        case obsr::value_type::empty:
+            break;
+        case obsr::value_type::raw: {
+            const auto data = value.get_raw();
+            os << "raw(ptr=0x" << std::hex << reinterpret_cast<uintptr_t>(data.data()) << ", size=" << data.size() << ")";
+            break;
+        }
+        case obsr::value_type::boolean:
+            os << (value.get_boolean() ? "True" : "False");
+            break;
+        case obsr::value_type::integer32:
+            os << value.get_int32();
+            break;
+        case obsr::value_type::integer64:
+            os << value.get_int64();
+            break;
+        case obsr::value_type::floating_point32:
+            os << value.get_float();
+            break;
+        case obsr::value_type::floating_point64:
+            os << value.get_double();
+            break;
+        case obsr::value_type::integer32_array:
+            os << value.get_int32_array();
+            break;
+        case obsr::value_type::integer64_array:
+            os << value.get_int64_array();
+            break;
+        case obsr::value_type::floating_point32_array:
+            os << value.get_float_array();
+            break;
+        case obsr::value_type::floating_point64_array:
+            os << value.get_double_array();
+            break;
+    }
+
+    return os;
+}

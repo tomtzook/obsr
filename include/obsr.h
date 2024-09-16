@@ -3,6 +3,7 @@
 #include <string>
 #include <functional>
 #include <chrono>
+#include <ostream>
 
 #include "obsr_types.h"
 
@@ -31,3 +32,6 @@ void start_client(std::string_view address, uint16_t server_port);
 void stop_network();
 
 }
+
+std::ostream& operator<<(std::ostream& os, obsr::value_type type);
+std::ostream& operator<<(std::ostream& os, const obsr::value& value);
