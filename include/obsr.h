@@ -111,6 +111,38 @@ entry get_entry(object obj, std::string_view name);
 object get_parent_for_object(object obj);
 
 /**
+ * Gets the path associated with an object.
+ *
+ * @param obj object
+ * @return absolute path of object
+ */
+std::string get_path_for_object(object obj);
+
+/**
+ * Gets the path associated with an entry.
+ *
+ * @param entry entry
+ * @return absolute path of entry
+ */
+std::string get_path_for_entry(entry entry);
+
+/**
+ * Gets the name part of the path of an object.
+ *
+ * @param obj object
+ * @return name part of the path of object
+ */
+std::string get_name_for_object(object obj);
+
+/**
+ * Gets the name part of the path of an entry.
+ *
+ * @param entry entry
+ * @return name part of the path of entry
+ */
+std::string get_name_for_entry(entry entry);
+
+/**
  * Gets the parent object of a given entry.
  * If the entry does not exist, an exception is thrown.
  *

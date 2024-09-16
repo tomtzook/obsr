@@ -17,6 +17,15 @@ static std::optional<std::string> get_parent_path(const std::string& path) {
     return path.substr(0, index);
 }
 
+static std::string get_path_name(const std::string& path) {
+    const auto index = path.rfind('/');
+    if (index == std::string::npos) {
+        return "";
+    }
+
+    return path.substr(index + 1);
+}
+
 static void verify_valid_name(std::string_view name) {
     if (name.empty()) {
         throw invalid_name_exception(name);
@@ -27,9 +36,10 @@ static void verify_valid_name(std::string_view name) {
     }
 }
 
-object_data::object_data(const std::string_view& path)
-    : path(path) {
-}
+object_data::object_data(std::string_view name, std::string_view path)
+    : name(name)
+    , path(path)
+{}
 
 instance::instance()
     : m_mutex()
@@ -41,7 +51,7 @@ instance::instance()
     , m_net_interface()
     , m_objects()
     , m_object_paths()
-    , m_root(m_objects.allocate_new("")) {
+    , m_root(m_objects.allocate_new("", "")) {
 }
 
 instance::~instance() {
@@ -139,6 +149,33 @@ object instance::get_parent_for_entry(entry entry) {
     assert(it != m_object_paths.end());
 
     return it->second;
+}
+
+std::string instance::get_path_for_object(object obj) {
+    std::unique_lock guard(m_mutex);
+
+    auto data = m_objects[obj];
+    return data->path;
+}
+
+std::string instance::get_path_for_entry(entry entry) {
+    std::unique_lock guard(m_mutex);
+
+    return m_storage->get_entry_path(entry);
+}
+
+std::string instance::get_name_for_object(object obj) {
+    std::unique_lock guard(m_mutex);
+
+    auto data = m_objects[obj];
+    return data->name;
+}
+
+std::string instance::get_name_for_entry(entry entry) {
+    std::unique_lock guard(m_mutex);
+
+    const auto path = m_storage->get_entry_path(entry);
+    return get_path_name(path);
 }
 
 void instance::delete_object(object obj) {
@@ -272,7 +309,7 @@ object instance::get_or_create_child(object parent, std::string_view name) {
 
     auto it = m_object_paths.find(path);
     if (it == m_object_paths.end()) {
-        const auto handle = m_objects.allocate_new(path);
+        const auto handle = m_objects.allocate_new(name, path);
         m_object_paths.emplace(path, handle);
 
         return handle;

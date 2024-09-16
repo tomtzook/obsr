@@ -13,8 +13,9 @@
 namespace obsr {
 
 struct object_data {
-    explicit object_data(const std::string_view& path);
+    object_data(std::string_view name, std::string_view path);
 
+    std::string name;
     std::string path;
 };
 
@@ -34,6 +35,12 @@ public:
 
     object get_parent_for_object(object obj);
     object get_parent_for_entry(entry entry);
+
+    std::string get_path_for_object(object obj);
+    std::string get_path_for_entry(entry entry);
+
+    std::string get_name_for_object(object obj);
+    std::string get_name_for_entry(entry entry);
 
     void delete_object(object obj);
     void delete_entry(entry entry);
