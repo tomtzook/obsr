@@ -186,7 +186,7 @@ private:
     bool select_next_state(parse_state current_state);
 
     message_type m_type;
-    io::readonly_buffer m_buffer;
+    io::readonly_buffer_view m_buffer;
     io::deserializer m_deserializer;
 };
 

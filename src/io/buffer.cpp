@@ -6,19 +6,19 @@
 
 namespace obsr::io {
 
-readonly_buffer::readonly_buffer()
+readonly_buffer_view::readonly_buffer_view()
     : m_buffer(nullptr)
     , m_read_pos(0)
     , m_size(0)
 {}
 
-void readonly_buffer::reset(const uint8_t* buffer, size_t size) {
+void readonly_buffer_view::reset(const uint8_t* buffer, size_t size) {
     m_buffer = buffer;
     m_read_pos = 0;
     m_size = size;
 }
 
-bool readonly_buffer::read(uint8_t* buffer, size_t size) {
+bool readonly_buffer_view::read(uint8_t* buffer, size_t size) {
     const auto space_to_max = (m_size - m_read_pos);
     if (size > space_to_max) {
         return false;
@@ -69,7 +69,7 @@ bool linear_buffer::write(const uint8_t* buffer, size_t size) {
 }
 
 
-buffer::buffer(size_t size)
+circular_buffer::circular_buffer(size_t size)
     : m_buffer(new uint8_t[size])
     , m_read_pos(0)
     , m_write_pos(0)
@@ -79,11 +79,11 @@ buffer::buffer(size_t size)
 
 // todo: there are several functions handling the indecies, combine
 
-buffer::~buffer() {
+circular_buffer::~circular_buffer() {
     delete[] m_buffer;
 }
 
-size_t buffer::read_available() const {
+size_t circular_buffer::read_available() const {
     if (m_write_pos < m_read_pos) {
         return (m_size - m_read_pos) + m_write_pos;
     } else {
@@ -91,7 +91,7 @@ size_t buffer::read_available() const {
     }
 }
 
-size_t buffer::write_available() const {
+size_t circular_buffer::write_available() const {
     if (m_write_pos >= m_read_pos) {
         return (m_size - m_write_pos) + m_write_pos;
     } else {
@@ -99,22 +99,22 @@ size_t buffer::write_available() const {
     }
 }
 
-bool buffer::can_read(size_t size) const {
+bool circular_buffer::can_read(size_t size) const {
     const auto available = read_available();
     return available >= size;
 }
 
-bool buffer::can_write(size_t size) const {
+bool circular_buffer::can_write(size_t size) const {
     const auto available = write_available();
     return available >= size;
 }
 
-void buffer::reset() {
+void circular_buffer::reset() {
     m_read_pos = 0;
     m_write_pos = 0;
 }
 
-bool buffer::find_and_seek_read(uint8_t byte) {
+bool circular_buffer::find_and_seek_read(uint8_t byte) {
     if (m_write_pos < m_read_pos) {
         const auto space_to_max = (m_size - m_read_pos);
         auto ptr = ::memchr(m_buffer + m_read_pos, byte, space_to_max);
@@ -151,7 +151,7 @@ bool buffer::find_and_seek_read(uint8_t byte) {
     }
 }
 
-void buffer::seek_read(size_t offset) {
+void circular_buffer::seek_read(size_t offset) {
     if (m_write_pos < m_read_pos) {
         const auto space_to_max = (m_size - m_read_pos);
         if (offset > space_to_max && offset > space_to_max + m_write_pos) {
@@ -168,7 +168,7 @@ void buffer::seek_read(size_t offset) {
     m_read_pos %= m_size;
 }
 
-bool buffer::read(uint8_t* buffer, size_t size) {
+bool circular_buffer::read(uint8_t* buffer, size_t size) {
     if (size > m_size) {
         return false;
     }
@@ -200,7 +200,7 @@ bool buffer::read(uint8_t* buffer, size_t size) {
     return true;
 }
 
-bool buffer::write(const uint8_t* buffer, size_t size) {
+bool circular_buffer::write(const uint8_t* buffer, size_t size) {
     if (size > m_size) {
         return false;
     }
@@ -232,7 +232,7 @@ bool buffer::write(const uint8_t* buffer, size_t size) {
     return true;
 }
 
-bool buffer::read_from(obsr::os::readable& readable) {
+bool circular_buffer::read_from(obsr::os::readable& readable) {
     if (m_write_pos >= m_read_pos) {
         auto space = (m_size - m_write_pos);
         auto read = readable.read(m_buffer + m_write_pos, space);
@@ -262,7 +262,7 @@ bool buffer::read_from(obsr::os::readable& readable) {
     }
 }
 
-bool buffer::write_into(obsr::os::writable& writable) {
+bool circular_buffer::write_into(obsr::os::writable& writable) {
     if (m_write_pos == m_read_pos) {
         return false;
     }

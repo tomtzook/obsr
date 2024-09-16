@@ -21,9 +21,9 @@ public:
     virtual bool write(const uint8_t* buffer, size_t size) = 0;
 };
 
-class readonly_buffer : public readable_buffer {
+class readonly_buffer_view : public readable_buffer {
 public:
-    readonly_buffer();
+    readonly_buffer_view();
 
     void reset(const uint8_t* buffer, size_t size);
 
@@ -53,10 +53,10 @@ private:
     size_t m_size;
 };
 
-class buffer : public readable_buffer, public writable_buffer {
+class circular_buffer : public readable_buffer, public writable_buffer {
 public:
-    explicit buffer(size_t size);
-    ~buffer() override;
+    explicit circular_buffer(size_t size);
+    ~circular_buffer() override;
 
     size_t read_available() const;
     size_t write_available() const;

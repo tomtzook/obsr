@@ -100,7 +100,7 @@ void resource_poller::remove(resource& resource) {
 
 events::polled_events resource_poller::poll(size_t max_events, std::chrono::milliseconds timeout) {
     if (max_events > events_buffer_size) {
-        // todo: dynamically change the buffer size
+        // todo: dynamically change the circular_buffer size
         throw illegal_argument_exception("max events requested exceed support size");
     }
 

@@ -184,7 +184,7 @@ void socket_io::connect(const connection_info& info) {
 
 bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
     if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
-        TRACE_DEBUG(LOG_MODULE_CLIENT, "write buffer does not have enough space");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "write circular_buffer does not have enough space");
         return false;
     }
 
@@ -199,7 +199,7 @@ bool socket_io::write(uint8_t type, const uint8_t* buffer, size_t size) {
     header_convert_net(header);
 
     if (!m_write_buffer.write(reinterpret_cast<uint8_t*>(&header), sizeof(header))) {
-        TRACE_DEBUG(LOG_MODULE_CLIENT, "write failed to buffer at start");
+        TRACE_DEBUG(LOG_MODULE_CLIENT, "write failed to circular_buffer at start");
         return false;
     }
 

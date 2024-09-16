@@ -43,7 +43,7 @@ protected:
     bool process_state(read_state current_state, read_data& data) override;
 
 private:
-    obsr::io::buffer m_read_buffer;
+    obsr::io::circular_buffer m_read_buffer;
 };
 
 // must be used from inside the looper
@@ -96,7 +96,7 @@ private:
 
     std::shared_ptr<obsr::os::socket> m_socket;
     reader m_reader;
-    obsr::io::buffer m_write_buffer;
+    obsr::io::circular_buffer m_write_buffer;
     uint32_t m_next_message_index;
 };
 
