@@ -18,16 +18,26 @@ namespace obsr {
  *
  * There is a single root object from which all objects are derived.
  *
- * Objects are largely treated as transitory, that is, as just pointers to entries. Event will generally not
+ * Objects are largely treated as links, that is, as just pointers to entries. Events will generally not
  * be generated for objects, and they lack a coherent life-cycle. Use them as a way to organize entries, but nothing more.
  */
 
 /**
  * On behaviour of entries
  *
- * Entries act as a storage for a single obsr::value. It is described by an handle and can be accessed by acquiring
- * an handle to it. Each entry is contained within an object. The path is made up of
- * parent objects and the name of the particular entry.
+ * Entries act as a storage for a single obsr::value. It is described by a handle and can be accessed by acquiring
+ * a handle to it. Each entry is contained within an object. The path is made up of parent objects and the name of the particular entry.
+ *
+ * Entries are the main storage container for data in obsr. Whereas objects provide packaging and organization,
+ * entries provide the actual information storage. As such, work with obsr should revolve around these entries.
+ *
+ * One work approach may include reflecting class instances over obsr by creating an object and storing all fields
+ * in entries. Though, one should note that unlike normal fields, the entries are not actually "owned" by the classes
+ * and their values may change by remote programs.
+ *
+ * When retrieving an entry handle, the entry isn't actually created (if it does not exist). This handle
+ * refers to a "ghost" entry, such that no creation event is sent and remote nodes will not be aware of this entry.
+ * Only when a value is set will the entry be created and shared.
  */
 
 /**
@@ -44,6 +54,10 @@ namespace obsr {
  * Because multiple programs may manipulate the same objects/entries, there can be an unexpected behaviour due to
  * the lack of strong synchronization between the programs. As such, it is recommended that for each entry, only one
  * program will write to it while other programs read from it.
+ *
+ * Object and entry handles (obsr::object, obsr::entry respectively) are not shared between instances and
+ * are instead a simple local "pointer" to these structs. They should not be stored and transferred among
+ * network nodes. Paths, instead, are shared and can be used as a unique identifier across nodes.
  */
 
 /**
