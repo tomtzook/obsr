@@ -1,11 +1,15 @@
 cmake_minimum_required(VERSION 3.5.1)
-project(obsr C CXX)
+project(obsr
+        LANGUAGES C CXX
+        VERSION 1.0)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 
+include(GNUInstallDirs)
+
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        add_compile_definitions(-DDEBUG=1)
+        add_compile_definitions(DEBUG=1)
 
         if (NOT DEFINED TRACE_LEVEL)
                 set(TRACE_LEVEL 1)
@@ -18,14 +22,15 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
                 endif ()
         endif ()
 
-        add_compile_definitions(-DTRACE_LEVEL=${TRACE_LEVEL} -DTRACE_SINK=${TRACE_SINK})
+        add_compile_definitions(TRACE_LEVEL=${TRACE_LEVEL} TRACE_SINK=${TRACE_SINK})
 endif ()
 
-set(INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 
 find_package(Threads REQUIRED)
-find_package(fmt)
+find_package(fmt REQUIRED)
+
+file(GLOB INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.h)
 
 add_library(obsr STATIC
         include/obsr.h
@@ -76,7 +81,20 @@ add_library(obsr STATIC
         src/util/bits.h
         src/obsr_types.cpp)
 target_include_directories(obsr
-        PUBLIC ${INCLUDES}
+        PUBLIC
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                $<INSTALL_INTERFACE:obsr>
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
         )
 target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt)
+
+install(TARGETS obsr EXPORT obsrTargets
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(FILES ${INCLUDE_FILES}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsr)
+install(EXPORT obsrTargets
+        FILE obsrTargets.cmake
+        NAMESPACE obsr::
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/obsr")

@@ -10,6 +10,7 @@
 #define TRACE_SINK_STDOUT 0
 #define TRACE_SINK_LINUX_SYSLOG 1
 
+#ifdef TRACE_SINK
 #if TRACE_SINK == TRACE_SINK_STDOUT
 #include <cstdio>
 #elif TRACE_SINK == TRACE_SINK_LINUX_SYSLOG
@@ -17,10 +18,19 @@
 #else
 #error "unknown trace sink"
 #endif
+#endif
 
 namespace obsr::debug {
 
 #ifdef DEBUG
+
+#ifndef TRACE_SINK
+#error "trace sink not defined"
+#endif
+
+#ifndef TRACE_LEVEL
+#error "trace level not defined"
+#endif
 
 #if TRACE_SINK == TRACE_SINK_LINUX_SYSLOG
 static inline int level_to_pri(log_level level) {
