@@ -11,7 +11,7 @@ namespace obsr::net {
 
 class network_client : public network_interface {
 public:
-    explicit network_client(std::shared_ptr<clock>& clock);
+    explicit network_client(clock_ref& clock);
 
     void configure_target(connection_info info);
 
@@ -36,7 +36,7 @@ private:
     std::mutex m_mutex;
     state m_state;
 
-    std::shared_ptr<clock> m_clock;
+    clock_ref m_clock;
     std::shared_ptr<storage::storage> m_storage;
     connection_info m_conn_info;
 

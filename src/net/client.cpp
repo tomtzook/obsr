@@ -15,7 +15,7 @@ static constexpr auto connect_retry_time = std::chrono::milliseconds(1000);
 static constexpr auto server_sync_time = std::chrono::milliseconds(1000);
 static constexpr auto update_time = std::chrono::milliseconds(200);
 
-network_client::network_client(std::shared_ptr<clock>& clock)
+network_client::network_client(clock_ref& clock)
     : m_mutex()
     , m_state(state::idle)
     , m_storage(nullptr)

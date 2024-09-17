@@ -15,9 +15,14 @@
 namespace obsr::storage {
 
 struct listener_data {
-    listener_data(listener_callback callback, const std::string_view& prefix);
+    listener_data(listener_callback callback, const std::string_view& prefix,
+                  std::chrono::milliseconds creation_timestamp);
 
     bool in_path(const std::string_view& path) const;
+
+    std::chrono::milliseconds get_creation_timestamp() const;
+    void set_creation_timestamp(std::chrono::milliseconds creation_timestamp);
+
     void invoke(const event& event) const;
 
 private:
@@ -28,8 +33,10 @@ private:
 
 class listener_storage {
 public:
-    listener_storage();
+    listener_storage(clock_ref  clock);
     ~listener_storage();
+
+    void on_clock_resync();
 
     listener create_listener(const listener_callback& callback, const std::string_view& prefix);
     void destroy_listener(listener listener);
@@ -43,6 +50,7 @@ private:
     void notify(const event& event);
     void thread_main();
 
+    clock_ref m_clock;
     handle_table<listener_data, 16> m_listeners;
 
     std::atomic<bool> m_thread_loop_run;

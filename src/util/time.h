@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <atomic>
+#include <memory>
 
 namespace obsr {
 
@@ -18,6 +19,8 @@ private:
     std::atomic<std::chrono::milliseconds> m_offset;
     std::atomic<std::chrono::milliseconds> m_rtt2;
 };
+
+using clock_ref = std::shared_ptr<clock>;
 
 class timer {
 public:

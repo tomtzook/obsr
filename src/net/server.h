@@ -19,7 +19,7 @@ public:
         in_use,
     };
 
-    server_client(server_io::client_id id, server_io& parent, const std::shared_ptr<clock>& clock);
+    server_client(server_io::client_id id, server_io& parent, const clock_ref& clock);
 
     server_io::client_id get_id() const;
 
@@ -38,7 +38,7 @@ public:
 private:
     server_io::client_id m_id;
     server_io& m_parent;
-    std::shared_ptr<clock> m_clock;
+    clock_ref m_clock;
     state m_state;
 
     message_queue m_queue;
@@ -47,7 +47,7 @@ private:
 
 class network_server : public network_interface {
 public:
-    explicit network_server(std::shared_ptr<clock>& clock);
+    explicit network_server(clock_ref& clock);
 
     void configure_bind(uint16_t bind_port);
 
@@ -81,7 +81,7 @@ private:
     std::mutex m_mutex;
     state m_state;
 
-    std::shared_ptr<clock> m_clock;
+    clock_ref m_clock;
     std::shared_ptr<storage::storage> m_storage;
     uint16_t m_bind_port;
 

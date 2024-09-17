@@ -13,7 +13,7 @@ namespace obsr::net {
 static constexpr auto open_retry_time = std::chrono::milliseconds(1000);
 static constexpr auto update_time = std::chrono::milliseconds(200);
 
-server_client::server_client(server_io::client_id id, server_io& parent, const std::shared_ptr<clock>& clock)
+server_client::server_client(server_io::client_id id, server_io& parent, const clock_ref& clock)
     : m_id(id)
     , m_parent(parent)
     , m_clock(clock)
@@ -61,7 +61,7 @@ void server_client::update() {
     m_queue.process();
 }
 
-network_server::network_server(std::shared_ptr<clock>& clock)
+network_server::network_server(clock_ref& clock)
     : m_mutex()
     , m_state(state::idle)
     , m_clock(clock)

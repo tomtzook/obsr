@@ -418,6 +418,10 @@ public:
         return m_timestamp;
     }
 
+    void set_timestamp(std::chrono::milliseconds timestamp) {
+        m_timestamp = timestamp;
+    }
+
     [[nodiscard]] inline event_type get_type() const {
         return m_type;
     }

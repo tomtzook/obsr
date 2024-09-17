@@ -91,7 +91,7 @@ value storage_entry::clear() {
     return old;
 }
 
-storage::storage(listener_storage_ref& listener_storage, const std::shared_ptr<clock>& clock)
+storage::storage(listener_storage_ref& listener_storage, const clock_ref& clock)
     : m_listener_storage(listener_storage)
     , m_clock(clock)
     , m_mutex()
@@ -263,6 +263,8 @@ void storage::on_clock_resync() {
 
         data.set_last_update_timestamp(adjusted_time);
     }
+
+    m_listener_storage->on_clock_resync();
 }
 
 void storage::on_entry_created(entry_id id,

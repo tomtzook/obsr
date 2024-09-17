@@ -9,14 +9,23 @@ namespace obsr::storage {
 
 #define LOG_MODULE "listener_storage"
 
-listener_data::listener_data(listener_callback callback, const std::string_view& prefix)
+listener_data::listener_data(listener_callback callback, const std::string_view& prefix,
+                             std::chrono::milliseconds creation_timestamp)
     : m_callback(std::move(callback))
     , m_prefix(prefix)
-    , m_creation_timestamp(time_now()) {
+    , m_creation_timestamp(creation_timestamp) {
 }
 
 bool listener_data::in_path(const std::string_view& path) const {
     return m_prefix.find(path) != std::string::npos;
+}
+
+std::chrono::milliseconds listener_data::get_creation_timestamp() const {
+    return m_creation_timestamp;
+}
+
+void listener_data::set_creation_timestamp(std::chrono::milliseconds creation_timestamp) {
+    m_creation_timestamp = creation_timestamp;
 }
 
 void listener_data::invoke(const event& event) const {
@@ -30,8 +39,9 @@ void listener_data::invoke(const event& event) const {
     m_callback(event);
 }
 
-listener_storage::listener_storage()
-    : m_listeners()
+listener_storage::listener_storage(clock_ref  clock)
+    : m_clock(std::move(clock))
+    , m_listeners()
     , m_thread_loop_run(true)
     , m_mutex()
     , m_has_events()
@@ -46,10 +56,26 @@ listener_storage::~listener_storage() {
     m_thread.join();
 }
 
+void listener_storage::on_clock_resync() {
+    std::unique_lock guard(m_mutex);
+
+    for (auto& event : m_pending_events) {
+        auto timestamp = event.get_timestamp();
+        timestamp = m_clock->adjust_time(timestamp);
+        event.set_timestamp(timestamp);
+    }
+
+    for (auto [handle, listener] : m_listeners) {
+        auto timestamp = listener.get_creation_timestamp();
+        timestamp = m_clock->adjust_time(timestamp);
+        listener.set_creation_timestamp(timestamp);
+    }
+}
+
 listener listener_storage::create_listener(const listener_callback& callback, const std::string_view& prefix) {
     std::unique_lock guard(m_mutex);
 
-    return m_listeners.allocate_new(callback, prefix);
+    return m_listeners.allocate_new(callback, prefix, m_clock->now());
 }
 
 void listener_storage::destroy_listener(listener listener) {
@@ -74,13 +100,13 @@ void listener_storage::destroy_listeners(const std::string_view& path) {
 }
 
 void listener_storage::notify(event_type type, const std::string_view& path, obsr::entry entry) {
-    obsr::event event(time_now(), type, path, entry);
+    obsr::event event(m_clock->now(), type, path, entry);
     notify(event);
 }
 
 void listener_storage::notify(event_type type, const std::string_view& path, obsr::entry entry,
                               const value& old_value, const value& new_value) {
-    obsr::event event(time_now(), type, path, entry, old_value, new_value);
+    obsr::event event(m_clock->now(), type, path, entry, old_value, new_value);
     notify(event);
 }
 

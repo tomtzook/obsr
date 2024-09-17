@@ -66,7 +66,7 @@ private:
     object get_or_create_object(std::string_view path);
 
     std::mutex m_mutex;
-    std::shared_ptr<clock> m_clock;
+    clock_ref m_clock;
     storage::listener_storage_ref m_listener_storage;
     std::shared_ptr<storage::storage> m_storage;
 

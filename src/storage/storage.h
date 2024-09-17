@@ -72,7 +72,7 @@ class storage {
 public:
     using entry_action = std::function<bool(const storage_entry&)>;
 
-    explicit storage(listener_storage_ref& listener_storage, const std::shared_ptr<clock>& clock);
+    explicit storage(listener_storage_ref& listener_storage, const clock_ref& clock);
 
     entry get_or_create_entry(const std::string_view& path);
     void delete_entry(entry entry);
@@ -121,7 +121,7 @@ private:
                                std::chrono::milliseconds timestamp = std::chrono::milliseconds(0));
 
     listener_storage_ref m_listener_storage;
-    std::shared_ptr<clock> m_clock;
+    clock_ref m_clock;
 
     std::recursive_mutex m_mutex; // todo: switch to regular
     handle_table<storage_entry, 256> m_entries;
