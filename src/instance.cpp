@@ -51,7 +51,7 @@ instance::instance()
     , m_net_interface()
     , m_objects()
     , m_object_paths()
-    , m_root(m_objects.allocate_new("", "")) {
+    , m_root(m_objects.allocate_new("", "/")) {
 }
 
 instance::~instance() {
@@ -335,7 +335,12 @@ object instance::get_or_create_object(std::string_view path) {
             // this is the leaf
             const auto name = path.substr(pos + 1);
             if (name.empty()) {
-                throw invalid_path_exception(path);
+                if (current == m_root) {
+                    // no child, just root
+                    return m_root;
+                } else {
+                    throw invalid_path_exception(path);
+                }
             }
 
             return get_or_create_child(current, name);
