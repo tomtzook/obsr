@@ -51,7 +51,7 @@ instance::instance()
     , m_net_interface()
     , m_objects()
     , m_object_paths()
-    , m_root(m_objects.allocate_new("", "/")) {
+    , m_root(m_objects.allocate_new("", "")) {
 }
 
 instance::~instance() {
