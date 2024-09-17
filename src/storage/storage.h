@@ -118,7 +118,6 @@ private:
                             std::chrono::milliseconds timestamp = std::chrono::milliseconds(0));
     void delete_entry_internal(entry entry,
                                bool mark_dirty = true,
-                               bool notify = true,
                                std::chrono::milliseconds timestamp = std::chrono::milliseconds(0));
 
     listener_storage_ref m_listener_storage;

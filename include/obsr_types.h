@@ -392,17 +392,19 @@ enum class event_type {
 
 class event {
 public:
-    event(std::chrono::milliseconds timestamp, event_type type, std::string_view path)
+    event(std::chrono::milliseconds timestamp, event_type type, std::string_view path, obsr::entry entry)
         : m_timestamp(timestamp)
         , m_type(type)
         , m_path(path)
+        , m_entry(entry)
         , m_old_value(value::make())
         , m_value(value::make())
     {}
-    event(std::chrono::milliseconds timestamp, event_type type, std::string_view path, value old_value, value value)
+    event(std::chrono::milliseconds timestamp, event_type type, std::string_view path, obsr::entry entry, value old_value, value value)
         : m_timestamp(timestamp)
         , m_type(type)
         , m_path(path)
+        , m_entry(entry)
         , m_old_value(std::move(old_value))
         , m_value(std::move(value))
     {}
@@ -424,6 +426,10 @@ public:
         return m_path;
     }
 
+    [[nodiscard]] inline obsr::entry get_entry() const {
+        return m_entry;
+    }
+
     [[nodiscard]] inline const obsr::value& get_old_value() const {
         assert(m_type == event_type::value_changed);
         return m_old_value;
@@ -438,6 +444,7 @@ private:
     std::chrono::milliseconds m_timestamp;
     event_type m_type;
     std::string m_path;
+    obsr::entry m_entry;
 
     // available for value change events
     obsr::value m_old_value;

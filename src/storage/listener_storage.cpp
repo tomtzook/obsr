@@ -73,13 +73,14 @@ void listener_storage::destroy_listeners(const std::string_view& path) {
     }
 }
 
-void listener_storage::notify(event_type type, const std::string_view& path) {
-    obsr::event event(time_now(), type, path);
+void listener_storage::notify(event_type type, const std::string_view& path, obsr::entry entry) {
+    obsr::event event(time_now(), type, path, entry);
     notify(event);
 }
 
-void listener_storage::notify(event_type type, const std::string_view& path, const value& old_value, const value& new_value) {
-    obsr::event event(time_now(), type, path, old_value, new_value);
+void listener_storage::notify(event_type type, const std::string_view& path, obsr::entry entry,
+                              const value& old_value, const value& new_value) {
+    obsr::event event(time_now(), type, path, entry, old_value, new_value);
     notify(event);
 }
 

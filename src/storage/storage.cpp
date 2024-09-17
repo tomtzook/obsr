@@ -128,13 +128,9 @@ void storage::delete_entries(const std::string_view& path) {
     std::vector<entry> handles;
     for (auto [handle, data] : m_entries) {
         if (data.is_in(path)) {
-            delete_entry_internal(handle, true, false);
+            delete_entry_internal(handle, true);
         }
     }
-
-    m_listener_storage->notify(
-            event_type::deleted,
-            path);
 }
 
 uint32_t storage::probe(entry entry) {
@@ -313,7 +309,7 @@ void storage::on_entry_deleted(entry_id id, std::chrono::milliseconds timestamp)
         return;
     }
 
-    delete_entry_internal(it->second, false, true, timestamp);
+    delete_entry_internal(it->second, false, timestamp);
 }
 
 void storage::on_entry_id_assigned(entry_id id,
@@ -382,7 +378,8 @@ void storage::set_entry_internal(entry entry,
     if (just_created) {
         m_listener_storage->notify(
                 event_type::created,
-                data->get_path());
+                data->get_path(),
+                entry);
     }
 
     if (id != id_not_assigned) {
@@ -410,13 +407,13 @@ void storage::set_entry_internal(entry entry,
     m_listener_storage->notify(
             event_type::value_changed,
             data->get_path(),
+            entry,
             old_value,
             value);
 }
 
 void storage::delete_entry_internal(entry entry,
                                     bool mark_dirty,
-                                    bool notify,
                                     std::chrono::milliseconds timestamp) {
     auto data = m_entries[entry];
 
@@ -449,11 +446,10 @@ void storage::delete_entry_internal(entry entry,
     }
     data->set_last_update_timestamp(timestamp);
 
-    if (notify) {
-        m_listener_storage->notify(
-                event_type::deleted,
-                data->get_path());
-    }
+    m_listener_storage->notify(
+            event_type::deleted,
+            data->get_path(),
+            entry);
 }
 
 }

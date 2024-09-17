@@ -35,8 +35,9 @@ public:
     void destroy_listener(listener listener);
     void destroy_listeners(const std::string_view& path);
 
-    void notify(event_type type, const std::string_view& path);
-    void notify(event_type type, const std::string_view& path, const value& old_value, const value& new_value);
+    void notify(event_type type, const std::string_view& path, obsr::entry entry);
+    void notify(event_type type, const std::string_view& path, obsr::entry entry,
+                const value& old_value, const value& new_value);
 
 private:
     void notify(const event& event);

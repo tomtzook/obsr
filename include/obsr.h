@@ -17,6 +17,9 @@ namespace obsr {
  * parent objects and the name of the particular object.
  *
  * There is a single root object from which all objects are derived.
+ *
+ * Objects are largely treated as transitory, that is, as just pointers to entries. Event will generally not
+ * be generated for objects, and they lack a coherent life-cycle. Use them as a way to organize entries, but nothing more.
  */
 
 /**
@@ -158,7 +161,7 @@ object get_parent_for_entry(entry entry);
  *
  * After this call, the given object handle should not be used again.
  *
- * This call generates a deleted event.
+ * This call generates a deleted event for each deleted entry under the object, but not for deleted object.
  *
  * @param obj object to delete.
  */
