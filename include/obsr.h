@@ -58,6 +58,13 @@ namespace obsr {
  * Object and entry handles (obsr::object, obsr::entry respectively) are not shared between instances and
  * are instead a simple local "pointer" to these structs. They should not be stored and transferred among
  * network nodes. Paths, instead, are shared and can be used as a unique identifier across nodes.
+ *
+ * Until (or while) network services are not running, obsr will still function, but data will just exist locally.
+ * One network services begin, connection attempts will be made. But until a connection is established, obsr will still
+ * act as local-only. Once connection is made, data starts being shared. This includes remote data becoming available locally
+ * and local data being shared to remotes, so one can work with obsr normally while there is no connection and expect
+ * to continue function normally with the data when connections are made. Collisions may occur if both local and remote have
+ * created the same entries. The resulting value would be the latest created value (according to obsr time).
  */
 
 /**
