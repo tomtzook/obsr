@@ -236,6 +236,14 @@ std::optional<obsr::value> deserializer::read_value(value_type type) {
 
             return value::make_raw(value_opt.value());
         }
+        case value_type::string: {
+            const auto value_opt = read_str();
+            if (!value_opt) {
+                return {};
+            }
+
+            return value::make_string(value_opt.value());
+        }
         case value_type::boolean: {
             const auto value_opt = read8();
             if (!value_opt) {
@@ -452,6 +460,10 @@ bool serializer::write_value(const value& value) {
         case value_type::raw: {
             auto arr = value.get_raw();
             return write_raw(arr.data(), arr.size_bytes());
+        }
+        case value_type::string: {
+            auto str = value.get_string();
+            return write_str(str);
         }
         case value_type::boolean: {
             return write8(value.get_boolean());

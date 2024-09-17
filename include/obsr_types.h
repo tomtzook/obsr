@@ -27,6 +27,7 @@ enum class entry_flag : uint8_t {
 enum class value_type : uint8_t {
     empty,
     raw,
+    string,
     boolean,
     integer32,
     integer64,
@@ -77,6 +78,21 @@ public:
         auto data = create_array(value);
         m_value.raw.ptr = data.get();
         m_value.raw.size = value.size();
+        m_data = std::move(data);
+    }
+
+    [[nodiscard]] inline std::string_view get_string() const {
+        assert(m_type == value_type::string);
+        return {m_value.string.ptr, m_value.string.size};
+    }
+
+    inline void set_string(std::string_view value) {
+        m_type = value_type::string;
+
+        auto data = create_array<char>({
+            reinterpret_cast<const char*>(value.data()), value.size()});
+        m_value.string.ptr = data.get();
+        m_value.string.size = value.size();
         m_data = std::move(data);
     }
 
@@ -263,6 +279,12 @@ public:
         return make_raw({reinterpret_cast<const uint8_t*>(ptr), size});
     }
 
+    static inline value make_string(std::string_view value) {
+        obsr::value val(value_type::string);
+        val.set_string(value);
+        return std::move(val);
+    }
+
     static inline value make_boolean(bool value) {
         obsr::value val(value_type::boolean);
         val.set_boolean(value);
@@ -359,6 +381,10 @@ private:
             uint8_t* ptr;
             size_t size;
         } raw;
+        struct {
+            char* ptr;
+            size_t size;
+        } string;
         bool boolean;
         int32_t integer32;
         int64_t integer64;

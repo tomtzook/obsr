@@ -113,6 +113,9 @@ std::ostream& operator<<(std::ostream& os, obsr::value_type type) {
         case obsr::value_type::raw:
             os << "raw";
             break;
+        case obsr::value_type::string:
+            os << "string";
+            break;
         case obsr::value_type::boolean:
             os << "bool";
             break;
@@ -154,6 +157,9 @@ std::ostream& operator<<(std::ostream& os, const obsr::value& value) {
             os << "raw(ptr=0x" << std::hex << reinterpret_cast<uintptr_t>(data.data()) << ", size=" << data.size() << ")";
             break;
         }
+        case obsr::value_type::string:
+            os << value.get_string();
+            break;
         case obsr::value_type::boolean:
             os << (value.get_boolean() ? "True" : "False");
             break;
