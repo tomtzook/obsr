@@ -265,11 +265,7 @@ void network_client::process_storage() {
                     entry.get_path(),
                     std::move(value)
             ));
-
-            return true;
-        }
-
-        if (entry.has_flags(storage::flag_internal_deleted)) {
+        } else if (entry.has_flags(storage::flag_internal_deleted)) {
             // entry was deleted
             m_message_queue.enqueue(out_message::entry_deleted(
                     entry.get_last_update_timestamp(),

@@ -203,6 +203,8 @@ void storage::clear_net_ids() {
     for (auto [handle, data] : m_entries) {
         data.clear_net_id();
     }
+
+    m_ids.clear();
 }
 
 listener storage::listen(entry entry, const listener_callback& callback) {
