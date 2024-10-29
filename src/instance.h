@@ -3,12 +3,13 @@
 #include <mutex>
 #include <fmt/format.h>
 
+#include <looper.h>
+
 #include "obsr_internal.h"
 #include "storage/storage.h"
 #include "net/client.h"
 #include "net/server.h"
 #include "util/time.h"
-#include "events/events.h"
 
 namespace obsr {
 
@@ -70,8 +71,7 @@ private:
     storage::listener_storage_ref m_listener_storage;
     std::shared_ptr<storage::storage> m_storage;
 
-    std::shared_ptr<events::looper> m_looper;
-    events::looper_thread m_looper_thread;
+    looper::loop m_loop;
 
     std::shared_ptr<net::network_interface> m_net_interface;
 

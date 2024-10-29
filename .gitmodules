@@ -1,0 +1,3 @@
+[submodule "looper"]
+	path = looper
+	url = git@github.com:tomtzook/looper.git

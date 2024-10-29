@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 include(GNUInstallDirs)
 
+add_subdirectory(looper)
+
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_compile_definitions(DEBUG=1)
 
@@ -51,11 +53,7 @@ add_library(obsr STATIC
         src/util/time.cpp
         src/io/serialize.h
         src/io/serialize.cpp
-        src/os/socket.h
-        src/os/socket.cpp
         src/internal_except.h
-        src/os/io.h
-        src/os/io.cpp
         src/io/buffer.h
         src/io/buffer.cpp
         src/net/io.h
@@ -71,13 +69,6 @@ add_library(obsr STATIC
         src/net/server.h
         src/net/server.cpp
         src/net/net.h
-        src/os/poller.h
-        src/os/poller.cpp
-        src/events/events.h
-        src/events/events.cpp
-        src/os/signal.h
-        src/os/signal.cpp
-        src/events/signal.h
         src/util/bits.h
         src/obsr_types.cpp)
 target_include_directories(obsr
@@ -86,9 +77,9 @@ target_include_directories(obsr
                 $<INSTALL_INTERFACE:obsr>
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
         )
-target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt)
+target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt looper)
 
-install(TARGETS obsr EXPORT obsrTargets
+install(TARGETS obsr looper EXPORT obsrTargets
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")

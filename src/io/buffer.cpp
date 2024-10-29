@@ -52,6 +52,10 @@ size_t linear_buffer::size() const {
     return m_size;
 }
 
+bool linear_buffer::can_write(size_t size) const {
+    return (m_size - m_write_pos) >= size;
+}
+
 void linear_buffer::reset() {
     m_write_pos = 0;
 }
@@ -228,69 +232,6 @@ bool circular_buffer::write(const uint8_t* buffer, size_t size) {
 
     m_write_pos += size;
     m_write_pos %= m_size;
-
-    return true;
-}
-
-bool circular_buffer::read_from(obsr::os::readable& readable) {
-    if (m_write_pos >= m_read_pos) {
-        auto space = (m_size - m_write_pos);
-        auto read = readable.read(m_buffer + m_write_pos, space);
-        if (read < space) {
-            m_write_pos += read;
-            return true;
-        }
-
-        space = (m_read_pos - 1);
-        if (space >= 1) {
-            read = readable.read(m_buffer, space);
-            m_write_pos = read;
-            return true;
-        } else {
-            m_write_pos = space;
-            return false;
-        }
-    } else {
-        const auto space = (m_read_pos - m_write_pos);
-        if (space >= 1) {
-            auto read = readable.read(m_buffer + m_write_pos, space);
-            m_write_pos += read;
-            return true;
-        } else {
-            return false;
-        }
-    }
-}
-
-bool circular_buffer::write_into(obsr::os::writable& writable) {
-    if (m_write_pos == m_read_pos) {
-        return false;
-    }
-
-    if (m_write_pos < m_read_pos) {
-        auto space = (m_size - m_read_pos);
-        if (space < 1) {
-            return false;
-        }
-
-        auto written = writable.write(m_buffer + m_read_pos, space);
-        if (written < space) {
-            m_read_pos += written;
-            return true;
-        }
-
-        space = m_write_pos;
-        written = writable.write(m_buffer, space);
-        m_read_pos = written;
-    } else {
-        const auto space = (m_write_pos - m_read_pos);
-        if (space < 1) {
-            return false;
-        }
-
-        auto written = writable.write(m_buffer + m_read_pos, space);
-        m_read_pos += written;
-    }
 
     return true;
 }

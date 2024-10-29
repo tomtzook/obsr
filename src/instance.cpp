@@ -46,12 +46,13 @@ instance::instance()
     , m_clock(std::make_shared<clock>())
     , m_listener_storage(std::make_shared<storage::listener_storage>(m_clock))
     , m_storage(std::make_shared<storage::storage>(m_listener_storage, m_clock))
-    , m_looper(std::make_shared<events::looper>())
-    , m_looper_thread(m_looper)
+    , m_loop(looper::empty_handle)
     , m_net_interface()
     , m_objects()
     , m_object_paths()
     , m_root(m_objects.allocate_new("", "")) {
+    m_loop = looper::create();
+    looper::exec_in_thread(m_loop);
 }
 
 instance::~instance() {
@@ -252,7 +253,7 @@ void instance::start_server(uint16_t bind_port) {
         throw illegal_state_exception("network interface already open");
     }
 
-    auto network_server = std::make_shared<net::network_server>(m_clock);
+    auto network_server = std::make_shared<net::server::network_server>(m_clock);
     try {
         network_server->configure_bind(bind_port);
         start_net(network_server);
@@ -272,7 +273,7 @@ void instance::start_client(std::string_view address, uint16_t server_port) {
         throw illegal_state_exception("network interface already open");
     }
 
-    auto network_client = std::make_shared<net::network_client>(m_clock);
+    auto network_client = std::make_shared<net::client::network_client>(m_clock);
     try {
         network_client->configure_target({std::string(address), server_port});
         start_net(network_client);
@@ -296,7 +297,7 @@ void instance::stop_network() {
 
 void instance::start_net(const std::shared_ptr<net::network_interface>& network_interface) {
     network_interface->attach_storage(m_storage);
-    network_interface->start(m_looper.get());
+    network_interface->start(m_loop);
 }
 
 void instance::stop_net(const std::shared_ptr<net::network_interface>& network_interface) {

@@ -5,8 +5,6 @@
 
 #include <optional>
 
-#include "os/io.h"
-
 namespace obsr::io {
 
 class readable_buffer {
@@ -43,6 +41,8 @@ public:
     const uint8_t* data() const;
     size_t pos() const;
     size_t size() const;
+
+    bool can_write(size_t size) const;
 
     void reset();
     bool write(const uint8_t* buffer, size_t size) override;
@@ -91,16 +91,6 @@ public:
     template<typename t_>
     bool write(const t_* t, size_t size) {
         return write(reinterpret_cast<const uint8_t*>(t), size);
-    }
-
-    bool read_from(obsr::os::readable& readable);
-    inline bool read_from(obsr::os::readable* readable) {
-        return read_from(*readable);
-    }
-
-    bool write_into(obsr::os::writable& writable);
-    inline bool write_into(obsr::os::writable* writable) {
-        return write_into(*writable);
     }
 
 private:
