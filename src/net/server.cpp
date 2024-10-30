@@ -112,6 +112,8 @@ void server_client::update() {
 
         m_writing_in_progress = true;
         looper::write_tcp(m_tcp, {m_write_buffer.data(), m_write_buffer.pos()}, [this](looper::loop loop, looper::tcp tcp, looper::error error)->void {
+            TRACE_DEBUG(LOG_MODULE, "write finished for client=%d", m_id);
+
             if (error != 0) {
                 TRACE_ERROR(LOG_MODULE, "write to tcp failed: code=%d", error);
                 invoke_func_nolock(m_error_cb, m_id);

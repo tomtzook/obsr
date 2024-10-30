@@ -298,6 +298,7 @@ void storage::on_entry_updated(entry_id id,
     auto it = m_ids.find(id);
     if (it == m_ids.end()) {
         // no such id, what?
+        TRACE_DEBUG(LOG_MODULE, "received update for non existent entry: id=%lu", id);
         return;
     }
 
