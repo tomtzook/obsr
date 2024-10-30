@@ -85,6 +85,7 @@ void network_client::start(looper::loop loop) {
         looper::reset_timer(timer);
     };
     m_update_timer_handle = looper::create_timer(m_loop, update_time, update_callback);
+    looper::start_timer(m_update_timer_handle);
 }
 
 void network_client::stop() {
@@ -371,6 +372,11 @@ bool network_client::write_new_message(uint8_t type, const uint8_t* buffer, size
 }
 
 void network_client::close_io() {
+    if (m_update_timer_handle != looper::empty_handle) {
+        looper::destroy_timer(m_update_timer_handle);
+        m_update_timer_handle = looper::empty_handle;
+    }
+
     if (m_tcp != looper::empty_handle) {
         looper::destroy_tcp(m_tcp);
         m_tcp = looper::empty_handle;

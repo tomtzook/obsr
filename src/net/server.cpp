@@ -217,6 +217,7 @@ void network_server::start(looper::loop loop) {
         looper::reset_timer(timer);
     };
     m_update_timer_handle = looper::create_timer(m_loop, update_time, update_callback);
+    looper::start_timer(m_update_timer_handle);
 }
 
 void network_server::stop() {
@@ -227,7 +228,7 @@ void network_server::stop() {
     }
 
     if (m_update_timer_handle != looper::empty_handle) {
-        looper::stop_timer(m_update_timer_handle);
+        looper::destroy_timer(m_update_timer_handle);
         m_update_timer_handle = looper::empty_handle;
     }
 
