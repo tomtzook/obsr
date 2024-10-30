@@ -25,6 +25,11 @@ public:
     instance();
     ~instance();
 
+    instance(const instance&) = delete;
+    instance(instance&&) = delete;
+    instance& operator=(const instance&) = delete;
+    instance& operator=(instance&&) = delete;
+
     std::chrono::milliseconds time();
 
     object get_root();
