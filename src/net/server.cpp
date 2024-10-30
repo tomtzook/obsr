@@ -54,6 +54,8 @@ server_client::server_client(client_id id, looper::tcp tcp, const clock_ref& clo
                 return false;
             }
         }
+
+        return true;
     });
 
     auto read_callback = [this](looper::loop loop, looper::tcp tcp, std::span<const uint8_t> buffer, looper::error error)->void {

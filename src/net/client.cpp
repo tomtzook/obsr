@@ -366,6 +366,8 @@ bool network_client::write_new_message(uint8_t type, const uint8_t* buffer, size
             return false;
         }
     }
+
+    return true;
 }
 
 void network_client::close_io() {
