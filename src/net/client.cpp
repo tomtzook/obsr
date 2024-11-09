@@ -26,7 +26,6 @@ network_client::network_client(clock_ref& clock)
     , m_tcp(looper::empty_handle)
     , m_parser()
     , m_message_queue()
-    , m_writing_in_progress(false)
     , m_write_buffer(1024)
     , m_reader(1024) {
     m_message_queue.attach([this](uint8_t type, const uint8_t* buffer, size_t size)->bool {
@@ -149,20 +148,8 @@ void network_client::update() {
             break;
     }
 
-    if (process_out_queue && !m_writing_in_progress) {
+    if (process_out_queue) {
         m_message_queue.process();
-
-        m_writing_in_progress = true;
-        looper::write_tcp(m_tcp, {m_write_buffer.data(), m_write_buffer.pos()}, [this](looper::loop loop, looper::tcp tcp, looper::error error)->void {
-            if (error != 0) {
-                TRACE_ERROR(LOG_MODULE, "write to tcp failed: code=%d", error);
-                close_io();
-                return;
-            }
-
-            m_write_buffer.reset();
-            m_writing_in_progress = false;
-        });
     }
 }
 
@@ -367,6 +354,16 @@ bool network_client::write_new_message(uint8_t type, const uint8_t* buffer, size
             return false;
         }
     }
+
+    looper::write_tcp(m_tcp, {m_write_buffer.data(), m_write_buffer.pos()}, [this](looper::loop loop, looper::tcp tcp, looper::error error)->void {
+        if (error != 0) {
+            TRACE_ERROR(LOG_MODULE, "write to tcp failed: code=%d", error);
+            close_io();
+            return;
+        }
+    });
+
+    m_write_buffer.reset();
 
     return true;
 }

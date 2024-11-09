@@ -23,8 +23,7 @@ server_client::server_client(client_id id, looper::tcp tcp, const clock_ref& clo
     , m_error_cb(std::move(error_cb))
     , m_published_entries()
     , m_queue()
-    , m_write_buffer(1024)
-    , m_writing_in_progress(false) {
+    , m_write_buffer(1024) {
     m_queue.attach([this](uint8_t type, const uint8_t* buffer, size_t size)->bool {
         if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
             TRACE_DEBUG(LOG_MODULE, "write circular_buffer does not have enough space");
@@ -54,6 +53,19 @@ server_client::server_client(client_id id, looper::tcp tcp, const clock_ref& clo
                 return false;
             }
         }
+
+        auto write_callback = [this](looper::loop loop, looper::tcp tcp, looper::error error)->void {
+            TRACE_DEBUG(LOG_MODULE, "write finished for client=%d", m_id);
+
+            if (error != 0) {
+                TRACE_ERROR(LOG_MODULE, "write to tcp failed: code=%d", error);
+                invoke_func_nolock(m_error_cb, m_id);
+                return;
+            }
+        };
+
+        looper::write_tcp(m_tcp, {m_write_buffer.data(), m_write_buffer.pos()}, write_callback);
+        m_write_buffer.reset();
 
         return true;
     });
@@ -98,7 +110,7 @@ void server_client::publish(storage::entry_id id, std::string_view name) {
 }
 
 void server_client::enqueue(const out_message& message, uint8_t flags) {
-    TRACE_DEBUG(LOG_MODULE, "enqueuing message for server client %d", m_id);
+    TRACE_DEBUG(LOG_MODULE, "enqueuing message for server client %d, type=0x%x", m_id, message.type());
     m_queue.enqueue(message, flags);
 }
 
@@ -107,23 +119,7 @@ void server_client::clear() {
 }
 
 void server_client::update() {
-    if (!m_writing_in_progress) {
-        m_queue.process();
-
-        m_writing_in_progress = true;
-        looper::write_tcp(m_tcp, {m_write_buffer.data(), m_write_buffer.pos()}, [this](looper::loop loop, looper::tcp tcp, looper::error error)->void {
-            TRACE_DEBUG(LOG_MODULE, "write finished for client=%d", m_id);
-
-            if (error != 0) {
-                TRACE_ERROR(LOG_MODULE, "write to tcp failed: code=%d", error);
-                invoke_func_nolock(m_error_cb, m_id);
-                return;
-            }
-
-            m_write_buffer.reset();
-            m_writing_in_progress = false;
-        });
-    }
+    m_queue.process();
 }
 
 void server_client::process_new_data() {
@@ -168,7 +164,9 @@ network_server::network_server(clock_ref& clock)
     , m_next_entry_id(0)
     , m_next_client_id(0)
     , m_clients()
-    , m_id_assignments() {
+    , m_id_assignments()
+    , m_update_timer_handle(looper::empty_handle)
+    , m_open_retry_timer() {
 }
 
 void network_server::configure_bind(uint16_t bind_port) {
@@ -369,7 +367,7 @@ void network_server::on_new_message(client_id id, const message_header& header, 
         return;
     }
 
-    TRACE_DEBUG(LOG_MODULE, "received new message from client=%d of m_type=%d", id, type);
+    TRACE_DEBUG(LOG_MODULE, "received new message from client=%d of type=%d", id, type);
 
     auto parse_data = m_parser.data();
     switch (type) {
@@ -496,6 +494,8 @@ void network_server::handle_do_handshake_for_client(client_id id) {
     if (it == m_clients.end()) {
         return;
     }
+
+    TRACE_DEBUG(LOG_MODULE, "starting handshake for client %d", id);
 
     auto& client = it->second;
 

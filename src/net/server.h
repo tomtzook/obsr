@@ -56,7 +56,6 @@ private:
     on_message_cb m_message_cb;
     on_error_cb m_error_cb;
 
-    bool m_writing_in_progress;
     io::linear_buffer m_write_buffer;
     message_queue m_queue;
     std::set<storage::entry_id> m_published_entries;

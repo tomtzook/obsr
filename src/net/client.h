@@ -53,7 +53,6 @@ private:
     reader m_reader;
     message_parser m_parser;
     message_queue m_message_queue;
-    bool m_writing_in_progress;
     io::linear_buffer m_write_buffer;
 
     timer m_connect_retry_timer;
