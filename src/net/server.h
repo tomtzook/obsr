@@ -1,11 +1,10 @@
 #pragma once
 
 #include <set>
-#include <deque>
 
 #include <looper.h>
-#include <looper_tcp.h>
 
+#include "looper_cxx.hpp"
 #include "storage/storage.h"
 #include "net/io.h"
 #include "net/serialize.h"
@@ -27,7 +26,7 @@ public:
         in_use,
     };
 
-    server_client(client_id id, looper::tcp tcp, const clock_ref& clock, on_message_cb&& message_cb, on_error_cb&& error_cb);
+    server_client(client_id id, looper::tcp tcp, const clock_ptr& clock, on_message_cb&& message_cb, on_error_cb&& error_cb);
     ~server_client();
 
     client_id get_id() const;
@@ -48,8 +47,8 @@ private:
     void process_new_data();
 
     client_id m_id;
-    looper::tcp m_tcp;
-    clock_ref m_clock;
+    looper::tcp_holder m_tcp;
+    clock_ptr m_clock;
     state m_state;
 
     reader m_reader;
@@ -61,9 +60,9 @@ private:
     std::set<storage::entry_id> m_published_entries;
 };
 
-class network_server : public network_interface {
+class network_server final : public network_interface {
 public:
-    explicit network_server(clock_ref& clock);
+    explicit network_server(const clock_ptr& clock);
 
     void configure_bind(uint16_t bind_port);
 
@@ -99,13 +98,13 @@ private:
     std::mutex m_mutex;
     state m_state;
 
-    clock_ref m_clock;
+    clock_ptr m_clock;
     std::shared_ptr<storage::storage> m_storage;
     uint16_t m_bind_port;
 
     looper::loop m_loop;
 
-    looper::tcp_server m_tcp;
+    looper::tcp_server_holder m_tcp;
     message_parser m_parser;
 
     client_id m_next_client_id;

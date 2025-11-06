@@ -1,10 +1,6 @@
 #pragma once
 
-#include <memory>
-#include <mutex>
-
 #include <looper.h>
-#include <looper_tcp.h>
 
 #include "io/buffer.h"
 #include "util/state.h"
@@ -34,16 +30,15 @@ enum read_error {
     read_failed = 3
 };
 
-class reader : public state_machine<read_state, read_state::header, read_data> {
+class reader final : public state_machine<read_state, read_state::header, read_data> {
 public:
     explicit reader(size_t buffer_size);
 
     bool update(std::span<const uint8_t> buffer);
 
-protected:
-    bool process_state(read_state current_state, read_data& data) override;
-
 private:
+    bool process_state(read_state current_state, read_data& data);
+
     obsr::io::circular_buffer m_read_buffer;
 };
 

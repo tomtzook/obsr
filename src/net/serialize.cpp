@@ -18,20 +18,131 @@ void header_convert_host(message_header& header) {
     header.message_size = obsr::bits::host32(header.message_size);
 }
 
-message_parser::message_parser()
-    : state_machine()
-    , m_type(static_cast<message_type>(-1))
-    , m_buffer()
-    , m_deserializer(&m_buffer)
+out_message::out_message(const message_type type)
+    : m_type(type)
+    , m_id(0)
+    , m_name()
+    , m_value(value::make())
+    , m_time(0)
+    , m_send_time(0)
 {}
 
-void message_parser::set_data(message_type type, const uint8_t* buffer, size_t size) {
+message_type out_message::type() const {
+    return m_type;
+}
+
+storage::entry_id out_message::id() const {
+    assert(m_type == message_type::entry_create || m_type == message_type::entry_update || m_type == message_type::entry_delete || m_type == message_type::entry_id_assign);
+    return m_id;
+}
+
+std::string_view out_message::name() const {
+    assert(m_type == message_type::entry_create || m_type == message_type::entry_id_assign);
+    return m_name;
+}
+
+const obsr::value& out_message::value() const {
+    assert(m_type == message_type::entry_create || m_type == message_type::entry_update);
+    return m_value;
+}
+
+std::chrono::milliseconds out_message::send_time() const {
+    assert(m_type == message_type::entry_create || m_type == message_type::entry_update || m_type == message_type::entry_delete || m_type == message_type::entry_id_assign || m_type == message_type::time_sync_response || m_type == message_type::time_sync_request);
+    return m_send_time;
+}
+
+std::chrono::milliseconds out_message::time_value() const {
+    assert(m_type == message_type::time_sync_response);
+    return m_time;
+}
+
+out_message out_message::empty() {
+    return out_message();
+}
+
+out_message out_message::entry_create(
+    const std::chrono::milliseconds send_time,
+    const std::string_view name,
+    obsr::value&& value) {
+    out_message message(message_type::entry_create);
+    message.m_send_time = send_time;
+    message.m_name = name;
+    message.m_value = std::move(value);
+
+    return std::move(message);
+}
+
+out_message out_message::entry_update(
+    const std::chrono::milliseconds send_time,
+    const storage::entry_id id,
+    obsr::value&& value) {
+    out_message message(message_type::entry_update);
+    message.m_send_time = send_time;
+    message.m_id = id;
+    message.m_value = std::move(value);
+
+    return std::move(message);
+}
+
+out_message out_message::entry_deleted(
+    const std::chrono::milliseconds send_time,
+    const storage::entry_id id) {
+    out_message message(message_type::entry_delete);
+    message.m_send_time = send_time;
+    message.m_id = id;
+
+    return std::move(message);
+}
+
+out_message out_message::entry_id_assign(
+    const storage::entry_id id,
+    const std::string_view name) {
+    out_message message(message_type::entry_id_assign);
+    message.m_id = id;
+    message.m_name = name;
+
+    return std::move(message);
+}
+
+out_message out_message::handshake_ready() {
+    return out_message(message_type::handshake_ready);
+}
+
+out_message out_message::handshake_finished() {
+    return out_message(message_type::handshake_finished);
+}
+
+out_message out_message::time_sync_request(const std::chrono::milliseconds send_time) {
+    out_message message(message_type::time_sync_request);
+    message.m_send_time = send_time;
+
+    return std::move(message);
+}
+
+out_message out_message::time_sync_response(
+    const std::chrono::milliseconds send_time,
+    const std::chrono::milliseconds time) {
+    out_message message(message_type::time_sync_response);
+    message.m_send_time = send_time;
+    message.m_time = time;
+
+    return std::move(message);
+}
+
+message_parser::message_parser()
+    : state_machine(std::bind_front(&message_parser::process_state, this))
+    , m_type(static_cast<message_type>(-1))
+    , m_buffer()
+    , m_deserializer(m_buffer)
+{}
+
+void message_parser::set_data(const message_type type, const uint8_t* buffer, const size_t size) {
     m_type = type;
     m_buffer.reset(buffer, size);
     reset();
 }
 
-bool message_parser::process_state(parse_state current_state, parse_data& data) {
+bool message_parser::process_state(const parse_state current_state, parse_data& data) {
     switch (current_state) {
         case parse_state::check_type: {
             return select_next_state(current_state);
@@ -96,7 +207,7 @@ bool message_parser::process_state(parse_state current_state, parse_data& data) 
     }
 }
 
-bool message_parser::select_next_state(parse_state current_state) {
+bool message_parser::select_next_state(const parse_state current_state) {
     switch (current_state) {
         case parse_state::check_type: {
             switch (m_type) {
@@ -185,7 +296,7 @@ bool message_parser::select_next_state(parse_state current_state) {
 
 message_serializer::message_serializer()
     : m_buffer(writer_buffer_size)
-    , m_serializer(&m_buffer)
+    , m_serializer(m_buffer)
 {}
 
 const uint8_t* message_serializer::data() const {

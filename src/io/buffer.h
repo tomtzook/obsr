@@ -1,9 +1,7 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
-#include <cstddef>
-
-#include <optional>
 
 namespace obsr::io {
 
@@ -19,7 +17,7 @@ public:
     virtual bool write(const uint8_t* buffer, size_t size) = 0;
 };
 
-class readonly_buffer_view : public readable_buffer {
+class readonly_buffer_view final : public readable_buffer {
 public:
     readonly_buffer_view();
 
@@ -33,16 +31,16 @@ private:
     size_t m_size;
 };
 
-class linear_buffer : public writable_buffer {
+class linear_buffer final : public writable_buffer {
 public:
     explicit linear_buffer(size_t size);
     ~linear_buffer() override;
 
-    const uint8_t* data() const;
-    size_t pos() const;
-    size_t size() const;
+    [[nodiscard]] const uint8_t* data() const;
+    [[nodiscard]] size_t pos() const;
+    [[nodiscard]] size_t size() const;
 
-    bool can_write(size_t size) const;
+    [[nodiscard]] bool can_write(size_t size) const;
 
     void reset();
     bool write(const uint8_t* buffer, size_t size) override;
@@ -53,16 +51,16 @@ private:
     size_t m_size;
 };
 
-class circular_buffer : public readable_buffer, public writable_buffer {
+class circular_buffer final : public readable_buffer, public writable_buffer {
 public:
     explicit circular_buffer(size_t size);
     ~circular_buffer() override;
 
-    size_t read_available() const;
-    size_t write_available() const;
+    [[nodiscard]] size_t read_available() const;
+    [[nodiscard]] size_t write_available() const;
 
-    bool can_read(size_t size) const;
-    bool can_write(size_t size) const;
+    [[nodiscard]] bool can_read(size_t size) const;
+    [[nodiscard]] bool can_write(size_t size) const;
 
     void reset();
 

@@ -6,16 +6,16 @@
 
 namespace obsr::net {
 
-reader::reader(size_t buffer_size)
-    : state_machine()
+reader::reader(const size_t buffer_size)
+    : state_machine(std::bind_front(&reader::process_state, this))
     , m_read_buffer(buffer_size) {
 }
 
-bool reader::update(std::span<const uint8_t> buffer) {
+bool reader::update(const std::span<const uint8_t> buffer) {
     return m_read_buffer.write(buffer.data(), buffer.size_bytes());
 }
 
-bool reader::process_state(read_state current_state, read_data& data) {
+bool reader::process_state(const read_state current_state, read_data& data) {
     switch (current_state) {
         case read_state::header: {
             auto& header = data.header;
@@ -38,7 +38,7 @@ bool reader::process_state(read_state current_state, read_data& data) {
         }
         case read_state::message: {
             const auto& header = data.header;
-            auto buffer = data.message_buffer;
+            const auto buffer = data.message_buffer;
             if (header.message_size > read_data::message_buffer_size) {
                 // we can skip forward by the size, but regardless we will handle it fine because
                 // we jump to the magic

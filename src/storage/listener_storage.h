@@ -8,19 +8,19 @@
 #include <atomic>
 
 #include "obsr_types.h"
-#include "obsr_internal.h"
 #include "util/handles.h"
 
 
 namespace obsr::storage {
 
 struct listener_data {
-    listener_data(listener_callback callback, const std::string_view& prefix,
-                  std::chrono::milliseconds creation_timestamp);
+    listener_data(listener_callback&& callback,
+        const std::string_view& prefix,
+        std::chrono::milliseconds creation_timestamp);
 
-    bool in_path(const std::string_view& path) const;
+    [[nodiscard]] bool in_path(const std::string_view& path) const;
 
-    std::chrono::milliseconds get_creation_timestamp() const;
+    [[nodiscard]] std::chrono::milliseconds get_creation_timestamp() const;
     void set_creation_timestamp(std::chrono::milliseconds creation_timestamp);
 
     void invoke(const event& event) const;
@@ -33,12 +33,12 @@ private:
 
 class listener_storage {
 public:
-    listener_storage(clock_ref  clock);
+    explicit listener_storage(clock_ptr clock);
     ~listener_storage();
 
     void on_clock_resync();
 
-    listener create_listener(const listener_callback& callback, const std::string_view& prefix);
+    listener create_listener(listener_callback&& callback, const std::string_view& prefix);
     void destroy_listener(listener listener);
     void destroy_listeners(const std::string_view& path);
 
@@ -50,7 +50,7 @@ private:
     void notify(const event& event);
     void thread_main();
 
-    clock_ref m_clock;
+    clock_ptr m_clock;
     handle_table<listener_data, 16> m_listeners;
 
     std::atomic<bool> m_thread_loop_run;
@@ -61,6 +61,6 @@ private:
     std::thread m_thread;
 };
 
-using listener_storage_ref = std::shared_ptr<listener_storage>;
+using listener_storage_ptr = std::shared_ptr<listener_storage>;
 
 }

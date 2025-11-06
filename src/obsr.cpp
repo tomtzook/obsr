@@ -4,7 +4,7 @@
 
 namespace obsr {
 
-static inline obsr::instance& global_instance() {
+static obsr::instance& global_instance() {
     static obsr::instance s_instance{};
     return s_instance;
 }
@@ -17,71 +17,71 @@ object get_root() {
     return global_instance().get_root();
 }
 
-object get_object(std::string_view path) {
+object get_object(const std::string_view path) {
     return global_instance().get_object(path);
 }
 
-entry get_entry(std::string_view path) {
+entry get_entry(const std::string_view path) {
     return global_instance().get_entry(path);
 }
 
-object get_child(object obj, std::string_view name) {
+object get_child(const object obj, const std::string_view name) {
     return global_instance().get_child(obj, name);
 }
 
-entry get_entry(object obj, std::string_view name) {
+entry get_entry(const object obj, const std::string_view name) {
     return global_instance().get_entry(obj, name);
 }
 
-object get_parent_for_object(object obj) {
+object get_parent_for_object(const object obj) {
     return global_instance().get_parent_for_object(obj);
 }
 
-object get_parent_for_entry(entry entry) {
+object get_parent_for_entry(const entry entry) {
     return global_instance().get_parent_for_entry(entry);
 }
 
-void delete_object(object obj) {
+void delete_object(const object obj) {
     global_instance().delete_object(obj);
 }
 
-void delete_entry(entry entry) {
+void delete_entry(const entry entry) {
     global_instance().delete_entry(entry);
 }
 
-uint32_t probe(entry entry) {
+uint32_t probe(const entry entry) {
     return global_instance().probe(entry);
 }
 
-obsr::value get_value(entry entry) {
+obsr::value get_value(const entry entry) {
     return global_instance().get_value(entry);
 }
 
-void set_value(entry entry, const obsr::value& value) {
+void set_value(const entry entry, const obsr::value& value) {
     global_instance().set_value(entry, value);
 }
 
-void clear_value(entry entry) {
+void clear_value(const entry entry) {
     global_instance().clear_value(entry);
 }
 
-listener listen_object(object obj, const listener_callback&& callback) {
-    return global_instance().listen_object(obj, callback);
+listener listen_object(const object obj, listener_callback&& callback) {
+    return global_instance().listen_object(obj, std::move(callback));
 }
 
-listener listen_entry(entry entry, const listener_callback&& callback) {
-    return global_instance().listen_entry(entry, callback);
+listener listen_entry(const entry entry, listener_callback&& callback) {
+    return global_instance().listen_entry(entry, std::move(callback));
 }
 
-void delete_listener(listener listener) {
+void delete_listener(const listener listener) {
     global_instance().delete_listener(listener);
 }
 
-void start_server(uint16_t bind_port) {
+void start_server(const uint16_t bind_port) {
     global_instance().start_server(bind_port);
 }
 
-void start_client(std::string_view address, uint16_t server_port) {
+void start_client(const std::string_view address, const uint16_t server_port) {
     global_instance().start_client(address, server_port);
 }
 

@@ -12,13 +12,13 @@ readonly_buffer_view::readonly_buffer_view()
     , m_size(0)
 {}
 
-void readonly_buffer_view::reset(const uint8_t* buffer, size_t size) {
+void readonly_buffer_view::reset(const uint8_t* buffer, const size_t size) {
     m_buffer = buffer;
     m_read_pos = 0;
     m_size = size;
 }
 
-bool readonly_buffer_view::read(uint8_t* buffer, size_t size) {
+bool readonly_buffer_view::read(uint8_t* buffer, const size_t size) {
     const auto space_to_max = (m_size - m_read_pos);
     if (size > space_to_max) {
         return false;
@@ -30,7 +30,7 @@ bool readonly_buffer_view::read(uint8_t* buffer, size_t size) {
     return true;
 }
 
-linear_buffer::linear_buffer(size_t size)
+linear_buffer::linear_buffer(const size_t size)
     : m_buffer(new uint8_t[size])
     , m_write_pos(0)
     , m_size(size)
@@ -52,7 +52,7 @@ size_t linear_buffer::size() const {
     return m_size;
 }
 
-bool linear_buffer::can_write(size_t size) const {
+bool linear_buffer::can_write(const size_t size) const {
     return (m_size - m_write_pos) >= size;
 }
 
@@ -60,7 +60,7 @@ void linear_buffer::reset() {
     m_write_pos = 0;
 }
 
-bool linear_buffer::write(const uint8_t* buffer, size_t size) {
+bool linear_buffer::write(const uint8_t* buffer, const size_t size) {
     const auto space_to_max = (m_size - m_write_pos);
     if (size > space_to_max) {
         return false;
@@ -73,7 +73,7 @@ bool linear_buffer::write(const uint8_t* buffer, size_t size) {
 }
 
 
-circular_buffer::circular_buffer(size_t size)
+circular_buffer::circular_buffer(const size_t size)
     : m_buffer(new uint8_t[size])
     , m_read_pos(0)
     , m_write_pos(0)
@@ -103,12 +103,12 @@ size_t circular_buffer::write_available() const {
     }
 }
 
-bool circular_buffer::can_read(size_t size) const {
+bool circular_buffer::can_read(const size_t size) const {
     const auto available = read_available();
     return available >= size;
 }
 
-bool circular_buffer::can_write(size_t size) const {
+auto circular_buffer::can_write(size_t size) const -> bool {
     const auto available = write_available();
     return available >= size;
 }
@@ -118,7 +118,7 @@ void circular_buffer::reset() {
     m_write_pos = 0;
 }
 
-bool circular_buffer::find_and_seek_read(uint8_t byte) {
+bool circular_buffer::find_and_seek_read(const uint8_t byte) {
     if (m_write_pos < m_read_pos) {
         const auto space_to_max = (m_size - m_read_pos);
         auto ptr = ::memchr(m_buffer + m_read_pos, byte, space_to_max);
@@ -172,7 +172,7 @@ void circular_buffer::seek_read(size_t offset) {
     m_read_pos %= m_size;
 }
 
-bool circular_buffer::read(uint8_t* buffer, size_t size) {
+bool circular_buffer::read(uint8_t* buffer, const size_t size) {
     if (size > m_size) {
         return false;
     }
@@ -204,7 +204,7 @@ bool circular_buffer::read(uint8_t* buffer, size_t size) {
     return true;
 }
 
-bool circular_buffer::write(const uint8_t* buffer, size_t size) {
+bool circular_buffer::write(const uint8_t* buffer, const size_t size) {
     if (size > m_size) {
         return false;
     }

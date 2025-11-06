@@ -1,13 +1,11 @@
 #pragma once
 
 #include <map>
-#include <vector>
 #include <string>
 #include <mutex>
 #include <optional>
 
 #include "obsr_types.h"
-#include "obsr_internal.h"
 #include "util/handles.h"
 #include "util/time.h"
 #include "listener_storage.h"
@@ -29,32 +27,26 @@ enum entry_internal_flag : uint16_t {
 struct storage_entry {
     storage_entry(entry handle, const std::string_view& path);
 
-    bool is_in(const std::string_view& path) const;
-    std::string_view get_path() const;
+    [[nodiscard]] bool is_in(const std::string_view& path) const;
+    [[nodiscard]] std::string_view get_path() const;
 
-    entry_id get_net_id() const;
+    [[nodiscard]] entry_id get_net_id() const;
     void set_net_id(entry_id id);
     void clear_net_id();
 
-    uint16_t get_flags() const;
-    bool has_flags(uint16_t flags) const;
+    [[nodiscard]] uint16_t get_flags() const;
+    [[nodiscard]] bool has_flags(uint16_t flags) const;
     void add_flags(uint16_t flags);
     void remove_flags(uint16_t flags);
 
-    inline bool is_dirty() const {
-        return has_flags(flag_internal_dirty);
-    }
-    inline void mark_dirty() {
-        add_flags(flag_internal_dirty);
-    }
-    void clear_dirty() {
-        remove_flags(flag_internal_dirty);
-    }
+    [[nodiscard]] bool is_dirty() const;
+    void mark_dirty();
+    void clear_dirty();
 
-    std::chrono::milliseconds get_last_update_timestamp() const;
+    [[nodiscard]] std::chrono::milliseconds get_last_update_timestamp() const;
     void set_last_update_timestamp(std::chrono::milliseconds timestamp);
 
-    const value& get_value() const;
+    [[nodiscard]] const value& get_value() const;
     value set_value(const value& value);
     value clear();
 
@@ -72,7 +64,7 @@ class storage {
 public:
     using entry_action = std::function<bool(const storage_entry&)>;
 
-    explicit storage(listener_storage_ref& listener_storage, const clock_ref& clock);
+    explicit storage(listener_storage_ptr  listener_storage, clock_ptr  clock);
 
     entry get_or_create_entry(const std::string_view& path);
     void delete_entry(entry entry);
@@ -87,8 +79,8 @@ public:
     void act_on_dirty_entries(const entry_action& action);
     void clear_net_ids();
 
-    listener listen(entry entry, const listener_callback& callback);
-    listener listen(const std::string_view& prefix, const listener_callback& callback);
+    listener listen(entry entry, listener_callback&& callback);
+    listener listen(const std::string_view& prefix, listener_callback&& callback);
     void remove_listener(listener listener);
 
     // should be used from network code
@@ -120,8 +112,8 @@ private:
                                bool mark_dirty = true,
                                std::chrono::milliseconds timestamp = std::chrono::milliseconds(0));
 
-    listener_storage_ref m_listener_storage;
-    clock_ref m_clock;
+    listener_storage_ptr m_listener_storage;
+    clock_ptr m_clock;
 
     std::recursive_mutex m_mutex; // todo: switch to regular
     handle_table<storage_entry, 256> m_entries;

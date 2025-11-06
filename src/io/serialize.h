@@ -1,8 +1,5 @@
 #pragma once
 
-#include <ostream>
-#include <string>
-
 #include "obsr_types.h"
 #include "buffer.h"
 
@@ -10,7 +7,7 @@ namespace obsr::io {
 
 class deserializer {
 public:
-    explicit deserializer(readable_buffer* buffer);
+    explicit deserializer(readable_buffer& buffer);
 
     std::optional<uint8_t> read8();
     std::optional<uint16_t> read16();
@@ -30,14 +27,14 @@ public:
 private:
     void expand_buffer(size_t size);
 
-    readable_buffer* m_buffer;
+    readable_buffer& m_buffer;
     std::unique_ptr<uint8_t> m_data;
     size_t m_data_size;
 };
 
 class serializer {
 public:
-    explicit serializer(writable_buffer* buffer);
+    explicit serializer(writable_buffer& buffer);
 
     bool write8(uint8_t value);
     bool write16(uint16_t value);
@@ -55,7 +52,7 @@ public:
     bool write_value(const value& value);
 
 private:
-    writable_buffer* m_buffer;
+    writable_buffer& m_buffer;
 };
 
 }

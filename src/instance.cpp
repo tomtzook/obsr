@@ -231,26 +231,26 @@ void instance::clear_value(entry entry) {
     m_storage->clear_entry(entry);
 }
 
-listener instance::listen_object(object obj, const listener_callback& callback) {
+listener instance::listen_object(const object obj, listener_callback&& callback) {
     std::unique_lock guard(m_mutex);
 
     auto data = m_objects[obj];
-    return m_storage->listen(data->path, callback);
+    return m_storage->listen(data->path, std::move(callback));
 }
 
-listener instance::listen_entry(entry entry, const listener_callback& callback) {
+listener instance::listen_entry(const entry entry, listener_callback&& callback) {
     std::unique_lock guard(m_mutex);
 
-    return m_storage->listen(entry, callback);
+    return m_storage->listen(entry, std::move(callback));
 }
 
-void instance::delete_listener(listener listener) {
+void instance::delete_listener(const listener listener) {
     std::unique_lock guard(m_mutex);
 
     m_storage->remove_listener(listener);
 }
 
-void instance::start_server(uint16_t bind_port) {
+void instance::start_server(const uint16_t bind_port) {
     std::unique_lock guard(m_mutex);
 
     if (m_net_interface) {
@@ -270,7 +270,7 @@ void instance::start_server(uint16_t bind_port) {
     m_net_interface = network_server;
 }
 
-void instance::start_client(std::string_view address, uint16_t server_port) {
+void instance::start_client(const std::string_view address, const uint16_t server_port) {
     std::unique_lock guard(m_mutex);
 
     if (m_net_interface) {

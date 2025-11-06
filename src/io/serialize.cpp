@@ -8,7 +8,7 @@ namespace obsr::io {
 
 #define LOG_MODULE "serialization"
 
-static bool is_within_size_limits(size_t size) {
+static bool is_within_size_limits(const size_t size) {
     if (size >= UINT8_MAX) {
         TRACE_ERROR(LOG_MODULE, "requested buffer/array too big: %lu", size);
         return false;
@@ -18,9 +18,9 @@ static bool is_within_size_limits(size_t size) {
 }
 
 template<typename t_>
-bool read(readable_buffer* buf, t_& value_out) {
+bool read(readable_buffer& buf, t_& value_out) {
     t_ value;
-    bool res = buf->read(reinterpret_cast<uint8_t*>(&value), sizeof(t_));
+    const auto res = buf.read(reinterpret_cast<uint8_t*>(&value), sizeof(t_));
     if (!res) {
         return false;
     }
@@ -30,11 +30,11 @@ bool read(readable_buffer* buf, t_& value_out) {
 }
 
 template<typename t_>
-bool write(writable_buffer* buf, const t_& value) {
-    return buf->write(reinterpret_cast<const uint8_t*>(&value), sizeof(t_));
+bool write(writable_buffer& buf, const t_& value) {
+    return buf.write(reinterpret_cast<const uint8_t*>(&value), sizeof(t_));
 }
 
-deserializer::deserializer(readable_buffer* buffer)
+deserializer::deserializer(readable_buffer& buffer)
     : m_buffer(buffer)
     , m_data()
     , m_data_size(0)
@@ -120,7 +120,7 @@ std::optional<std::span<uint8_t>> deserializer::read_raw() {
     const auto size = size_opt.value();
     expand_buffer(size);
 
-    if (!m_buffer->read(m_data.get(), size)) {
+    if (!m_buffer.read(m_data.get(), size)) {
         return {};
     }
 
@@ -327,7 +327,7 @@ std::optional<obsr::value> deserializer::read_value(value_type type) {
     }
 }
 
-void deserializer::expand_buffer(size_t size) {
+void deserializer::expand_buffer(const size_t size) {
     if (m_data && m_data_size >= size) {
         return;
     }
@@ -336,7 +336,7 @@ void deserializer::expand_buffer(size_t size) {
     m_data_size = size;
 }
 
-serializer::serializer(writable_buffer* buffer)
+serializer::serializer(writable_buffer& buffer)
     : m_buffer(buffer)
 {}
 
@@ -359,7 +359,7 @@ bool serializer::write64(uint64_t value) {
     return write(m_buffer, value);
 }
 
-bool serializer::writef32(float value) {
+bool serializer::writef32(const float value) {
     union {
         float f;
         uint32_t i;
@@ -369,7 +369,7 @@ bool serializer::writef32(float value) {
     return write32(mem.i);
 }
 
-bool serializer::writef64(double value) {
+bool serializer::writef64(const double value) {
     union {
         double d;
         uint64_t i;
@@ -379,7 +379,7 @@ bool serializer::writef64(double value) {
     return write64(mem.i);
 }
 
-bool serializer::write_size(size_t value) {
+bool serializer::write_size(const size_t value) {
     if (!is_within_size_limits(value)) {
         return false;
     }
@@ -387,24 +387,24 @@ bool serializer::write_size(size_t value) {
     return write8(value);
 }
 
-bool serializer::write_raw(const uint8_t* ptr, size_t size) {
+bool serializer::write_raw(const uint8_t* ptr, const size_t size) {
     if (!write_size(size)) {
         return false;
     }
 
-    return m_buffer->write(ptr, size);
+    return m_buffer.write(ptr, size);
 }
 
-bool serializer::write_str(std::string_view str) {
+bool serializer::write_str(const std::string_view str) {
     return write_raw(reinterpret_cast<const uint8_t*>(str.data()), str.size());
 }
 
-bool serializer::write_arr_i32(std::span<const int32_t> arr) {
+bool serializer::write_arr_i32(const std::span<const int32_t> arr) {
     if (!write_size(arr.size())) {
         return false;
     }
 
-    for (auto value : arr) {
+    for (const auto value : arr) {
         if (!write32(static_cast<uint32_t>(value))) {
             return false;
         }
@@ -413,12 +413,12 @@ bool serializer::write_arr_i32(std::span<const int32_t> arr) {
     return true;
 }
 
-bool serializer::write_arr_i64(std::span<const int64_t> arr) {
+bool serializer::write_arr_i64(const std::span<const int64_t> arr) {
     if (!write_size(arr.size())) {
         return false;
     }
 
-    for (auto value : arr) {
+    for (const auto value : arr) {
         if (!write64(static_cast<uint64_t>(value))) {
             return false;
         }
@@ -427,12 +427,12 @@ bool serializer::write_arr_i64(std::span<const int64_t> arr) {
     return true;
 }
 
-bool serializer::write_arr_f32(std::span<const float> arr) {
+bool serializer::write_arr_f32(const std::span<const float> arr) {
     if (!write_size(arr.size())) {
         return false;
     }
 
-    for (auto value : arr) {
+    for (const auto value : arr) {
         if (!writef32(value)) {
             return false;
         }
@@ -441,12 +441,12 @@ bool serializer::write_arr_f32(std::span<const float> arr) {
     return true;
 }
 
-bool serializer::write_arr_f64(std::span<const double> arr) {
+bool serializer::write_arr_f64(const std::span<const double> arr) {
     if (!write_size(arr.size())) {
         return false;
     }
 
-    for (auto value : arr) {
+    for (const auto value : arr) {
         if (!writef64(value)) {
             return false;
         }
@@ -458,11 +458,11 @@ bool serializer::write_arr_f64(std::span<const double> arr) {
 bool serializer::write_value(const value& value) {
     switch (value.get_type()) {
         case value_type::raw: {
-            auto arr = value.get_raw();
+            const auto arr = value.get_raw();
             return write_raw(arr.data(), arr.size_bytes());
         }
         case value_type::string: {
-            auto str = value.get_string();
+            const auto str = value.get_string();
             return write_str(str);
         }
         case value_type::boolean: {
@@ -481,19 +481,19 @@ bool serializer::write_value(const value& value) {
             return writef64(value.get_double());
         }
         case value_type::integer32_array: {
-            auto arr = value.get_int32_array();
+            const auto arr = value.get_int32_array();
             return write_arr_i32(arr);
         }
         case value_type::integer64_array: {
-            auto arr = value.get_int64_array();
+            const auto arr = value.get_int64_array();
             return write_arr_i64(arr);
         }
         case value_type::floating_point32_array: {
-            auto arr = value.get_float_array();
+            const auto arr = value.get_float_array();
             return write_arr_f32(arr);
         }
         case value_type::floating_point64_array: {
-            auto arr = value.get_double_array();
+            const auto arr = value.get_double_array();
             return write_arr_f64(arr);
         }
         case value_type::empty:

@@ -13,7 +13,12 @@ namespace obsr::net::server {
 static constexpr auto open_retry_time = std::chrono::milliseconds(1000);
 static constexpr auto update_time = std::chrono::milliseconds(200);
 
-server_client::server_client(client_id id, looper::tcp tcp, const clock_ref& clock, on_message_cb&& message_cb, on_error_cb&& error_cb)
+server_client::server_client(
+    const client_id id,
+    looper::tcp tcp,
+    const clock_ptr& clock,
+    on_message_cb&& message_cb,
+    on_error_cb&& error_cb)
     : m_id(id)
     , m_tcp(tcp)
     , m_clock(clock)
@@ -21,10 +26,10 @@ server_client::server_client(client_id id, looper::tcp tcp, const clock_ref& clo
     , m_reader(1024)
     , m_message_cb(std::move(message_cb))
     , m_error_cb(std::move(error_cb))
-    , m_published_entries()
+    , m_write_buffer(1024)
     , m_queue()
-    , m_write_buffer(1024) {
-    m_queue.attach([this](uint8_t type, const uint8_t* buffer, size_t size)->bool {
+    , m_published_entries() {
+    m_queue.attach([this](const uint8_t type, const uint8_t* buffer, const size_t size)->bool {
         if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
             TRACE_DEBUG(LOG_MODULE, "write circular_buffer does not have enough space");
             return false;
@@ -54,7 +59,7 @@ server_client::server_client(client_id id, looper::tcp tcp, const clock_ref& clo
             }
         }
 
-        auto write_callback = [this](looper::loop loop, looper::tcp tcp, looper::error error)->void {
+        auto write_callback = [this](looper::tcp, const looper::error error)->void {
             TRACE_DEBUG(LOG_MODULE, "write finished for client=%d", m_id);
 
             if (error != 0) {
@@ -70,7 +75,7 @@ server_client::server_client(client_id id, looper::tcp tcp, const clock_ref& clo
         return true;
     });
 
-    auto read_callback = [this](looper::loop loop, looper::tcp tcp, std::span<const uint8_t> buffer, looper::error error)->void {
+    auto read_callback = [this](looper::tcp, const std::span<const uint8_t> buffer, const looper::error error)->void {
         if (error != 0) {
             invoke_func_nolock(m_error_cb, m_id);
             return;
@@ -98,18 +103,18 @@ void server_client::set_state(state state) {
     m_state = state;
 }
 
-bool server_client::is_known(storage::entry_id id) const {
-    return m_published_entries.find(id) != m_published_entries.end();
+bool server_client::is_known(const storage::entry_id id) const {
+    return m_published_entries.contains(id);
 }
 
-void server_client::publish(storage::entry_id id, std::string_view name) {
+void server_client::publish(const storage::entry_id id, const std::string_view name) {
     TRACE_DEBUG(LOG_MODULE, "publishing entry for server client %d, entry=%d", m_id, id);
     enqueue(out_message::entry_id_assign(id, name));
 
     m_published_entries.insert(id);
 }
 
-void server_client::enqueue(const out_message& message, uint8_t flags) {
+void server_client::enqueue(const out_message& message, const uint8_t flags) {
     TRACE_DEBUG(LOG_MODULE, "enqueuing message for server client %d, type=0x%x", m_id, message.type());
     m_queue.enqueue(message, flags);
 }
@@ -152,7 +157,7 @@ void server_client::process_new_data() {
     } while (run);
 }
 
-network_server::network_server(clock_ref& clock)
+network_server::network_server(const clock_ptr& clock)
     : m_mutex()
     , m_state(state::idle)
     , m_clock(clock)
@@ -161,15 +166,15 @@ network_server::network_server(clock_ref& clock)
     , m_loop(looper::empty_handle)
     , m_tcp(looper::empty_handle)
     , m_parser()
-    , m_next_entry_id(0)
     , m_next_client_id(0)
+    , m_next_entry_id(0)
     , m_clients()
     , m_id_assignments()
     , m_update_timer_handle(looper::empty_handle)
     , m_open_retry_timer() {
 }
 
-void network_server::configure_bind(uint16_t bind_port) {
+void network_server::configure_bind(const uint16_t bind_port) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
@@ -179,7 +184,7 @@ void network_server::configure_bind(uint16_t bind_port) {
     m_bind_port = bind_port;
 }
 
-void network_server::attach_storage(std::shared_ptr<storage::storage> storage) {
+void network_server::attach_storage(const std::shared_ptr<storage::storage> storage) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
@@ -189,7 +194,7 @@ void network_server::attach_storage(std::shared_ptr<storage::storage> storage) {
     m_storage = storage;
 }
 
-void network_server::start(looper::loop loop) {
+void network_server::start(const looper::loop loop) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
@@ -212,7 +217,7 @@ void network_server::start(looper::loop loop) {
 
     m_state = state::opening;
 
-    auto update_callback = [this](looper::loop loop, looper::timer timer)->void {
+    auto update_callback = [this](const looper::timer timer)->void {
         update();
         looper::reset_timer(timer);
     };
@@ -271,17 +276,22 @@ bool network_server::do_open() {
     try {
         m_tcp = looper::create_tcp_server(m_loop);
         looper::bind_tcp_server(m_tcp, m_bind_port);
-        looper::listen_tcp(m_tcp, 5, [this](looper::loop loop, looper::tcp_server server)->void {
+        looper::listen_tcp(m_tcp, 5, [this](const looper::tcp_server server)->void {
             std::unique_lock lock(m_mutex);
 
-            auto message_cb = [this](client_id id, const message_header& header, const uint8_t* buffer, size_t size)->void {
-                std::unique_lock lock(m_mutex);
+            auto message_cb = [this](
+                const client_id id,
+                const message_header& header,
+                const uint8_t* buffer,
+                const size_t size)->void {
+                std::unique_lock lock_cb1(m_mutex);
                 on_new_message(id, header, buffer, size);
             };
-            auto error_cb = [this](client_id id)->void {
-                std::unique_lock lock(m_mutex);
 
-                auto it = m_clients.find(id);
+            auto error_cb = [this](const client_id id)->void {
+                std::unique_lock lock_cb1(m_mutex);
+
+                const auto it = m_clients.find(id);
                 if (it != m_clients.end()) {
                     m_clients.erase(it);
                 }
@@ -294,7 +304,7 @@ bool network_server::do_open() {
                 auto client_u = std::make_unique<server_client>(id, tcp, m_clock, message_cb, error_cb);
                 auto [it, _] = m_clients.emplace(id, std::move(client_u));
 
-                auto& client = it->second;
+                const auto& client = it->second;
                 client->set_state(server_client::state::in_handshake);
             } catch (const std::exception& e) {
                 TRACE_ERROR(LOG_MODULE, "error accepting new client");
@@ -453,7 +463,7 @@ storage::entry_id network_server::assign_id_to_entry(std::string_view name) {
     return id;
 }
 
-void network_server::enqueue_message_for_clients(const out_message& message, client_id id_to_skip) {
+void network_server::enqueue_message_for_clients(const out_message& message, const client_id id_to_skip) {
     for (auto& [id, client] : m_clients) {
         if (id == id_to_skip) {
             continue;
@@ -463,8 +473,11 @@ void network_server::enqueue_message_for_clients(const out_message& message, cli
     }
 }
 
-void network_server::enqueue_message_for_client(client_id id, const out_message& message, uint8_t flags) {
-    auto it = m_clients.find(id);
+void network_server::enqueue_message_for_client(
+    const client_id id,
+    const out_message& message,
+    const uint8_t flags) {
+    const auto it = m_clients.find(id);
     if (it == m_clients.end()) {
         return;
     }
@@ -473,11 +486,11 @@ void network_server::enqueue_message_for_client(client_id id, const out_message&
 }
 
 void network_server::publish_and_update_entry_for_clients(
-        storage::entry_id entry_id,
+        const storage::entry_id entry_id,
         const std::string& name,
         obsr::value&& value,
-        std::chrono::milliseconds value_time,
-        client_id id_to_skip) {
+        const std::chrono::milliseconds value_time,
+        const client_id id_to_skip) {
     const auto message = out_message::entry_update(value_time, entry_id, std::move(value));
     for (auto& [id, client] : m_clients) {
         if (id == id_to_skip) {
@@ -489,15 +502,15 @@ void network_server::publish_and_update_entry_for_clients(
     }
 }
 
-void network_server::handle_do_handshake_for_client(client_id id) {
-    auto it = m_clients.find(id);
+void network_server::handle_do_handshake_for_client(const client_id id) {
+    const auto it = m_clients.find(id);
     if (it == m_clients.end()) {
         return;
     }
 
     TRACE_DEBUG(LOG_MODULE, "starting handshake for client %d", id);
 
-    auto& client = it->second;
+    const auto& client = it->second;
 
     const auto now = m_clock->now();
     for (auto& [entry_id, name] : m_id_assignments) {
@@ -524,10 +537,7 @@ void network_server::close_io() {
     m_clients.clear();
     m_state = state::opening;
 
-    if (m_tcp != looper::empty_handle) {
-        looper::destroy_tcp_server(m_tcp);
-        m_tcp = looper::empty_handle;
-    }
+    m_tcp.reset();
 }
 
 }

@@ -15,20 +15,20 @@ static constexpr auto connect_retry_time = std::chrono::milliseconds(1000);
 static constexpr auto server_sync_time = std::chrono::milliseconds(1000);
 static constexpr auto update_time = std::chrono::milliseconds(200);
 
-network_client::network_client(clock_ref& clock)
+network_client::network_client(const clock_ptr& clock)
     : m_mutex()
     , m_state(state::idle)
-    , m_storage(nullptr)
     , m_clock(clock)
+    , m_storage(nullptr)
     , m_conn_info({"", 0})
     , m_loop(looper::empty_handle)
-    , m_update_timer_handle(looper::empty_handle)
-    , m_tcp(looper::empty_handle)
+    , m_tcp()
+    , m_update_timer_handle()
+    , m_reader(1024)
     , m_parser()
     , m_message_queue()
-    , m_write_buffer(1024)
-    , m_reader(1024) {
-    m_message_queue.attach([this](uint8_t type, const uint8_t* buffer, size_t size)->bool {
+    , m_write_buffer(1024) {
+    m_message_queue.attach([this](const uint8_t type, const uint8_t* buffer, const size_t size)->bool {
         return write_new_message(type, buffer, size);
     });
 }
@@ -53,7 +53,7 @@ void network_client::attach_storage(std::shared_ptr<storage::storage> storage) {
     m_storage = std::move(storage);
 }
 
-void network_client::start(looper::loop loop) {
+void network_client::start(const looper::loop loop) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
@@ -77,13 +77,13 @@ void network_client::start(looper::loop loop) {
 
     m_state = state::opening;
 
-    auto update_callback = [this](looper::loop loop, looper::timer timer)->void {
-        std::lock_guard lock(m_mutex);
+    auto update_callback = [this](const looper::timer timer)->void {
+        std::lock_guard lock_cb(m_mutex);
 
         update();
         looper::reset_timer(timer);
     };
-    m_update_timer_handle = looper::create_timer(m_loop, update_time, update_callback);
+    m_update_timer_handle = looper::make_timer(m_loop, update_time, update_callback);
     looper::start_timer(m_update_timer_handle);
 }
 
@@ -94,11 +94,7 @@ void network_client::stop() {
         throw illegal_state_exception("not running");
     }
 
-    if (m_update_timer_handle != looper::empty_handle) {
-        looper::stop_timer(m_update_timer_handle);
-        m_update_timer_handle = looper::empty_handle;
-    }
-
+    m_update_timer_handle.reset();
     close_io();
 
     m_state = state::idle;
@@ -156,8 +152,8 @@ void network_client::update() {
 bool network_client::do_open_and_connect() {
     try {
         m_tcp = looper::create_tcp(m_loop);
-        looper::connect_tcp(m_tcp, m_conn_info.ip, m_conn_info.port, [this](looper::loop loop, looper::tcp tcp, looper::error error)->void {
-            std::unique_lock lock(m_mutex);
+        looper::connect_tcp(m_tcp, m_conn_info.ip, m_conn_info.port, [this](looper::tcp, const looper::error error)->void {
+            std::unique_lock lock_cb1(m_mutex);
 
             if (error != 0) {
                 TRACE_ERROR(LOG_MODULE, "error while connecting client: code=%d", error);
@@ -172,8 +168,8 @@ bool network_client::do_open_and_connect() {
             m_message_queue.enqueue(out_message::time_sync_request(now), message_queue::flag_immediate);
             m_state = state::in_handshake_time_sync;
 
-            auto read_callback = [this](looper::loop loop, looper::tcp tcp, std::span<const uint8_t> buffer, looper::error error)->void {
-                std::unique_lock lock(m_mutex);
+            auto read_callback = [this](looper::tcp, const std::span<const uint8_t> buffer, const looper::error error)->void {
+                std::unique_lock lock_cb2(m_mutex);
 
                 if (error != 0) {
                     TRACE_ERROR(LOG_MODULE, "error while reading client: code=%d", error);
@@ -256,20 +252,21 @@ void network_client::process_new_data() {
     } while (run);
 }
 
-void network_client::on_new_message(const message_header& header, const uint8_t* buffer, size_t size) {
-    auto type = static_cast<message_type>(header.type);
+void network_client::on_new_message(const message_header& header, const uint8_t* buffer, const size_t size) {
+    const auto type = static_cast<message_type>(header.type);
     m_parser.set_data(type, buffer, size);
     m_parser.process();
 
     if (m_parser.is_errored()) {
         TRACE_ERROR(LOG_MODULE, "failed to parse incoming data, parser error=%d", m_parser.error_code());
         return;
-    } else if (!m_parser.is_finished()) {
+    }
+    if (!m_parser.is_finished()) {
         TRACE_ERROR(LOG_MODULE, "failed to parse incoming data, parser did not finish");
         return;
     }
 
-    auto parse_data = m_parser.data();
+    const auto parse_data = m_parser.data();
     switch (type) {
         case message_type::entry_update:
             TRACE_DEBUG(LOG_MODULE, "ENTRY UPDATE from server: id=%d", parse_data.id);
@@ -325,7 +322,7 @@ void network_client::on_new_message(const message_header& header, const uint8_t*
     }
 }
 
-bool network_client::write_new_message(uint8_t type, const uint8_t* buffer, size_t size) {
+bool network_client::write_new_message(const uint8_t type, const uint8_t* buffer, const size_t size) {
     if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
         TRACE_DEBUG(LOG_MODULE, "write circular_buffer does not have enough space");
         return false;
@@ -355,7 +352,7 @@ bool network_client::write_new_message(uint8_t type, const uint8_t* buffer, size
         }
     }
 
-    looper::write_tcp(m_tcp, {m_write_buffer.data(), m_write_buffer.pos()}, [this](looper::loop loop, looper::tcp tcp, looper::error error)->void {
+    looper::write_tcp(m_tcp, {m_write_buffer.data(), m_write_buffer.pos()}, [this](looper::tcp, const looper::error error)->void {
         if (error != 0) {
             TRACE_ERROR(LOG_MODULE, "write to tcp failed: code=%d", error);
             close_io();
@@ -369,15 +366,8 @@ bool network_client::write_new_message(uint8_t type, const uint8_t* buffer, size
 }
 
 void network_client::close_io() {
-    if (m_update_timer_handle != looper::empty_handle) {
-        looper::destroy_timer(m_update_timer_handle);
-        m_update_timer_handle = looper::empty_handle;
-    }
-
-    if (m_tcp != looper::empty_handle) {
-        looper::destroy_tcp(m_tcp);
-        m_tcp = looper::empty_handle;
-    }
+    m_update_timer_handle.reset();
+    m_tcp.reset();
 
     m_connect_retry_timer.stop();
     m_clock_sync_timer.stop();

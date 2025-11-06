@@ -56,8 +56,8 @@ public:
     void set_value(entry entry, const obsr::value& value);
     void clear_value(entry entry);
 
-    listener listen_object(object obj, const listener_callback& callback);
-    listener listen_entry(entry entry, const listener_callback& callback);
+    listener listen_object(object obj, listener_callback&& callback);
+    listener listen_entry(entry entry, listener_callback&& callback);
     void delete_listener(listener listener);
 
     void start_server(uint16_t bind_port);
@@ -72,8 +72,8 @@ private:
     object get_or_create_object(std::string_view path);
 
     std::mutex m_mutex;
-    clock_ref m_clock;
-    storage::listener_storage_ref m_listener_storage;
+    clock_ptr m_clock;
+    storage::listener_storage_ptr m_listener_storage;
     std::shared_ptr<storage::storage> m_storage;
 
     looper::loop m_loop;

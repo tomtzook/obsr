@@ -9,8 +9,8 @@ namespace obsr::storage {
 
 #define LOG_MODULE "listener_storage"
 
-listener_data::listener_data(listener_callback callback, const std::string_view& prefix,
-                             std::chrono::milliseconds creation_timestamp)
+listener_data::listener_data(listener_callback&& callback, const std::string_view& prefix,
+                             const std::chrono::milliseconds creation_timestamp)
     : m_callback(std::move(callback))
     , m_prefix(prefix)
     , m_creation_timestamp(creation_timestamp) {
@@ -24,7 +24,7 @@ std::chrono::milliseconds listener_data::get_creation_timestamp() const {
     return m_creation_timestamp;
 }
 
-void listener_data::set_creation_timestamp(std::chrono::milliseconds creation_timestamp) {
+void listener_data::set_creation_timestamp(const std::chrono::milliseconds creation_timestamp) {
     m_creation_timestamp = creation_timestamp;
 }
 
@@ -39,7 +39,7 @@ void listener_data::invoke(const event& event) const {
     m_callback(event);
 }
 
-listener_storage::listener_storage(clock_ref  clock)
+listener_storage::listener_storage(clock_ptr  clock)
     : m_clock(std::move(clock))
     , m_listeners()
     , m_thread_loop_run(true)
@@ -72,13 +72,13 @@ void listener_storage::on_clock_resync() {
     }
 }
 
-listener listener_storage::create_listener(const listener_callback& callback, const std::string_view& prefix) {
+listener listener_storage::create_listener(listener_callback&& callback, const std::string_view& prefix) {
     std::unique_lock guard(m_mutex);
 
-    return m_listeners.allocate_new(callback, prefix, m_clock->now());
+    return m_listeners.allocate_new(std::move(callback), prefix, m_clock->now());
 }
 
-void listener_storage::destroy_listener(listener listener) {
+void listener_storage::destroy_listener(const listener listener) {
     std::unique_lock guard(m_mutex);
 
     m_listeners.release(listener);
@@ -94,19 +94,26 @@ void listener_storage::destroy_listeners(const std::string_view& path) {
         }
     }
 
-    for (auto handle : handles) {
+    for (const auto handle : handles) {
         m_listeners.release(handle);
     }
 }
 
-void listener_storage::notify(event_type type, const std::string_view& path, obsr::entry entry) {
-    obsr::event event(m_clock->now(), type, path, entry);
+void listener_storage::notify(
+    const event_type type,
+    const std::string_view& path,
+    const obsr::entry entry) {
+    const obsr::event event(m_clock->now(), type, path, entry);
     notify(event);
 }
 
-void listener_storage::notify(event_type type, const std::string_view& path, obsr::entry entry,
-                              const value& old_value, const value& new_value) {
-    obsr::event event(m_clock->now(), type, path, entry, old_value, new_value);
+void listener_storage::notify(
+    const event_type type,
+    const std::string_view& path,
+    const obsr::entry entry,
+    const value& old_value,
+    const value& new_value) {
+    const obsr::event event(m_clock->now(), type, path, entry, old_value, new_value);
     notify(event);
 }
 

@@ -5,16 +5,18 @@
 
 #include "storage.h"
 
+#include <utility>
+
 
 namespace obsr::storage {
 
 #define LOG_MODULE "storage"
 
-static inline bool does_entry_have_value(const storage_entry* entry) {
+static bool does_entry_have_value(const storage_entry* entry) {
     return !entry->has_flags(flag_internal_created) && !entry->has_flags(flag_internal_deleted);
 }
 
-storage_entry::storage_entry(entry handle, const std::string_view& path)
+storage_entry::storage_entry(const entry handle, const std::string_view& path)
     : m_handle(handle)
     , m_path(path)
     , m_value(value::make())
@@ -47,23 +49,35 @@ uint16_t storage_entry::get_flags() const {
     return m_flags;
 }
 
-bool storage_entry::has_flags(uint16_t flags) const {
+bool storage_entry::has_flags(const uint16_t flags) const {
     return (m_flags & flags) == flags;
 }
 
-void storage_entry::add_flags(uint16_t flags) {
+void storage_entry::add_flags(const uint16_t flags) {
     m_flags |= flags;
 }
 
-void storage_entry::remove_flags(uint16_t flags) {
+void storage_entry::remove_flags(const uint16_t flags) {
     m_flags &= ~flags;
+}
+
+bool storage_entry::is_dirty() const {
+    return has_flags(flag_internal_dirty);
+}
+
+void storage_entry::mark_dirty() {
+    add_flags(flag_internal_dirty);
+}
+
+void storage_entry::clear_dirty() {
+    remove_flags(flag_internal_dirty);
 }
 
 std::chrono::milliseconds storage_entry::get_last_update_timestamp() const {
     return m_last_update_timestamp;
 }
 
-void storage_entry::set_last_update_timestamp(std::chrono::milliseconds timestamp) {
+void storage_entry::set_last_update_timestamp(const std::chrono::milliseconds timestamp) {
     m_last_update_timestamp = timestamp;
 }
 
@@ -91,9 +105,9 @@ value storage_entry::clear() {
     return old;
 }
 
-storage::storage(listener_storage_ref& listener_storage, const clock_ref& clock)
-    : m_listener_storage(listener_storage)
-    , m_clock(clock)
+storage::storage(listener_storage_ptr listener_storage, clock_ptr clock)
+    : m_listener_storage(std::move(listener_storage))
+    , m_clock(std::move(clock))
     , m_mutex()
     , m_entries()
     , m_paths()
@@ -116,7 +130,7 @@ entry storage::get_or_create_entry(const std::string_view& path) {
     throw no_such_handle_exception(entry_handle);
 }
 
-void storage::delete_entry(entry entry) {
+void storage::delete_entry(const entry entry) {
     std::unique_lock guard(m_mutex);
 
     delete_entry_internal(entry);
@@ -133,32 +147,32 @@ void storage::delete_entries(const std::string_view& path) {
     }
 }
 
-uint32_t storage::probe(entry entry) {
+uint32_t storage::probe(const entry entry) {
     std::unique_lock guard(m_mutex);
 
     if (!m_entries.has(entry)) {
         return entry_not_exists;
     }
 
-    auto data = m_entries[entry];
+    const auto data = m_entries[entry];
     return data->get_flags() & ~flag_internal_mask;
 }
 
-std::string storage::get_entry_path(entry entry) {
+std::string storage::get_entry_path(const entry entry) {
     std::unique_lock guard(m_mutex);
 
     auto data = m_entries[entry];
     return std::string(data->get_path());
 }
 
-std::optional<obsr::value> storage::get_entry_value(entry entry) {
+std::optional<obsr::value> storage::get_entry_value(const entry entry) {
     std::unique_lock guard(m_mutex);
 
     if (!m_entries.has(entry)) {
         return std::nullopt;
     }
 
-    auto data = m_entries[entry];
+    const auto data = m_entries[entry];
     if (!does_entry_have_value(data)) {
         return std::nullopt;
     }
@@ -166,13 +180,13 @@ std::optional<obsr::value> storage::get_entry_value(entry entry) {
     return data->get_value();
 }
 
-void storage::set_entry_value(entry entry, const obsr::value& value) {
+void storage::set_entry_value(const entry entry, const obsr::value& value) {
     std::unique_lock guard(m_mutex);
 
     set_entry_internal(entry, value);
 }
 
-void storage::clear_entry(entry entry) {
+void storage::clear_entry(const entry entry) {
     std::unique_lock guard(m_mutex);
 
     set_entry_internal(entry, value::make(), true);
@@ -186,11 +200,9 @@ void storage::act_on_dirty_entries(const entry_action& action) {
             continue;
         }
 
-        const auto resume = action(data);
-
-        if (resume) {
+        if (action(data)) {
+            // resume
             data.clear_dirty();
-            continue;
         } else {
             break;
         }
@@ -207,29 +219,29 @@ void storage::clear_net_ids() {
     m_ids.clear();
 }
 
-listener storage::listen(entry entry, const listener_callback& callback) {
+listener storage::listen(const entry entry, listener_callback&& callback) {
     std::unique_lock guard(m_mutex);
 
-    auto data = m_entries[entry];
-    return m_listener_storage->create_listener(callback, data->get_path());
+    const auto data = m_entries[entry];
+    return m_listener_storage->create_listener(std::move(callback), data->get_path());
 }
 
-listener storage::listen(const std::string_view& prefix, const listener_callback& callback) {
+listener storage::listen(const std::string_view& prefix, listener_callback&& callback) {
     std::unique_lock guard(m_mutex);
 
-    return m_listener_storage->create_listener(callback, prefix);
+    return m_listener_storage->create_listener(std::move(callback), prefix);
 }
 
-void storage::remove_listener(listener listener) {
+void storage::remove_listener(const listener listener) {
     std::unique_lock guard(m_mutex);
 
     m_listener_storage->destroy_listener(listener);
 }
 
-std::optional<obsr::value> storage::get_entry_value_from_id(entry_id id) {
+std::optional<obsr::value> storage::get_entry_value_from_id(const entry_id id) {
     std::unique_lock guard(m_mutex);
 
-    auto it = m_ids.find(id);
+    const auto it = m_ids.find(id);
     if (it == m_ids.end()) {
         // no such id
         return {};
@@ -240,7 +252,7 @@ std::optional<obsr::value> storage::get_entry_value_from_id(entry_id id) {
         return {};
     }
 
-    auto data = m_entries[entry];
+    const auto data = m_entries[entry];
     if (does_entry_have_value(data)) {
         return data->get_value();
     }
@@ -270,13 +282,13 @@ void storage::on_clock_resync() {
 }
 
 void storage::on_entry_created(entry_id id,
-                               std::string_view path,
+                               const std::string_view path,
                                const value& value,
-                               std::chrono::milliseconds timestamp) {
+                               const std::chrono::milliseconds timestamp) {
     std::unique_lock guard(m_mutex);
 
     entry entry;
-    auto it = m_paths.find(path);
+    const auto it = m_paths.find(path);
     if (it != m_paths.end()) {
         // entry exists
         entry = it->second;
@@ -290,12 +302,12 @@ void storage::on_entry_created(entry_id id,
     set_entry_internal(entry, value, false, id, false, timestamp);
 }
 
-void storage::on_entry_updated(entry_id id,
+void storage::on_entry_updated(const entry_id id,
                                const value& value,
-                               std::chrono::milliseconds timestamp) {
+                               const std::chrono::milliseconds timestamp) {
     std::unique_lock guard(m_mutex);
 
-    auto it = m_ids.find(id);
+    const auto it = m_ids.find(id);
     if (it == m_ids.end()) {
         // no such id, what?
         TRACE_DEBUG(LOG_MODULE, "received update for non existent entry: id=%lu", id);
@@ -305,10 +317,10 @@ void storage::on_entry_updated(entry_id id,
     set_entry_internal(it->second, value, false, id, false, timestamp);
 }
 
-void storage::on_entry_deleted(entry_id id, std::chrono::milliseconds timestamp) {
+void storage::on_entry_deleted(const entry_id id, const std::chrono::milliseconds timestamp) {
     std::unique_lock guard(m_mutex);
 
-    auto it = m_ids.find(id);
+    const auto it = m_ids.find(id);
     if (it == m_ids.end()) {
         // no such id, what?
         return;
@@ -318,11 +330,11 @@ void storage::on_entry_deleted(entry_id id, std::chrono::milliseconds timestamp)
 }
 
 void storage::on_entry_id_assigned(entry_id id,
-                                   std::string_view path) {
+                                   const std::string_view path) {
     std::unique_lock guard(m_mutex);
 
     entry entry;
-    auto it = m_paths.find(path);
+    const auto it = m_paths.find(path);
     if (it != m_paths.end()) {
         // entry exists
         entry = it->second;
@@ -331,7 +343,7 @@ void storage::on_entry_id_assigned(entry_id id,
         entry = create_new_entry(path);
     }
 
-    auto data = m_entries[entry];
+    const auto data = m_entries[entry];
     data->set_net_id(id);
 
     m_ids.emplace(id, entry);
@@ -339,7 +351,7 @@ void storage::on_entry_id_assigned(entry_id id,
 
 entry storage::create_new_entry(const std::string_view& path) {
     auto entry = m_entries.allocate_new_with_handle(path);
-    auto data = m_entries[entry];
+    const auto data = m_entries[entry];
 
     m_paths.emplace(path, entry);
 
@@ -349,11 +361,11 @@ entry storage::create_new_entry(const std::string_view& path) {
     return entry;
 }
 
-void storage::set_entry_internal(entry entry,
+void storage::set_entry_internal(const entry entry,
                                  const value& value,
-                                 bool clear,
-                                 entry_id id,
-                                 bool mark_dirty,
+                                 const bool clear,
+                                 const entry_id id,
+                                 const bool mark_dirty,
                                  std::chrono::milliseconds timestamp) {
     auto data = m_entries[entry];
 
@@ -417,10 +429,10 @@ void storage::set_entry_internal(entry entry,
             value);
 }
 
-void storage::delete_entry_internal(entry entry,
-                                    bool mark_dirty,
+void storage::delete_entry_internal(const entry entry,
+                                    const bool mark_dirty,
                                     std::chrono::milliseconds timestamp) {
-    auto data = m_entries[entry];
+    const auto data = m_entries[entry];
 
     const auto last_update = data->get_last_update_timestamp();
     if (timestamp.count() != 0 && last_update > timestamp) {

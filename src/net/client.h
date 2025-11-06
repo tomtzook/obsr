@@ -1,7 +1,6 @@
 #pragma once
 
-#include <looper.h>
-#include <looper_tcp.h>
+#include <looper_cxx.hpp>
 
 #include "storage/storage.h"
 #include "net/io.h"
@@ -11,9 +10,9 @@
 
 namespace obsr::net::client {
 
-class network_client : public network_interface {
+class network_client final : public network_interface {
 public:
-    explicit network_client(clock_ref& clock);
+    explicit network_client(const clock_ptr& clock);
 
     void configure_target(connection_info info);
 
@@ -42,13 +41,13 @@ private:
     std::mutex m_mutex;
     state m_state;
 
-    clock_ref m_clock;
+    clock_ptr m_clock;
     std::shared_ptr<storage::storage> m_storage;
     connection_info m_conn_info;
 
     looper::loop m_loop;
-    looper::tcp m_tcp;
-    looper::timer m_update_timer_handle;
+    looper::tcp_holder m_tcp;
+    looper::timer_holder m_update_timer_handle;
 
     reader m_reader;
     message_parser m_parser;

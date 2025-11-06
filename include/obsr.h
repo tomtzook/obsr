@@ -253,7 +253,7 @@ void clear_value(entry entry);
  * @param callback listener callback
  * @return listener handle
  */
-listener listen_object(object obj, const listener_callback&& callback);
+listener listen_object(object obj, listener_callback&& callback);
 
 /**
  * Listens to events generated for an entry. Only events generated
@@ -263,7 +263,7 @@ listener listen_object(object obj, const listener_callback&& callback);
  * @param callback listener callback
  * @return listener handle
  */
-listener listen_entry(entry entry, const listener_callback&& callback);
+listener listen_entry(entry entry, listener_callback&& callback);
 
 /**
  * Deletes a listener associated with the given handle. Events will not be generated for the callback after this

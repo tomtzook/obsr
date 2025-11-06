@@ -114,9 +114,9 @@ public:
             throw no_space_exception();
         }
 
-        auto handle = static_cast<obsr::handle>(index);
+        const auto handle = static_cast<obsr::handle>(index);
 
-        m_data[index] = std::make_unique<type_>(args...);
+        m_data[index] = std::make_unique<type_>(std::forward<arg_>(args)...);
         m_count++;
 
         return handle;

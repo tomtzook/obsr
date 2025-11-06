@@ -10,6 +10,7 @@
 namespace obsr::net {
 
 #pragma pack(push, 1)
+
 struct message_header {
     static constexpr uint8_t message_magic = 0x29;
     static constexpr uint8_t current_version = 0x1;
@@ -20,6 +21,7 @@ struct message_header {
     uint8_t type;
     uint32_t message_size;
 };
+
 #pragma pack(pop)
 
 enum class message_type {
@@ -63,105 +65,26 @@ struct parse_data {
 void header_convert_net(message_header& header);
 void header_convert_host(message_header& header);
 
-struct out_message {
+class out_message {
 public:
-    explicit out_message(message_type type = message_type::no_type)
-        : m_type(type)
-        , m_id(0)
-        , m_name()
-        , m_value(value::make())
-        , m_time(0)
-        , m_send_time(0)
-    {}
+    explicit out_message(message_type type = message_type::no_type);
 
-    inline message_type type() const {
-        return m_type;
-    }
+    [[nodiscard]] message_type type() const;
+    [[nodiscard]] storage::entry_id id() const;
+    [[nodiscard]] std::string_view name() const;
+    [[nodiscard]] const obsr::value& value() const;
+    [[nodiscard]] std::chrono::milliseconds send_time() const;
+    [[nodiscard]] std::chrono::milliseconds time_value() const;
 
-    inline storage::entry_id id() const {
-        assert(m_type == message_type::entry_create || m_type == message_type::entry_update || m_type == message_type::entry_delete || m_type == message_type::entry_id_assign);
-        return m_id;
-    }
-
-    inline std::string_view name() const {
-        assert(m_type == message_type::entry_create || m_type == message_type::entry_id_assign);
-        return m_name;
-    }
-
-    inline const obsr::value& value() const {
-        assert(m_type == message_type::entry_create || m_type == message_type::entry_update);
-        return m_value;
-    }
-
-    inline std::chrono::milliseconds send_time() const {
-        assert(m_type == message_type::entry_create || m_type == message_type::entry_update || m_type == message_type::entry_delete || m_type == message_type::entry_id_assign || m_type == message_type::time_sync_response || m_type == message_type::time_sync_request);
-        return m_send_time;
-    }
-
-    inline std::chrono::milliseconds time_value() const {
-        assert(m_type == message_type::time_sync_response);
-        return m_time;
-    }
-
-    static inline out_message empty() {
-        return out_message();
-    }
-
-    static inline out_message entry_create(std::chrono::milliseconds send_time, std::string_view name, obsr::value&& value) {
-        out_message message(message_type::entry_create);
-        message.m_send_time = send_time;
-        message.m_name = name;
-        message.m_value = std::move(value);
-
-        return std::move(message);
-    }
-
-    static inline out_message entry_update(std::chrono::milliseconds send_time, storage::entry_id id, obsr::value&& value) {
-        out_message message(message_type::entry_update);
-        message.m_send_time = send_time;
-        message.m_id = id;
-        message.m_value = std::move(value);
-
-        return std::move(message);
-    }
-
-    static inline out_message entry_deleted(std::chrono::milliseconds send_time, storage::entry_id id) {
-        out_message message(message_type::entry_delete);
-        message.m_send_time = send_time;
-        message.m_id = id;
-
-        return std::move(message);
-    }
-    static inline out_message entry_id_assign(storage::entry_id id, std::string_view name) {
-        out_message message(message_type::entry_id_assign);
-        message.m_id = id;
-        message.m_name = name;
-
-        return std::move(message);
-    }
-
-    static inline out_message handshake_ready() {
-        return out_message(message_type::handshake_ready);
-    }
-
-    static inline out_message handshake_finished() {
-        return out_message(message_type::handshake_finished);
-    }
-
-    static inline out_message time_sync_request(std::chrono::milliseconds send_time) {
-        out_message message(message_type::time_sync_request);
-        message.m_send_time = send_time;
-
-        return std::move(message);
-    }
-
-    static inline out_message time_sync_response(std::chrono::milliseconds send_time, std::chrono::milliseconds time) {
-        out_message message(message_type::time_sync_response);
-        message.m_send_time = send_time;
-        message.m_time = time;
-
-        return std::move(message);
-    }
+    static out_message empty();
+    static out_message entry_create(std::chrono::milliseconds send_time, std::string_view name, obsr::value&& value);
+    static out_message entry_update(std::chrono::milliseconds send_time, storage::entry_id id, obsr::value&& value);
+    static out_message entry_deleted(std::chrono::milliseconds send_time, storage::entry_id id);
+    static out_message entry_id_assign(storage::entry_id id, std::string_view name);
+    static out_message handshake_ready();
+    static out_message handshake_finished();
+    static out_message time_sync_request(std::chrono::milliseconds send_time);
+    static out_message time_sync_response(std::chrono::milliseconds send_time, std::chrono::milliseconds time);
 
 private:
     message_type m_type;
@@ -173,16 +96,14 @@ private:
     std::chrono::milliseconds m_send_time;
 };
 
-class message_parser : public state_machine<parse_state, parse_state::check_type, parse_data> {
+class message_parser final : public state_machine<parse_state, parse_state::check_type, parse_data> {
 public:
     message_parser();
 
     void set_data(message_type type, const uint8_t* buffer, size_t size);
 
-protected:
-    bool process_state(parse_state current_state, parse_data& data) override;
-
 private:
+    bool process_state(parse_state current_state, parse_data& data);
     bool select_next_state(parse_state current_state);
 
     message_type m_type;
@@ -194,8 +115,8 @@ class message_serializer {
 public:
     message_serializer();
 
-    const uint8_t* data() const;
-    size_t size() const;
+    [[nodiscard]] const uint8_t* data() const;
+    [[nodiscard]] size_t size() const;
 
     void reset();
 
