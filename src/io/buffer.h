@@ -1,29 +1,42 @@
 #pragma once
 
-#include <algorithm>
 #include <cstdint>
+#include <algorithm>
+#include <functional>
 
 namespace obsr::io {
 
-class readable_buffer {
-public:
-    virtual ~readable_buffer() = default;
-    virtual bool read(uint8_t* buffer, size_t size) = 0;
+
+template<typename t_>
+concept readable = requires(t_ t, uint8_t* f1_buffer, size_t f1_size) {
+    { t.read(f1_buffer, f1_size) } -> std::same_as<bool>;
 };
 
-class writable_buffer {
-public:
-    virtual ~writable_buffer() = default;
-    virtual bool write(const uint8_t* buffer, size_t size) = 0;
+template<typename t_>
+concept writable = requires(t_ t, const uint8_t* f1_buffer, size_t f1_size) {
+    { t.write(f1_buffer, f1_size) } -> std::same_as<bool>;
 };
 
-class readonly_buffer_view final : public readable_buffer {
+using read_func = std::function<bool(uint8_t*, size_t)>;
+using write_func = std::function<bool(const uint8_t*, size_t)>;
+
+template<readable t_>
+read_func create_read_func(t_& t) {
+    return std::bind_front(&t_::read, t);
+}
+
+template<writable t_>
+write_func create_write_func(t_& t) {
+    return std::bind_front(&t_::write, t);
+}
+
+class readonly_buffer_view final {
 public:
     readonly_buffer_view();
 
     void reset(const uint8_t* buffer, size_t size);
 
-    bool read(uint8_t* buffer, size_t size) override;
+    bool read(uint8_t* buffer, size_t size);
 
 private:
     const uint8_t* m_buffer;
@@ -31,10 +44,10 @@ private:
     size_t m_size;
 };
 
-class linear_buffer final : public writable_buffer {
+class linear_buffer final {
 public:
     explicit linear_buffer(size_t size);
-    ~linear_buffer() override;
+    ~linear_buffer();
 
     [[nodiscard]] const uint8_t* data() const;
     [[nodiscard]] size_t pos() const;
@@ -43,7 +56,7 @@ public:
     [[nodiscard]] bool can_write(size_t size) const;
 
     void reset();
-    bool write(const uint8_t* buffer, size_t size) override;
+    bool write(const uint8_t* buffer, size_t size);
 
 private:
     uint8_t* m_buffer;
@@ -51,10 +64,10 @@ private:
     size_t m_size;
 };
 
-class circular_buffer final : public readable_buffer, public writable_buffer {
+class circular_buffer final {
 public:
     explicit circular_buffer(size_t size);
-    ~circular_buffer() override;
+    ~circular_buffer();
 
     [[nodiscard]] size_t read_available() const;
     [[nodiscard]] size_t write_available() const;
@@ -67,8 +80,8 @@ public:
     bool find_and_seek_read(uint8_t byte);
     void seek_read(size_t offset);
 
-    bool read(uint8_t* buffer, size_t size) override;
-    bool write(const uint8_t* buffer, size_t size) override;
+    bool read(uint8_t* buffer, size_t size);
+    bool write(const uint8_t* buffer, size_t size);
 
     template<typename t_>
     bool read(t_& t_out) {

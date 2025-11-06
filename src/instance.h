@@ -1,9 +1,10 @@
 #pragma once
 
 #include <mutex>
+#include <variant>
 #include <fmt/format.h>
 
-#include <looper.h>
+#include <looper_cxx.hpp>
 
 #include "obsr_internal.h"
 #include "storage/storage.h"
@@ -20,7 +21,7 @@ struct object_data {
     std::string path;
 };
 
-struct instance {
+class instance {
 public:
     instance();
     ~instance();
@@ -30,7 +31,7 @@ public:
     instance& operator=(const instance&) = delete;
     instance& operator=(instance&&) = delete;
 
-    std::chrono::milliseconds time();
+    std::chrono::milliseconds time() const;
 
     object get_root();
     object get_object(std::string_view path);
@@ -65,20 +66,23 @@ public:
     void stop_network();
 
 private:
-    void start_net(const std::shared_ptr<net::network_interface>& network_interface);
-    void stop_net(const std::shared_ptr<net::network_interface>& network_interface);
+    void start_net();
+    void stop_net();
 
     object get_or_create_child(object parent, std::string_view name);
     object get_or_create_object(std::string_view path);
+
+    using server_ptr = std::unique_ptr<net::server::network_server>;
+    using client_ptr = std::unique_ptr<net::client::network_client>;
+    using net_agent_type = std::variant<std::monostate, server_ptr, client_ptr>;
 
     std::mutex m_mutex;
     clock_ptr m_clock;
     storage::listener_storage_ptr m_listener_storage;
     std::shared_ptr<storage::storage> m_storage;
 
-    looper::loop m_loop;
-
-    std::shared_ptr<net::network_interface> m_net_interface;
+    looper::loop_holder m_loop;
+    net_agent_type m_net_agent;
 
     handle_table<object_data, 256> m_objects;
     std::map<std::string, object, std::less<>> m_object_paths;

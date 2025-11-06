@@ -5,20 +5,19 @@
 #include "storage/storage.h"
 #include "net/io.h"
 #include "net/serialize.h"
-#include "net/net.h"
 #include "util/time.h"
 
 namespace obsr::net::client {
 
-class network_client final : public network_interface {
+class network_client final {
 public:
     explicit network_client(const clock_ptr& clock);
 
     void configure_target(connection_info info);
 
-    void attach_storage(std::shared_ptr<storage::storage> storage) override;
-    void start(looper::loop loop) override;
-    void stop() override;
+    void attach_storage(std::shared_ptr<storage::storage> storage);
+    void start(looper::loop loop);
+    void stop();
 
 private:
     enum class state {

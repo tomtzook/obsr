@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5.1)
+cmake_minimum_required(VERSION 3.20)
 project(obsr
         LANGUAGES C CXX
         VERSION 1.0)
@@ -79,13 +79,13 @@ target_include_directories(obsr
         )
 target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt looper)
 
-install(TARGETS obsr looper EXPORT obsrTargets
+install(TARGETS obsr looper EXPORT obsrConfig
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(FILES ${INCLUDE_FILES}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsr)
-install(EXPORT obsrTargets
-        FILE obsrTargets.cmake
+install(EXPORT obsrConfig
+        FILE obsrConfig.cmake
         NAMESPACE obsr::
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/obsr")

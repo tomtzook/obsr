@@ -8,7 +8,6 @@
 #include "storage/storage.h"
 #include "net/io.h"
 #include "net/serialize.h"
-#include "net/net.h"
 
 namespace obsr::net::server {
 
@@ -60,15 +59,15 @@ private:
     std::set<storage::entry_id> m_published_entries;
 };
 
-class network_server final : public network_interface {
+class network_server final {
 public:
     explicit network_server(const clock_ptr& clock);
 
     void configure_bind(uint16_t bind_port);
 
-    void attach_storage(std::shared_ptr<storage::storage> storage) override;
-    void start(looper::loop loop) override;
-    void stop() override;
+    void attach_storage(std::shared_ptr<storage::storage> storage);
+    void start(looper::loop loop);
+    void stop();
 
 private:
     enum class state {

@@ -18,9 +18,9 @@ static bool is_within_size_limits(const size_t size) {
 }
 
 template<typename t_>
-bool read(readable_buffer& buf, t_& value_out) {
+bool read(read_func& func, t_& value_out) {
     t_ value;
-    const auto res = buf.read(reinterpret_cast<uint8_t*>(&value), sizeof(t_));
+    const auto res = func(reinterpret_cast<uint8_t*>(&value), sizeof(t_));
     if (!res) {
         return false;
     }
@@ -30,19 +30,19 @@ bool read(readable_buffer& buf, t_& value_out) {
 }
 
 template<typename t_>
-bool write(writable_buffer& buf, const t_& value) {
-    return buf.write(reinterpret_cast<const uint8_t*>(&value), sizeof(t_));
+bool write(write_func& func, const t_& value) {
+    return func(reinterpret_cast<const uint8_t*>(&value), sizeof(t_));
 }
 
-deserializer::deserializer(readable_buffer& buffer)
-    : m_buffer(buffer)
+deserializer::deserializer(read_func&& read)
+    : m_read(std::move(read))
     , m_data()
     , m_data_size(0)
 {}
 
 std::optional<uint8_t> deserializer::read8() {
     uint8_t value;
-    if (!read(m_buffer, value)) {
+    if (!read(m_read, value)) {
         return {};
     }
 
@@ -51,7 +51,7 @@ std::optional<uint8_t> deserializer::read8() {
 
 std::optional<uint16_t> deserializer::read16() {
     uint16_t value;
-    if (!read(m_buffer, value)) {
+    if (!read(m_read, value)) {
         return {};
     }
 
@@ -61,7 +61,7 @@ std::optional<uint16_t> deserializer::read16() {
 
 std::optional<uint32_t> deserializer::read32() {
     uint32_t value;
-    if (!read(m_buffer, value)) {
+    if (!read(m_read, value)) {
         return {};
     }
 
@@ -71,7 +71,7 @@ std::optional<uint32_t> deserializer::read32() {
 
 std::optional<uint64_t> deserializer::read64() {
     uint64_t value;
-    if (!read(m_buffer, value)) {
+    if (!read(m_read, value)) {
         return {};
     }
 
@@ -120,7 +120,7 @@ std::optional<std::span<uint8_t>> deserializer::read_raw() {
     const auto size = size_opt.value();
     expand_buffer(size);
 
-    if (!m_buffer.read(m_data.get(), size)) {
+    if (!m_read(m_data.get(), size)) {
         return {};
     }
 
@@ -336,27 +336,27 @@ void deserializer::expand_buffer(const size_t size) {
     m_data_size = size;
 }
 
-serializer::serializer(writable_buffer& buffer)
-    : m_buffer(buffer)
+serializer::serializer(write_func&& write)
+    : m_write(std::move(write))
 {}
 
-bool serializer::write8(uint8_t value) {
-    return write(m_buffer, value);
+bool serializer::write8(const uint8_t value) {
+    return write(m_write, value);
 }
 
 bool serializer::write16(uint16_t value) {
     value = obsr::bits::net16(value);
-    return write(m_buffer, value);
+    return write(m_write, value);
 }
 
 bool serializer::write32(uint32_t value) {
     value = obsr::bits::net32(value);
-    return write(m_buffer, value);
+    return write(m_write, value);
 }
 
 bool serializer::write64(uint64_t value) {
     value = obsr::bits::net64(value);
-    return write(m_buffer, value);
+    return write(m_write, value);
 }
 
 bool serializer::writef32(const float value) {
@@ -392,7 +392,7 @@ bool serializer::write_raw(const uint8_t* ptr, const size_t size) {
         return false;
     }
 
-    return m_buffer.write(ptr, size);
+    return m_write(ptr, size);
 }
 
 bool serializer::write_str(const std::string_view str) {

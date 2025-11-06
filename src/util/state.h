@@ -10,7 +10,6 @@ public:
     using process_func = std::function<bool(state_, data_&)>;
 
     explicit state_machine(process_func&& process_func);
-    virtual ~state_machine() = default;
 
     [[nodiscard]] bool is_finished() const;
     [[nodiscard]] bool is_errored() const;
