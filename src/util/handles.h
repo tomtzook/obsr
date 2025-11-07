@@ -68,11 +68,11 @@ public:
         , m_count(0)
     {}
 
-    bool empty() const {
+    [[nodiscard]] bool empty() const {
         return m_count < 1;
     }
 
-    const type_* operator[](handle handle) const {
+    const type_* operator[](const handle handle) const {
         if (!has(handle)) {
             throw no_such_handle_exception(handle);
         }
@@ -81,7 +81,7 @@ public:
         return m_data[index].get();
     }
 
-    type_* operator[](handle handle) {
+    type_* operator[](const handle handle) {
         if (!has(handle)) {
             throw no_such_handle_exception(handle);
         }
@@ -90,7 +90,7 @@ public:
         return m_data[index].get();
     }
 
-    bool has(handle handle) const {
+    [[nodiscard]] bool has(const handle handle) const {
         if (handle == empty_handle) {
             return false;
         }
@@ -137,7 +137,7 @@ public:
         return handle;
     }
 
-    std::unique_ptr<type_> release(handle handle) {
+    std::unique_ptr<type_> release(const handle handle) {
         if (!has(handle)) {
             throw no_such_handle_exception(handle);
         }
@@ -159,7 +159,7 @@ public:
     }
 
 private:
-    ssize_t find_next_available_spot() const {
+    [[nodiscard]] ssize_t find_next_available_spot() const {
         for (int i = 0; i < capacity_; ++i) {
             if (!m_data[i]) {
                 return i;

@@ -26,8 +26,8 @@ class timer {
 public:
     timer();
 
-    bool is_running() const;
-    bool has_elapsed(std::chrono::milliseconds time) const;
+    [[nodiscard]] bool is_running() const;
+    [[nodiscard]] bool has_elapsed(std::chrono::milliseconds time) const;
 
     void start();
     void reset();

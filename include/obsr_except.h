@@ -15,7 +15,7 @@ public:
     }
 };
 
-class no_such_handle_exception : public exception {
+class no_such_handle_exception final : public exception {
 public:
     explicit no_such_handle_exception(handle handle);
 
@@ -31,14 +31,14 @@ private:
     obsr::handle m_handle;
 };
 
-class no_space_exception : public exception {
+class no_space_exception final : public exception {
 public:
     [[nodiscard]] const char* what() const noexcept override {
         return "no more space";
     }
 };
 
-class entry_type_mismatch_exception : public exception {
+class entry_type_mismatch_exception final : public exception {
 public:
     explicit entry_type_mismatch_exception(entry entry, value_type actual_type, value_type new_type);
 
@@ -64,33 +64,33 @@ private:
     value_type m_new_type;
 };
 
-class cannot_delete_root_exception : public exception {
+class cannot_delete_root_exception final : public exception {
 public:
     [[nodiscard]] const char* what() const noexcept override {
         return "deleting root object is not possible";
     }
 };
 
-class data_exceeds_size_limits_exception : public exception {
+class data_exceeds_size_limits_exception final : public exception {
 public:
     [[nodiscard]] const char* what() const noexcept override {
         return "provided data exceeds size limits and cannot be used";
     }
 };
 
-class no_parent_exception : public exception {
+class no_parent_exception final : public exception {
 public:
     [[nodiscard]] const char* what() const noexcept override {
         return "no parent for object as it is root";
     }
 };
 
-class invalid_path_exception : public exception {
+class invalid_path_exception final : public exception {
 public:
-    explicit invalid_path_exception(std::string  path)
+    explicit invalid_path_exception(std::string path)
         : m_path(std::move(path))
     {}
-    explicit invalid_path_exception(std::string_view path)
+    explicit invalid_path_exception(const std::string_view path)
         : m_path(path)
     {}
 
@@ -106,12 +106,12 @@ private:
     std::string m_path;
 };
 
-class invalid_name_exception : public exception {
+class invalid_name_exception final : public exception {
 public:
-    explicit invalid_name_exception(std::string  name)
+    explicit invalid_name_exception(std::string name)
         : m_name(std::move(name))
     {}
-    explicit invalid_name_exception(std::string_view name)
+    explicit invalid_name_exception(const std::string_view name)
         : m_name(name)
     {}
 
@@ -127,9 +127,9 @@ private:
     std::string m_name;
 };
 
-class entry_does_not_exist_exception : public exception {
+class entry_does_not_exist_exception final : public exception {
 public:
-    explicit entry_does_not_exist_exception(obsr::entry entry)
+    explicit entry_does_not_exist_exception(const obsr::entry entry)
         : m_entry(entry)
     {}
 
