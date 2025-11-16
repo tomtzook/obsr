@@ -26,7 +26,6 @@ public:
     };
 
     server_client(client_id id, looper::tcp tcp, const clock_ptr& clock, on_message_cb&& message_cb, on_error_cb&& error_cb);
-    ~server_client();
 
     client_id get_id() const;
 

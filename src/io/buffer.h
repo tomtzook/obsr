@@ -22,12 +22,12 @@ using write_func = std::function<bool(const uint8_t*, size_t)>;
 
 template<readable t_>
 [[nodiscard]] read_func create_read_func(t_& t) {
-    return std::bind_front(&t_::read, t);
+    return std::bind_front(&t_::read, std::ref(t));
 }
 
 template<writable t_>
 [[nodiscard]] write_func create_write_func(t_& t) {
-    return std::bind_front(&t_::write, t);
+    return std::bind_front(&t_::write, std::ref(t));
 }
 
 class readonly_buffer_view final {

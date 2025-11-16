@@ -87,10 +87,6 @@ server_client::server_client(
     looper::start_tcp_read(tcp, read_callback);
 }
 
-server_client::~server_client() {
-    looper::destroy_tcp(m_tcp);
-}
-
 client_id server_client::get_id() const {
     return m_id;
 }
