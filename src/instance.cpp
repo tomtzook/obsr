@@ -93,7 +93,7 @@ entry instance::get_entry(const std::string_view path) {
     }
 
     const auto& ppath = ppath_opt.value();
-    get_or_create_object(ppath); // create object hierarchy
+    (void) get_or_create_object(ppath); // create object hierarchy
 
     return m_storage->get_or_create_entry(path);
 }

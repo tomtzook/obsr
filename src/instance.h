@@ -31,34 +31,34 @@ public:
     instance& operator=(const instance&) = delete;
     instance& operator=(instance&&) = delete;
 
-    std::chrono::milliseconds time() const;
+    [[nodiscard]] std::chrono::milliseconds time() const;
 
-    object get_root();
-    object get_object(std::string_view path);
-    entry get_entry(std::string_view path);
+    [[nodiscard]] object get_root();
+    [[nodiscard]] object get_object(std::string_view path);
+    [[nodiscard]] entry get_entry(std::string_view path);
 
-    object get_child(object obj, std::string_view name);
-    entry get_entry(object obj, std::string_view name);
+    [[nodiscard]] object get_child(object obj, std::string_view name);
+    [[nodiscard]] entry get_entry(object obj, std::string_view name);
 
-    object get_parent_for_object(object obj);
-    object get_parent_for_entry(entry entry);
+    [[nodiscard]] object get_parent_for_object(object obj);
+    [[nodiscard]] object get_parent_for_entry(entry entry);
 
-    std::string get_path_for_object(object obj);
-    std::string get_path_for_entry(entry entry);
+    [[nodiscard]] std::string get_path_for_object(object obj);
+    [[nodiscard]] std::string get_path_for_entry(entry entry);
 
-    std::string get_name_for_object(object obj);
-    std::string get_name_for_entry(entry entry);
+    [[nodiscard]] std::string get_name_for_object(object obj);
+    [[nodiscard]] std::string get_name_for_entry(entry entry);
 
     void delete_object(object obj);
     void delete_entry(entry entry);
 
-    uint32_t probe(entry entry);
-    obsr::value get_value(entry entry);
+    [[nodiscard]] uint32_t probe(entry entry);
+    [[nodiscard]] obsr::value get_value(entry entry);
     void set_value(entry entry, const obsr::value& value);
     void clear_value(entry entry);
 
-    listener listen_object(object obj, listener_callback&& callback);
-    listener listen_entry(entry entry, listener_callback&& callback);
+    [[nodiscard]] listener listen_object(object obj, listener_callback&& callback);
+    [[nodiscard]] listener listen_entry(entry entry, listener_callback&& callback);
     void delete_listener(listener listener);
 
     void start_server(uint16_t bind_port);
@@ -66,11 +66,9 @@ public:
     void stop_network();
 
 private:
-    void start_net();
-    void stop_net();
 
-    object get_or_create_child(object parent, std::string_view name);
-    object get_or_create_object(std::string_view path);
+    [[nodiscard]] object get_or_create_child(object parent, std::string_view name);
+    [[nodiscard]] object get_or_create_object(std::string_view path);
 
     using server_ptr = std::unique_ptr<net::server::network_server>;
     using client_ptr = std::unique_ptr<net::client::network_client>;

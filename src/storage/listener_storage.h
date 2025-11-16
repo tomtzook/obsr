@@ -38,7 +38,7 @@ public:
 
     void on_clock_resync();
 
-    listener create_listener(listener_callback&& callback, const std::string_view& prefix);
+    [[nodiscard]] listener create_listener(listener_callback&& callback, const std::string_view& prefix);
     void destroy_listener(listener listener);
     void destroy_listeners(const std::string_view& path);
 

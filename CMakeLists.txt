@@ -72,7 +72,7 @@ add_library(obsr STATIC
 target_include_directories(obsr
         PUBLIC
                 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-                $<INSTALL_INTERFACE:obsr>
+                $<INSTALL_INTERFACE:include/obsr>
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
         )
 target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt looper::looper)

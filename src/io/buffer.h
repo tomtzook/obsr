@@ -21,12 +21,12 @@ using read_func = std::function<bool(uint8_t*, size_t)>;
 using write_func = std::function<bool(const uint8_t*, size_t)>;
 
 template<readable t_>
-read_func create_read_func(t_& t) {
+[[nodiscard]] read_func create_read_func(t_& t) {
     return std::bind_front(&t_::read, t);
 }
 
 template<writable t_>
-write_func create_write_func(t_& t) {
+[[nodiscard]] write_func create_write_func(t_& t) {
     return std::bind_front(&t_::write, t);
 }
 
@@ -36,7 +36,7 @@ public:
 
     void reset(const uint8_t* buffer, size_t size);
 
-    bool read(uint8_t* buffer, size_t size);
+    [[nodiscard]] bool read(uint8_t* buffer, size_t size);
 
 private:
     const uint8_t* m_buffer;
@@ -56,7 +56,7 @@ public:
     [[nodiscard]] bool can_write(size_t size) const;
 
     void reset();
-    bool write(const uint8_t* buffer, size_t size);
+    [[nodiscard]] bool write(const uint8_t* buffer, size_t size);
 
 private:
     uint8_t* m_buffer;
@@ -77,14 +77,14 @@ public:
 
     void reset();
 
-    bool find_and_seek_read(uint8_t byte);
+    [[nodiscard]] bool find_and_seek_read(uint8_t byte);
     void seek_read(size_t offset);
 
-    bool read(uint8_t* buffer, size_t size);
-    bool write(const uint8_t* buffer, size_t size);
+    [[nodiscard]] bool read(uint8_t* buffer, size_t size);
+    [[nodiscard]] bool write(const uint8_t* buffer, size_t size);
 
     template<typename t_>
-    bool read(t_& t_out) {
+    [[nodiscard]] bool read(t_& t_out) {
         t_ t;
         if (!read(reinterpret_cast<uint8_t*>(&t), sizeof(t))) {
             return false;
@@ -95,12 +95,12 @@ public:
     }
 
     template<typename t_>
-    bool write(const t_& t) {
+    [[nodiscard]] bool write(const t_& t) {
         return write(reinterpret_cast<const uint8_t*>(&t), sizeof(t));
     }
 
     template<typename t_>
-    bool write(const t_* t, size_t size) {
+    [[nodiscard]] bool write(const t_* t, const size_t size) {
         return write(reinterpret_cast<const uint8_t*>(t), size);
     }
 

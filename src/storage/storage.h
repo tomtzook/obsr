@@ -47,8 +47,8 @@ struct storage_entry {
     void set_last_update_timestamp(std::chrono::milliseconds timestamp);
 
     [[nodiscard]] const value& get_value() const;
-    value set_value(const value& value);
-    value clear();
+    [[nodiscard]] value set_value(const value& value);
+    [[nodiscard]] value clear();
 
 private:
     const entry m_handle;
@@ -66,25 +66,25 @@ public:
 
     explicit storage(listener_storage_ptr  listener_storage, clock_ptr  clock);
 
-    entry get_or_create_entry(const std::string_view& path);
+    [[nodiscard]] entry get_or_create_entry(const std::string_view& path);
     void delete_entry(entry entry);
     void delete_entries(const std::string_view& path);
 
-    uint32_t probe(entry entry);
-    std::string get_entry_path(entry entry);
-    std::optional<obsr::value> get_entry_value(entry entry);
+    [[nodiscard]] uint32_t probe(entry entry);
+    [[nodiscard]] std::string get_entry_path(entry entry);
+    [[nodiscard]] std::optional<obsr::value> get_entry_value(entry entry);
     void set_entry_value(entry entry, const obsr::value& value);
     void clear_entry(entry entry);
 
     void act_on_dirty_entries(const entry_action& action);
     void clear_net_ids();
 
-    listener listen(entry entry, listener_callback&& callback);
-    listener listen(const std::string_view& prefix, listener_callback&& callback);
+    [[nodiscard]] listener listen(entry entry, listener_callback&& callback);
+    [[nodiscard]] listener listen(const std::string_view& prefix, listener_callback&& callback);
     void remove_listener(listener listener);
 
     // should be used from network code
-    std::optional<obsr::value> get_entry_value_from_id(entry_id id);
+    [[nodiscard]] std::optional<obsr::value> get_entry_value_from_id(entry_id id);
     void on_clock_resync();
 
     void on_entry_created(entry_id id,
@@ -100,7 +100,7 @@ public:
                               std::string_view path);
 
 private:
-    entry create_new_entry(const std::string_view& path);
+    [[nodiscard]] entry create_new_entry(const std::string_view& path);
 
     void set_entry_internal(entry entry,
                             const value& value,

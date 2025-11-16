@@ -447,7 +447,7 @@ void storage::delete_entry_internal(const entry entry,
         return;
     }
 
-    data->clear();
+    (void) data->clear();
     data->add_flags(flag_internal_deleted);
 
     if (mark_dirty) {

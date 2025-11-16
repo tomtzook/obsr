@@ -133,7 +133,7 @@ message_parser::message_parser()
     : state_machine(std::bind_front(&message_parser::process_state, this))
     , m_type(static_cast<message_type>(-1))
     , m_buffer()
-    , m_deserializer(io::create_read_func(m_buffer))
+    , m_deserializer(m_buffer)
 {}
 
 void message_parser::set_data(const message_type type, const uint8_t* buffer, const size_t size) {
@@ -296,7 +296,7 @@ bool message_parser::select_next_state(const parse_state current_state) {
 
 message_serializer::message_serializer()
     : m_buffer(writer_buffer_size)
-    , m_serializer(io::create_write_func(m_buffer))
+    , m_serializer(m_buffer)
 {}
 
 const uint8_t* message_serializer::data() const {

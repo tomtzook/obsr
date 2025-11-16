@@ -47,71 +47,71 @@ public:
     value& operator=(const value& other) = default;
     value& operator=(value&& other) = default;
 
-    [[nodiscard]] inline value_type get_type() const;
-    [[nodiscard]] inline bool empty() const;
+    [[nodiscard]] value_type get_type() const;
+    [[nodiscard]] bool empty() const;
 
     void clear();
 
-    [[nodiscard]] inline std::span<const uint8_t> get_raw() const;
-    [[nodiscard]] inline std::span<const uint8_t> get_raw_or(std::span<const uint8_t> default_val) const;
-    inline void set_raw(std::span<const uint8_t> value);
+    [[nodiscard]] std::span<const uint8_t> get_raw() const;
+    [[nodiscard]] std::span<const uint8_t> get_raw_or(std::span<const uint8_t> default_val) const;
+    void set_raw(std::span<const uint8_t> value);
 
-    [[nodiscard]] inline std::string_view get_string() const;
-    inline void set_string(std::string_view value);
+    [[nodiscard]] std::string_view get_string() const;
+    void set_string(std::string_view value);
 
-    [[nodiscard]] inline bool get_boolean() const;
-    [[nodiscard]] inline bool get_boolean_or(bool default_val) const;
-    inline void set_boolean(bool value);
+    [[nodiscard]] bool get_boolean() const;
+    [[nodiscard]] bool get_boolean_or(bool default_val) const;
+    void set_boolean(bool value);
 
-    [[nodiscard]] inline int32_t get_int32() const;
-    [[nodiscard]] inline int32_t get_int32_or(int32_t default_val) const;
-    inline void set_int32(int32_t value);
+    [[nodiscard]] int32_t get_int32() const;
+    [[nodiscard]] int32_t get_int32_or(int32_t default_val) const;
+    void set_int32(int32_t value);
 
-    [[nodiscard]] inline int64_t get_int64() const;
-    [[nodiscard]] inline int64_t get_int64_or(int64_t default_val) const;
-    inline void set_int64(int64_t value);
+    [[nodiscard]] int64_t get_int64() const;
+    [[nodiscard]] int64_t get_int64_or(int64_t default_val) const;
+    void set_int64(int64_t value);
 
-    [[nodiscard]] inline float get_float() const;
-    [[nodiscard]] inline float get_float_or(float default_val) const;
-    inline void set_float(float value);
+    [[nodiscard]] float get_float() const;
+    [[nodiscard]] float get_float_or(float default_val) const;
+    void set_float(float value);
 
-    [[nodiscard]] inline double get_double() const;
-    [[nodiscard]] inline double get_double_or(double default_val) const;
-    inline void set_double(double value);
+    [[nodiscard]] double get_double() const;
+    [[nodiscard]] double get_double_or(double default_val) const;
+    void set_double(double value);
 
-    [[nodiscard]] inline std::span<const int32_t> get_int32_array() const;
-    [[nodiscard]] inline std::span<const int32_t> get_int32_array_or(std::span<const int32_t> default_val) const;
-    inline void set_int32_array(std::span<const int32_t> value);
+    [[nodiscard]] std::span<const int32_t> get_int32_array() const;
+    [[nodiscard]] std::span<const int32_t> get_int32_array_or(std::span<const int32_t> default_val) const;
+    void set_int32_array(std::span<const int32_t> value);
 
-    [[nodiscard]] inline std::span<const int64_t> get_int64_array() const;
-    [[nodiscard]] inline std::span<const int64_t> get_int64_array_or(std::span<const int64_t> default_val) const;
-    inline void set_int64_array(std::span<const int64_t> value);
+    [[nodiscard]] std::span<const int64_t> get_int64_array() const;
+    [[nodiscard]] std::span<const int64_t> get_int64_array_or(std::span<const int64_t> default_val) const;
+    void set_int64_array(std::span<const int64_t> value);
 
-    [[nodiscard]] inline std::span<const float> get_float_array() const;
-    [[nodiscard]] inline std::span<const float> get_float_array_or(std::span<const float> default_val) const;
-    inline void set_float_array(std::span<const float> value);
+    [[nodiscard]] std::span<const float> get_float_array() const;
+    [[nodiscard]] std::span<const float> get_float_array_or(std::span<const float> default_val) const;
+    void set_float_array(std::span<const float> value);
 
-    [[nodiscard]] inline std::span<const double> get_double_array() const;
-    [[nodiscard]] inline std::span<const double> get_double_array_or(std::span<const double> default_val) const;
-    inline void set_double_array(std::span<const double> value);
+    [[nodiscard]] std::span<const double> get_double_array() const;
+    [[nodiscard]] std::span<const double> get_double_array_or(std::span<const double> default_val) const;
+    void set_double_array(std::span<const double> value);
 
-    static inline value make();
-    static inline value make_raw(std::span<const uint8_t> value);
-    static inline value make_raw(const void* ptr, size_t size);
-    static inline value make_string(std::string_view value);
-    static inline value make_boolean(bool value);
-    static inline value make_int32(int32_t value);
-    static inline value make_int64(int64_t value);
-    static inline value make_float(float value);
-    static inline value make_double(double value);
-    static inline value make_int32_array(std::span<const int32_t> value);
-    static inline value make_int32_array(std::initializer_list<int32_t> value);
-    static inline value make_int64_array(std::span<const int64_t> value);
-    static inline value make_int64_array(std::initializer_list<int64_t> value);
-    static inline value make_float_array(std::span<const float> value);
-    static inline value make_float_array(std::initializer_list<float> value);
-    static inline value make_double_array(std::span<const double> value);
-    static inline value make_double_array(std::initializer_list<double> value);
+    static value make();
+    static value make_raw(std::span<const uint8_t> value);
+    static value make_raw(const void* ptr, size_t size);
+    static value make_string(std::string_view value);
+    static value make_boolean(bool value);
+    static value make_int32(int32_t value);
+    static value make_int64(int64_t value);
+    static value make_float(float value);
+    static value make_double(double value);
+    static value make_int32_array(std::span<const int32_t> value);
+    static value make_int32_array(std::initializer_list<int32_t> value);
+    static value make_int64_array(std::span<const int64_t> value);
+    static value make_int64_array(std::initializer_list<int64_t> value);
+    static value make_float_array(std::span<const float> value);
+    static value make_float_array(std::initializer_list<float> value);
+    static value make_double_array(std::span<const double> value);
+    static value make_double_array(std::initializer_list<double> value);
 
 private:
     template<typename t_>
@@ -182,11 +182,11 @@ public:
     [[nodiscard]] std::chrono::milliseconds get_timestamp() const;
     void set_timestamp(std::chrono::milliseconds timestamp);
 
-    [[nodiscard]] inline event_type get_type() const;
-    [[nodiscard]] inline const std::string& get_path() const;
-    [[nodiscard]] inline obsr::entry get_entry() const;
-    [[nodiscard]] inline const obsr::value& get_old_value() const;
-    [[nodiscard]] inline const obsr::value& get_value() const;
+    [[nodiscard]] event_type get_type() const;
+    [[nodiscard]] const std::string& get_path() const;
+    [[nodiscard]] obsr::entry get_entry() const;
+    [[nodiscard]] const obsr::value& get_old_value() const;
+    [[nodiscard]] const obsr::value& get_value() const;
 
 private:
     std::chrono::milliseconds m_timestamp;

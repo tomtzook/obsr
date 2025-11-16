@@ -19,7 +19,7 @@ public:
         using pointer           = value_type*;
         using reference         = value_type&;
 
-        iterator(std::unique_ptr<value_type>* ptr, size_t index)
+        iterator(std::unique_ptr<value_type>* ptr, const size_t index)
             : m_ptr(ptr)
             , m_index(index) {
 
