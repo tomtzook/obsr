@@ -8,8 +8,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 include(GNUInstallDirs)
 
-add_subdirectory(looper)
-
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_compile_definitions(DEBUG=1)
 
@@ -31,6 +29,7 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 
 find_package(Threads REQUIRED)
 find_package(fmt REQUIRED)
+find_package(looper REQUIRED HINTS /home/tomtzook/.local)
 
 file(GLOB INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.h)
 
@@ -68,7 +67,6 @@ add_library(obsr STATIC
         src/util/general.h
         src/net/server.h
         src/net/server.cpp
-        src/net/net.h
         src/util/bits.h
         src/obsr_types.cpp)
 target_include_directories(obsr
@@ -77,9 +75,9 @@ target_include_directories(obsr
                 $<INSTALL_INTERFACE:obsr>
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
         )
-target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt looper)
+target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt looper::looper)
 
-install(TARGETS obsr looper EXPORT obsrConfig
+install(TARGETS obsr EXPORT obsrConfig
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")

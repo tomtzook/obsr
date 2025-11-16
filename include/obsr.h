@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-#include <functional>
 #include <chrono>
 #include <ostream>
 
@@ -23,7 +22,7 @@ namespace obsr {
  */
 
 /**
- * On behaviour of entries
+ * On behaviour of entries:
  *
  * Entries act as a storage for a single obsr::value. It is described by a handle and can be accessed by acquiring
  * a handle to it. Each entry is contained within an object. The path is made up of parent objects and the name of the particular entry.
@@ -33,7 +32,7 @@ namespace obsr {
  *
  * One work approach may include reflecting class instances over obsr by creating an object and storing all fields
  * in entries. Though, one should note that unlike normal fields, the entries are not actually "owned" by the classes
- * and their values may change by remote programs.
+ * and their values may be changed by remote programs.
  *
  * When retrieving an entry handle, the entry isn't actually created (if it does not exist). This handle
  * refers to a "ghost" entry, such that no creation event is sent and remote nodes will not be aware of this entry.
