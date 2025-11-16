@@ -29,7 +29,7 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 
 find_package(Threads REQUIRED)
 find_package(fmt REQUIRED)
-find_package(looper REQUIRED HINTS /home/tomtzook/.local)
+find_package(looper REQUIRED)
 
 file(GLOB INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.h)
 
