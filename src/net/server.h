@@ -65,7 +65,7 @@ public:
 
     void configure_bind(uint16_t bind_port);
 
-    void attach_storage(std::shared_ptr<storage::storage> storage);
+    void attach_storage(const std::shared_ptr<storage::storage>& storage);
     void start(looper::loop loop);
     void stop();
 
@@ -111,7 +111,7 @@ private:
     std::map<client_id, std::unique_ptr<server_client>> m_clients;
     std::map<storage::entry_id, std::string> m_id_assignments;
 
-    looper::timer m_update_timer_handle;
+    looper::timer_holder m_update_timer_handle;
     timer m_open_retry_timer;
 };
 

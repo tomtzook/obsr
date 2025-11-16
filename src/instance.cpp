@@ -57,10 +57,6 @@ instance::instance()
 
 instance::~instance() {
     stop_network();
-
-    if (m_loop != looper::empty_handle) {
-        looper::destroy(m_loop);
-    }
 }
 
 std::chrono::milliseconds instance::time() const {

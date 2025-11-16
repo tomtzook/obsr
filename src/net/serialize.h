@@ -120,12 +120,13 @@ public:
 
     void reset();
 
-    bool entry_id_assign(storage::entry_id id, std::string_view name);
-    bool entry_created(std::chrono::milliseconds send_time, std::string_view name, const value& value);
-    bool entry_updated(std::chrono::milliseconds send_time, storage::entry_id id, const value& value);
-    bool entry_deleted(std::chrono::milliseconds send_time, storage::entry_id id);
-    bool time_sync_request(std::chrono::milliseconds send_time);
-    bool time_sync_response(std::chrono::milliseconds send_time, std::chrono::milliseconds request_time);
+    [[nodiscard]] bool entry_id_assign(storage::entry_id id, std::string_view name);
+    [[nodiscard]] bool entry_created(std::chrono::milliseconds send_time, std::string_view name, const value& value);
+    [[nodiscard]] bool entry_updated(std::chrono::milliseconds send_time, storage::entry_id id, const value& value);
+    [[nodiscard]] bool entry_deleted(std::chrono::milliseconds send_time, storage::entry_id id);
+    [[nodiscard]] bool time_sync_request(std::chrono::milliseconds send_time);
+    [[nodiscard]] bool time_sync_response(std::chrono::milliseconds send_time, std::chrono::milliseconds request_time);
+
 private:
     io::linear_buffer m_buffer;
     io::serializer m_serializer;
@@ -151,14 +152,15 @@ public:
     void process();
 
 private:
-    bool write_message(const out_message& message);
-    bool write_entry_created(const out_message& message);
-    bool write_entry_updated(const out_message& message);
-    bool write_entry_deleted(const out_message& message);
-    bool write_entry_id_assigned(const out_message& message);
-    bool write_time_sync_request(const out_message& message);
-    bool write_time_sync_response(const out_message& message);
-    bool write_basic(const out_message& message);
+
+    [[nodiscard]] bool write_message(const out_message& message);
+    [[nodiscard]] bool write_entry_created(const out_message& message);
+    [[nodiscard]] bool write_entry_updated(const out_message& message);
+    [[nodiscard]] bool write_entry_deleted(const out_message& message);
+    [[nodiscard]] bool write_entry_id_assigned(const out_message& message);
+    [[nodiscard]] bool write_time_sync_request(const out_message& message);
+    [[nodiscard]] bool write_time_sync_response(const out_message& message);
+    [[nodiscard]] bool write_basic(const out_message& message);
 
     destination m_destination;
 

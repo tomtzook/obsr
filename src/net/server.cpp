@@ -15,7 +15,7 @@ static constexpr auto update_time = std::chrono::milliseconds(200);
 
 server_client::server_client(
     const client_id id,
-    looper::tcp tcp,
+    const looper::tcp tcp,
     const clock_ptr& clock,
     on_message_cb&& message_cb,
     on_error_cb&& error_cb)
@@ -99,7 +99,7 @@ server_client::state server_client::get_state() const {
     return m_state;
 }
 
-void server_client::set_state(state state) {
+void server_client::set_state(const state state) {
     m_state = state;
 }
 
@@ -170,7 +170,7 @@ network_server::network_server(const clock_ptr& clock)
     , m_next_entry_id(0)
     , m_clients()
     , m_id_assignments()
-    , m_update_timer_handle(looper::empty_handle)
+    , m_update_timer_handle()
     , m_open_retry_timer() {
 }
 
@@ -184,7 +184,7 @@ void network_server::configure_bind(const uint16_t bind_port) {
     m_bind_port = bind_port;
 }
 
-void network_server::attach_storage(const std::shared_ptr<storage::storage> storage) {
+void network_server::attach_storage(const std::shared_ptr<storage::storage>& storage) {
     std::unique_lock lock(m_mutex);
 
     if (m_state != state::idle) {
@@ -221,7 +221,7 @@ void network_server::start(const looper::loop loop) {
         update();
         looper::reset_timer(timer);
     };
-    m_update_timer_handle = looper::create_timer(m_loop, update_time, update_callback);
+    m_update_timer_handle = looper::make_timer(m_loop, update_time, update_callback);
     looper::start_timer(m_update_timer_handle);
 }
 
@@ -232,11 +232,7 @@ void network_server::stop() {
         throw illegal_state_exception("not running");
     }
 
-    if (m_update_timer_handle != looper::empty_handle) {
-        looper::destroy_timer(m_update_timer_handle);
-        m_update_timer_handle = looper::empty_handle;
-    }
-
+    m_update_timer_handle.reset();
     close_io();
 
     m_state = state::idle;
@@ -372,7 +368,8 @@ void network_server::on_new_message(client_id id, const message_header& header, 
     if (m_parser.is_errored()) {
         TRACE_ERROR(LOG_MODULE, "failed to parse incoming data, parser error=%d", m_parser.error_code());
         return;
-    } else if (!m_parser.is_finished()) {
+    }
+    if (!m_parser.is_finished()) {
         TRACE_ERROR(LOG_MODULE, "failed to parse incoming data, parser did not finish");
         return;
     }
