@@ -208,7 +208,7 @@ std::span<const float> value::get_float_array_or(const std::span<const float> de
 }
 
 void value::set_float_array(const std::span<const float> value) {
-    m_type = value_type::integer64_array;
+    m_type = value_type::floating_point32_array;
 
     auto data = create_array(value);
     m_value.floating_point32_array.arr = data.get();
@@ -230,7 +230,7 @@ std::span<const double> value::get_double_array_or(const std::span<const double>
 }
 
 void value::set_double_array(const std::span<const double> value) {
-    m_type = value_type::integer64_array;
+    m_type = value_type::floating_point64_array;
 
     auto data = create_array(value);
     m_value.floating_point64_array.arr = data.get();
