@@ -134,6 +134,17 @@ entry get_entry(object obj, std::string_view name);
 object get_parent_for_object(object obj);
 
 /**
+ * Gets the parent object of a given entry.
+ * If the entry does not exist, an exception is thrown.
+ *
+ * At the moment, calling this function with obj being deleted, is undefined.
+ *
+ * @param entry entry
+ * @return parent of entry
+ */
+object get_parent_for_entry(entry entry);
+
+/**
  * Gets the path associated with an object.
  *
  * @param obj object
@@ -164,17 +175,6 @@ std::string get_name_for_object(object obj);
  * @return name part of the path of entry
  */
 std::string get_name_for_entry(entry entry);
-
-/**
- * Gets the parent object of a given entry.
- * If the entry does not exist, an exception is thrown.
- *
- * At the moment, calling this function with obj being deleted, is undefined.
- *
- * @param entry entry
- * @return parent of entry
- */
-object get_parent_for_entry(entry entry);
 
 /**
  * Deletes an object, with all of its children and entries.

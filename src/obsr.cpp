@@ -41,6 +41,22 @@ object get_parent_for_entry(const entry entry) {
     return global_instance().get_parent_for_entry(entry);
 }
 
+std::string get_path_for_object(const object obj) {
+    return global_instance().get_path_for_object(obj);
+}
+
+std::string get_path_for_entry(const entry entry) {
+    return global_instance().get_path_for_entry(entry);
+}
+
+std::string get_name_for_object(const object obj) {
+    return global_instance().get_name_for_object(obj);
+}
+
+std::string get_name_for_entry(const entry entry) {
+    return global_instance().get_name_for_entry(entry);
+}
+
 void delete_object(const object obj) {
     global_instance().delete_object(obj);
 }
