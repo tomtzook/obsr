@@ -47,6 +47,9 @@ public:
     value& operator=(const value& other) = default;
     value& operator=(value&& other) = default;
 
+    bool operator==(const value& other) const;
+    bool operator!=(const value& other) const;
+
     [[nodiscard]] value_type get_type() const;
     [[nodiscard]] bool empty() const;
 

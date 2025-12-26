@@ -1,5 +1,8 @@
 
 #include "obsr_types.h"
+
+#include <cstring>
+
 #include "obsr_except.h"
 
 namespace obsr {
@@ -9,6 +12,76 @@ value::value(const value_type type)
     , m_value()
     , m_data()
 {}
+
+bool value::operator==(const value& other) const {
+    if (m_type != other.m_type) {
+        return false;
+    }
+
+    switch (m_type) {
+        case value_type::empty: return true;
+        case value_type::raw:
+            return m_value.raw.size == other.m_value.raw.size &&
+                std::memcmp(m_value.raw.ptr, other.m_value.raw.ptr, m_value.raw.size) == 0;
+        case value_type::string:
+            return m_value.string.size == other.m_value.string.size &&
+                std::memcmp(m_value.string.ptr, other.m_value.string.ptr, m_value.string.size) == 0;
+        case value_type::boolean: return m_value.boolean == other.m_value.boolean;
+        case value_type::integer32: return m_value.integer32 == other.m_value.integer32;
+        case value_type::integer64: return m_value.integer64 == other.m_value.integer64;
+        case value_type::floating_point32: return m_value.floating_point32 == other.m_value.floating_point32;
+        case value_type::floating_point64: return m_value.floating_point64 == other.m_value.floating_point64;
+        case value_type::integer32_array:
+            return m_value.integer32_array.size == other.m_value.integer32_array.size &&
+                std::memcmp(m_value.integer32_array.arr, other.m_value.integer32_array.arr, m_value.integer32_array.size * sizeof(int32_t)) == 0;
+        case value_type::integer64_array:
+            return m_value.integer64_array.size == other.m_value.integer64_array.size &&
+                std::memcmp(m_value.integer64_array.arr, other.m_value.integer64_array.arr, m_value.integer64_array.size * sizeof(int64_t)) == 0;
+        case value_type::floating_point32_array:
+            return m_value.floating_point32_array.size == other.m_value.floating_point32_array.size &&
+                std::memcmp(m_value.floating_point32_array.arr, other.m_value.floating_point32_array.arr, m_value.floating_point32_array.size * sizeof(float)) == 0;
+        case value_type::floating_point64_array:
+            return m_value.floating_point64_array.size == other.m_value.floating_point64_array.size &&
+                std::memcmp(m_value.floating_point64_array.arr, other.m_value.floating_point64_array.arr, m_value.floating_point64_array.size * sizeof(double)) == 0;
+        default:
+            return false;
+    }
+}
+
+bool value::operator!=(const value& other) const {
+    if (m_type != other.m_type) {
+        return true;
+    }
+
+    switch (m_type) {
+        case value_type::empty: return false;
+        case value_type::raw:
+            return m_value.raw.size != other.m_value.raw.size ||
+                std::memcmp(m_value.raw.ptr, other.m_value.raw.ptr, m_value.raw.size) != 0;
+        case value_type::string:
+            return m_value.string.size != other.m_value.string.size ||
+                std::memcmp(m_value.string.ptr, other.m_value.string.ptr, m_value.string.size) != 0;
+        case value_type::boolean: return m_value.boolean != other.m_value.boolean;
+        case value_type::integer32: return m_value.integer32 != other.m_value.integer32;
+        case value_type::integer64: return m_value.integer64 != other.m_value.integer64;
+        case value_type::floating_point32: return m_value.floating_point32 != other.m_value.floating_point32;
+        case value_type::floating_point64: return m_value.floating_point64 != other.m_value.floating_point64;
+        case value_type::integer32_array:
+            return m_value.integer32_array.size != other.m_value.integer32_array.size ||
+                std::memcmp(m_value.integer32_array.arr, other.m_value.integer32_array.arr, m_value.integer32_array.size * sizeof(int32_t)) != 0;
+        case value_type::integer64_array:
+            return m_value.integer64_array.size != other.m_value.integer64_array.size ||
+                std::memcmp(m_value.integer64_array.arr, other.m_value.integer64_array.arr, m_value.integer64_array.size * sizeof(int64_t)) != 0;
+        case value_type::floating_point32_array:
+            return m_value.floating_point32_array.size != other.m_value.floating_point32_array.size ||
+                std::memcmp(m_value.floating_point32_array.arr, other.m_value.floating_point32_array.arr, m_value.floating_point32_array.size * sizeof(float)) != 0;
+        case value_type::floating_point64_array:
+            return m_value.floating_point64_array.size != other.m_value.floating_point64_array.size ||
+                std::memcmp(m_value.floating_point64_array.arr, other.m_value.floating_point64_array.arr, m_value.floating_point64_array.size * sizeof(double)) != 0;
+        default:
+            return true;
+    }
+}
 
 value_type value::get_type() const {
     return m_type;
