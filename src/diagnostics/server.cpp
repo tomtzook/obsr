@@ -8,6 +8,54 @@
 
 namespace obsr::diagnostics {
 
+template<typename t>
+std::string mask_str(const t mask, const char*(*bit_to_str)(t)) {
+    std::stringstream ss;
+    bool has_one = false;
+    for (int i = 0; i < sizeof(mask) * 8; i++) {
+        if (const auto bit = mask & (1 << i)) {
+            const auto str = bit_to_str(bit);
+
+            if (has_one) {
+                ss << '|';
+            } else {
+                has_one = true;
+            }
+
+            ss << str;
+        }
+    }
+
+    return ss.str();
+}
+
+static const char* flag_str(const uint16_t flag) {
+    switch (flag) {
+        case obsr::storage::flag_internal_dirty:
+            return "dirty";
+        case obsr::storage::flag_internal_created:
+            return "created";
+        case obsr::storage::flag_internal_deleted:
+            return "deleted";
+        default:
+            return "";
+    }
+}
+
+template<typename wr_t_>
+static void write_flags(rapidjson::Writer<wr_t_>& writer, const uint16_t flags) {
+    writer.StartArray();
+
+    for (int i = 0; i < sizeof(flags) * 8; i++) {
+        if (const auto bit = flags & (1 << i)) {
+            const auto str = flag_str(bit);
+            writer.String(str);
+        }
+    }
+
+    writer.EndArray();
+}
+
 template<typename wr_t_, typename t_>
 static void write_arr(rapidjson::Writer<wr_t_>& writer, const std::span<const t_> arr) {
     writer.StartArray();
@@ -78,13 +126,19 @@ static void write_value(rapidjson::Writer<wr_t_>& writer, const value& value) {
     writer.EndObject();
 }
 
-server::server(std::shared_ptr<storage::storage> storage)
-    : m_storage_monitor(std::move(storage))
+server::server(std::shared_ptr<storage::storage> storage, const uint16_t port)
+    : m_storage(std::move(storage))
+    , m_dispatcher(std::make_shared<event_dispatcher>())
+    , m_storage_monitor(m_storage, m_dispatcher)
     , m_app()
-    , m_thread(&server::server_main, this)
-{}
+    , m_port(port)
+    , m_thread(&server::server_main, this) {
+    m_storage->set_diagnostics_dispatcher(m_dispatcher);
+}
 
 server::~server() {
+    m_storage->set_diagnostics_dispatcher(m_dispatcher);
+
     m_app.stop();
     m_thread.join();
 }
@@ -107,7 +161,11 @@ void server::server_main() {
             writer.StartObject();
 
             writer.Key("path");
-            writer.String(entry.path.c_str());
+            writer.String(entry.path);
+            writer.Key("netId");
+            writer.Int(entry.net_id);
+            writer.Key("flags");
+            write_flags(writer, entry.flags);
             writer.Key("value");
             write_value(writer, entry.value);
 
@@ -119,7 +177,7 @@ void server::server_main() {
         return crow::response(200, "application/json", buffer.GetString());
     });
 
-    m_app.port(18080).multithreaded().run();
+    m_app.port(m_port).multithreaded().run();
 }
 
 }

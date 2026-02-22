@@ -66,7 +66,7 @@ public:
     void start_client(std::string_view address, uint16_t server_port);
     void stop_network();
 
-    void start_diagnostics();
+    void start_diagnostics(uint16_t port);
     void stop_diagnostics();
 
 private:

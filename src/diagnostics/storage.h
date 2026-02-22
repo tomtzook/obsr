@@ -2,9 +2,9 @@
 
 #include <mutex>
 #include <map>
-#include <functional>
 #include <atomic>
 
+#include "diagnostics/dispatcher.h"
 #include "storage/storage.h"
 
 namespace obsr::diagnostics {
@@ -13,11 +13,13 @@ class storage_monitor {
 public:
     struct entry {
         obsr::handle handle;
-        std::string path;
+        char path[256];
         value value;
+        uint16_t net_id;
+        uint16_t flags;
     };
 
-    explicit storage_monitor(std::shared_ptr<storage::storage> storage);
+    explicit storage_monitor(std::shared_ptr<storage::storage> storage, event_dispatcher_ptr dispatcher);
     ~storage_monitor();
 
     std::shared_ptr<const std::map<obsr::handle, entry>> get_data_snapshot() const;
@@ -40,11 +42,11 @@ private:
         type m_write_data;
     };
 
-    void on_event(const obsr::event& event);
+    void on_event(const diagnostic_event& event);
 
     std::mutex m_mutex;
     std::shared_ptr<storage::storage> m_storage;
-    listener m_listener;
+    event_dispatcher_ptr m_dispatcher;
     data_snapshot m_data;
     std::chrono::milliseconds m_last_sync;
 };

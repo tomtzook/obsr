@@ -41,8 +41,12 @@ entry_id storage_entry::get_net_id() const {
     return m_net_id;
 }
 
-void storage_entry::set_net_id(entry_id id) {
-    m_net_id = id;
+bool storage_entry::set_net_id(const entry_id id) {
+    if (m_net_id != id) {
+        m_net_id = id;
+        return true;
+    }
+    return false;
 }
 
 void storage_entry::clear_net_id() {
@@ -100,14 +104,18 @@ std::optional<value> storage_entry::set_value(const value& value) {
         return std::nullopt;
     }
 
-    auto old = m_value;
+    auto old = std::move(m_value);
     m_value = value;
 
     return old;
 }
 
-value storage_entry::clear() {
-    auto old = m_value;
+std::optional<value> storage_entry::clear() {
+    if (m_value.empty()) {
+        return std::nullopt;
+    }
+
+    auto old = std::move(m_value);
     m_value = value::make();
 
     return old;
@@ -128,6 +136,16 @@ void storage::foreach_entry(const entry_view& action) {
     for (const auto [handle, data] : m_entries) {
         action(data);
     }
+}
+
+void storage::set_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr dispatcher) {
+    std::unique_lock guard(m_mutex);
+    m_diagnostic_dispatcher = std::move(dispatcher);
+}
+
+void storage::clear_diagnostics_dispatcher() {
+    std::unique_lock guard(m_mutex);
+    m_diagnostic_dispatcher.reset();
 }
 
 entry storage::get_or_create_entry(const std::string_view& path) {
@@ -360,7 +378,9 @@ void storage::on_entry_id_assigned(entry_id id,
     }
 
     const auto data = m_entries[entry];
-    data->set_net_id(id);
+    if (data->set_net_id(id)) {
+        diagnostics::notify_entry_net_id_set(m_diagnostic_dispatcher, entry, id);
+    }
 
     m_ids.emplace(id, entry);
 }
@@ -374,6 +394,8 @@ entry storage::create_new_entry(const std::string_view& path) {
     data->add_flags(flag_internal_created);
     data->set_last_update_timestamp(std::chrono::milliseconds(0));
 
+    diagnostics::notify_entry_created(m_diagnostic_dispatcher, entry, data->get_path());
+
     return entry;
 }
 
@@ -383,7 +405,7 @@ void storage::set_entry_internal(const entry entry,
                                  const entry_id id,
                                  const bool mark_dirty,
                                  std::chrono::milliseconds timestamp) {
-    auto data = m_entries[entry];
+    const auto data = m_entries[entry];
 
     const auto last_update = data->get_last_update_timestamp();
     if (timestamp.count() != 0 && last_update > timestamp) {
@@ -394,11 +416,13 @@ void storage::set_entry_internal(const entry entry,
     }
 
     bool just_created = false;
+    bool flags_changed = false;
     if (data->has_flags(flag_internal_created)) {
         TRACE_DEBUG(LOG_MODULE, "received set request on new created entry");
 
         data->remove_flags(flag_internal_created);
         just_created = true;
+        flags_changed = true;
     }
 
     if (data->has_flags(flag_internal_deleted)) {
@@ -406,6 +430,11 @@ void storage::set_entry_internal(const entry entry,
 
         data->remove_flags(flag_internal_deleted);
         just_created = true;
+        flags_changed = true;
+    }
+
+    if (flags_changed) {
+        diagnostics::notify_entry_flags_changed(m_diagnostic_dispatcher, entry, data->get_flags());
     }
 
     if (just_created) {
@@ -416,12 +445,21 @@ void storage::set_entry_internal(const entry entry,
     }
 
     if (id != id_not_assigned) {
-        data->set_net_id(id);
+        if (data->set_net_id(id)) {
+            diagnostics::notify_entry_net_id_set(m_diagnostic_dispatcher, entry, id);
+        }
     }
 
     auto old_value = value::make();
     if (clear) {
-        old_value = data->clear();
+         auto opt = data->clear();
+        if (!opt) {
+            // no change
+            return;
+        }
+
+        diagnostics::notify_entry_flags_changed(m_diagnostic_dispatcher, entry, data->get_flags());
+        old_value = std::move(opt.value());
     } else {
         auto opt = data->set_value(value);
         if (!opt) {
@@ -429,6 +467,7 @@ void storage::set_entry_internal(const entry entry,
             return;
         }
 
+        diagnostics::notify_entry_value_set(m_diagnostic_dispatcher, entry, value);
         old_value = std::move(opt.value());
     }
 
@@ -471,6 +510,8 @@ void storage::delete_entry_internal(const entry entry,
 
     (void) data->clear();
     data->add_flags(flag_internal_deleted);
+
+    diagnostics::notify_entry_flags_changed(m_diagnostic_dispatcher, entry, data->get_flags());
 
     if (mark_dirty) {
         data->mark_dirty();

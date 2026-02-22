@@ -9,6 +9,7 @@
 #include "util/handles.h"
 #include "util/time.h"
 #include "listener_storage.h"
+#include "diagnostics/dispatcher.h"
 
 namespace obsr::storage {
 
@@ -32,7 +33,7 @@ struct storage_entry {
     [[nodiscard]] std::string_view get_path() const;
 
     [[nodiscard]] entry_id get_net_id() const;
-    void set_net_id(entry_id id);
+    bool set_net_id(entry_id id);
     void clear_net_id();
 
     [[nodiscard]] uint16_t get_flags() const;
@@ -49,7 +50,7 @@ struct storage_entry {
 
     [[nodiscard]] const value& get_value() const;
     [[nodiscard]] std::optional<value> set_value(const value& value);
-    [[nodiscard]] value clear();
+    [[nodiscard]] std::optional<value> clear();
 
 private:
     const entry m_handle;
@@ -69,6 +70,9 @@ public:
     explicit storage(listener_storage_ptr listener_storage, clock_ptr clock);
 
     void foreach_entry(const entry_view& action);
+
+    void set_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr dispatcher);
+    void clear_diagnostics_dispatcher();
 
     [[nodiscard]] entry get_or_create_entry(const std::string_view& path);
     void delete_entry(entry entry);
@@ -117,6 +121,7 @@ private:
                                std::chrono::milliseconds timestamp = std::chrono::milliseconds(0));
 
     listener_storage_ptr m_listener_storage;
+    diagnostics::event_dispatcher_ptr m_diagnostic_dispatcher;
     clock_ptr m_clock;
 
     std::recursive_mutex m_mutex; // todo: switch to regular

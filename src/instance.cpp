@@ -304,8 +304,8 @@ void instance::stop_network() {
     }
 }
 
-void instance::start_diagnostics() {
-    m_diagnostics_server = std::make_unique<diagnostics::server>(m_storage);
+void instance::start_diagnostics(const uint16_t port) {
+    m_diagnostics_server = std::make_unique<diagnostics::server>(m_storage, port);
 }
 
 void instance::stop_diagnostics() {

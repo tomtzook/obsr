@@ -3,6 +3,8 @@
 
 #include "storage.h"
 
+#include <cstring>
+
 namespace obsr::diagnostics {
 
 storage_monitor::data_snapshot::data_snapshot()
@@ -23,18 +25,16 @@ void storage_monitor::data_snapshot::swap() {
     m_read_data.store(std::move(new_data));
 }
 
-storage_monitor::storage_monitor(std::shared_ptr<storage::storage> storage)
+storage_monitor::storage_monitor(std::shared_ptr<storage::storage> storage, event_dispatcher_ptr dispatcher)
     : m_mutex()
     , m_storage(std::move(storage))
-    , m_listener(empty_handle)
+    , m_dispatcher(std::move(dispatcher))
     , m_data()
     , m_last_sync()
 {}
 
 storage_monitor::~storage_monitor() {
-    if (m_listener != empty_handle) {
-        m_storage->remove_listener(m_listener);
-    }
+
 }
 
 std::shared_ptr<const std::map<obsr::handle, storage_monitor::entry>> storage_monitor::get_data_snapshot() const {
@@ -44,14 +44,24 @@ std::shared_ptr<const std::map<obsr::handle, storage_monitor::entry>> storage_mo
 void storage_monitor::start() {
     std::unique_lock lock(m_mutex);
 
-    auto& snapshot = m_data.write();
-    m_storage->foreach_entry([&snapshot](const auto& entry) {
-        struct entry our_entry{entry.get_handle(), std::string(entry.get_path()), entry.get_value()};
-        snapshot.emplace(our_entry.handle, std::move(our_entry));
+    /*m_listener = m_storage->listen("/", [this](const auto& event)->void {
+        on_event(event);
+    });*/
+
+    // todo: need to detach listener!
+    m_dispatcher->listen([this](const auto& event)->void {
+        on_event(event);
     });
 
-    m_listener = m_storage->listen("/", [this](const auto& event)->void {
-        on_event(event);
+    auto& snapshot = m_data.write();
+    m_storage->foreach_entry([&snapshot](const storage::storage_entry& entry) {
+        struct entry our_entry{};
+        our_entry.handle = entry.get_handle();
+        strncpy(our_entry.path, entry.get_path().data(), sizeof(our_entry.path));
+        our_entry.flags = entry.get_flags();
+        our_entry.net_id = entry.get_net_id();
+        our_entry.value = entry.get_value();
+        snapshot.emplace(our_entry.handle, std::move(our_entry));
     });
 
     m_last_sync = time_now();
@@ -66,44 +76,65 @@ void storage_monitor::sync() {
     }
 }
 
-void storage_monitor::on_event(const obsr::event& event) {
+void storage_monitor::on_event(const diagnostic_event& event) {
     std::unique_lock lock(m_mutex);
 
     auto& snapshot = m_data.write();
 
-    const auto handle = event.get_entry();
-    switch (event.get_type()) {
-        case event_type::created: {
-            const auto it = snapshot.find(handle);
-            if (it != snapshot.end()) {
-                // todo: this means a problem!!!
-                return;
-            }
+    if (event.has<storage_entry_created>()) {
+        const auto& data = event.get<storage_entry_created>();
 
-            entry entry{handle, event.get_path(), value()};
-            snapshot.emplace(handle, std::move(entry));
-            break;
+        const auto it = snapshot.find(data.handle);
+        if (it != snapshot.end()) {
+            // todo: this means a problem!!!
+            return;
         }
-        case event_type::deleted: {
-            const auto it = snapshot.find(handle);
-            if (it == snapshot.end()) {
-                // todo: this means a problem!!!
-                return;
-            }
 
-            snapshot.erase(it);
-            break;
-        }
-        case event_type::value_changed: {
-            const auto it = snapshot.find(handle);
-            if (it == snapshot.end()) {
-                // todo: this means a problem!!!
-                return;
-            }
+        entry entry{};
+        entry.handle = data.handle;
+        strncpy(entry.path, data.path, std::min(sizeof(entry.path), sizeof(data.path)));
 
-            it->second.value = event.get_value();
-            break;
+        snapshot.emplace(data.handle, std::move(entry));
+    } else if (event.has<storage_entry_deleted>()) {
+        const auto& data = event.get<storage_entry_deleted>();
+
+        const auto it = snapshot.find(data.handle);
+        if (it != snapshot.end()) {
+            // todo: this means a problem!!!
+            return;
         }
+
+        snapshot.erase(it);
+    } else if (event.has<storage_entry_value_changed>()) {
+        const auto& data = event.get<storage_entry_value_changed>();
+
+        const auto it = snapshot.find(data.handle);
+        if (it == snapshot.end()) {
+            // todo: this means a problem!!!
+            return;
+        }
+
+        it->second.value = data.value;
+    } else if (event.has<storage_entry_flags_changed>()) {
+        const auto& data = event.get<storage_entry_flags_changed>();
+
+        const auto it = snapshot.find(data.handle);
+        if (it == snapshot.end()) {
+            // todo: this means a problem!!!
+            return;
+        }
+
+        it->second.flags = data.flags;
+    } else if (event.has<storage_entry_net_id_changed>()) {
+        const auto& data = event.get<storage_entry_net_id_changed>();
+
+        const auto it = snapshot.find(data.handle);
+        if (it == snapshot.end()) {
+            // todo: this means a problem!!!
+            return;
+        }
+
+        it->second.net_id = data.net_id;
     }
 }
 

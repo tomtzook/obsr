@@ -101,8 +101,8 @@ void stop_network() {
     global_instance().stop_network();
 }
 
-void start_diagnostics() {
-    global_instance().start_diagnostics();
+void start_diagnostics(const uint16_t port) {
+    global_instance().start_diagnostics(port);
 }
 
 void stop_diagnostics() {
