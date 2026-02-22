@@ -83,15 +83,24 @@ target_include_directories(obsr
                 $<INSTALL_INTERFACE:include/obsr>
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
         )
-target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt looper::looper Crow::Crow RapidJSON)
+target_link_libraries(obsr PUBLIC Threads::Threads fmt::fmt looper::looper Crow::Crow RapidJSON)
 
-install(TARGETS obsr EXPORT obsrConfig
+install(TARGETS obsr EXPORT obsrTargets
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(FILES ${INCLUDE_FILES}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/obsr)
-install(EXPORT obsrConfig
-        FILE obsrConfig.cmake
+install(EXPORT obsrTargets
+        FILE obsrTargets.cmake
         NAMESPACE obsr::
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/obsr")
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/obsrConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/obsrConfig.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/obsr
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/obsrConfig.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/obsr)

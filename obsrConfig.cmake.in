@@ -1,0 +1,16 @@
+@PACKAGE_INIT@
+
+# Include the targets file that defines the imported library target
+include("${CMAKE_CURRENT_LIST_DIR}/obsrTargets.cmake")
+
+include(CMakeFindDependencyMacro)
+find_dependency(Threads REQUIRED)
+find_dependency(fmt REQUIRED)
+find_dependency(looper REQUIRED)
+find_dependency(Crow REQUIRED)
+find_dependency(RapidJSON REQUIRED)
+
+# Define the namespace::target name
+set(MyStaticLib_FOUND TRUE)
+set(MyStaticLib_INCLUDE_DIRS "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
+set(MyStaticLib_LIBRARIES MyStaticLib::MyStaticLib)
