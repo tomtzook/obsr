@@ -1,13 +1,9 @@
 
 #include "instance.h"
+#include "global.h"
 #include "obsr.h"
 
 namespace obsr {
-
-static obsr::instance& global_instance() {
-    static obsr::instance s_instance{};
-    return s_instance;
-}
 
 std::chrono::milliseconds time() {
     return global_instance().time();
@@ -105,6 +101,14 @@ void stop_network() {
     global_instance().stop_network();
 }
 
+void start_diagnostics() {
+    global_instance().start_diagnostics();
+}
+
+void stop_diagnostics() {
+    global_instance().stop_diagnostics();
+}
+
 }
 
 template<typename t_>
@@ -124,46 +128,8 @@ std::ostream& operator<<(std::ostream& os, std::span<const t_> arr) {
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, obsr::value_type type) {
-    switch (type) {
-        case obsr::value_type::empty:
-            os << "empty";
-            break;
-        case obsr::value_type::raw:
-            os << "raw";
-            break;
-        case obsr::value_type::string:
-            os << "string";
-            break;
-        case obsr::value_type::boolean:
-            os << "bool";
-            break;
-        case obsr::value_type::integer32:
-            os << "int32";
-            break;
-        case obsr::value_type::integer64:
-            os << "int64";
-            break;
-        case obsr::value_type::floating_point32:
-            os << "float";
-            break;
-        case obsr::value_type::floating_point64:
-            os << "double";
-            break;
-        case obsr::value_type::integer32_array:
-            os << "int32_arr";
-            break;
-        case obsr::value_type::integer64_array:
-            os << "int64_arr";
-            break;
-        case obsr::value_type::floating_point32_array:
-            os << "float_arr";
-            break;
-        case obsr::value_type::floating_point64_array:
-            os << "double_arr";
-            break;
-    }
-
+std::ostream& operator<<(std::ostream& os, const obsr::value_type type) {
+    os << obsr::value_type_str(type);
     return os;
 }
 
@@ -211,7 +177,7 @@ std::ostream& operator<<(std::ostream& os, const obsr::value& value) {
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, obsr::event_type type) {
+std::ostream& operator<<(std::ostream& os, const obsr::event_type type) {
     switch (type) {
         case obsr::event_type::created:
             os << "created";

@@ -294,6 +294,9 @@ void start_client(std::string_view address, uint16_t server_port);
  */
 void stop_network();
 
+void start_diagnostics();
+void stop_diagnostics();
+
 }
 
 // these are textual and should not be used to store in file or send

@@ -30,6 +30,8 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 find_package(fmt REQUIRED)
 find_package(looper REQUIRED)
+find_package(Crow REQUIRED)
+find_package(RapidJSON REQUIRED)
 
 file(GLOB INCLUDE_FILES ${CMAKE_SOURCE_DIR}/include/*.h)
 
@@ -68,14 +70,20 @@ add_library(obsr STATIC
         src/net/server.h
         src/net/server.cpp
         src/util/bits.h
-        src/obsr_types.cpp)
+        src/obsr_types.cpp
+        src/global.h
+        src/global.cpp
+        src/diagnostics/storage.h
+        src/diagnostics/storage.cpp
+        src/diagnostics/server.h
+        src/diagnostics/server.cpp)
 target_include_directories(obsr
         PUBLIC
                 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                 $<INSTALL_INTERFACE:include/obsr>
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
         )
-target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt looper::looper)
+target_link_libraries(obsr PRIVATE Threads::Threads fmt::fmt looper::looper Crow::Crow RapidJSON)
 
 install(TARGETS obsr EXPORT obsrConfig
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"

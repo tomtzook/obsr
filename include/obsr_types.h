@@ -39,8 +39,11 @@ enum class value_type : uint8_t {
     floating_point64_array
 };
 
+const char* value_type_str(value_type type);
+
 class value {
 public:
+    value();
     value(const value& other) = default;
     value(value&& other) = default;
 

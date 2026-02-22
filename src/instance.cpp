@@ -50,7 +50,8 @@ instance::instance()
     , m_net_agent()
     , m_objects()
     , m_object_paths()
-    , m_root(m_objects.allocate_new("", "")) {
+    , m_root(m_objects.allocate_new("", ""))
+    , m_diagnostics_server() {
     m_loop = looper::create();
     looper::exec_in_thread(m_loop);
 }
@@ -301,6 +302,14 @@ void instance::stop_network() {
 
         m_net_agent = std::monostate{};
     }
+}
+
+void instance::start_diagnostics() {
+    m_diagnostics_server = std::make_unique<diagnostics::server>(m_storage);
+}
+
+void instance::stop_diagnostics() {
+    m_diagnostics_server.reset();
 }
 
 object instance::get_or_create_child(const object parent, const std::string_view name) {

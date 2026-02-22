@@ -7,6 +7,41 @@
 
 namespace obsr {
 
+const char* value_type_str(const value_type type) {
+    switch (type) {
+        case value_type::empty:
+            return "empty";
+        case value_type::raw:
+            return "raw";
+        case value_type::string:
+            return "string";
+        case value_type::boolean:
+            return "bool";
+        case value_type::integer32:
+            return "int32";
+        case value_type::integer64:
+            return "int64";
+        case value_type::floating_point32:
+            return "float";
+        case value_type::floating_point64:
+            return "double";
+        case value_type::integer32_array:
+            return "int32_arr";
+        case value_type::integer64_array:
+            return "int64_arr";
+        case value_type::floating_point32_array:
+            return "float_arr";
+        case value_type::floating_point64_array:
+            return "double_arr";
+        default:
+            return "";
+    }
+}
+
+value::value()
+    : value(value_type::empty)
+{}
+
 value::value(const value_type type)
     : m_type(type)
     , m_value()

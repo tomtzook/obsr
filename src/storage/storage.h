@@ -27,6 +27,7 @@ enum entry_internal_flag : uint16_t {
 struct storage_entry {
     storage_entry(entry handle, const std::string_view& path);
 
+    [[nodiscard]] obsr::entry get_handle() const;
     [[nodiscard]] bool is_in(const std::string_view& path) const;
     [[nodiscard]] std::string_view get_path() const;
 
@@ -47,7 +48,7 @@ struct storage_entry {
     void set_last_update_timestamp(std::chrono::milliseconds timestamp);
 
     [[nodiscard]] const value& get_value() const;
-    [[nodiscard]] value set_value(const value& value);
+    [[nodiscard]] std::optional<value> set_value(const value& value);
     [[nodiscard]] value clear();
 
 private:
@@ -62,9 +63,12 @@ private:
 
 class storage {
 public:
+    using entry_view = std::function<void(const storage_entry&)>;
     using entry_action = std::function<bool(const storage_entry&)>;
 
-    explicit storage(listener_storage_ptr  listener_storage, clock_ptr  clock);
+    explicit storage(listener_storage_ptr listener_storage, clock_ptr clock);
+
+    void foreach_entry(const entry_view& action);
 
     [[nodiscard]] entry get_or_create_entry(const std::string_view& path);
     void delete_entry(entry entry);
@@ -116,7 +120,7 @@ private:
     clock_ptr m_clock;
 
     std::recursive_mutex m_mutex; // todo: switch to regular
-    handle_table<storage_entry, 256> m_entries;
+    handle_table<storage_entry, 1024> m_entries;
     std::map<std::string, entry, std::less<>> m_paths;
     std::map<entry_id, entry> m_ids;
 };

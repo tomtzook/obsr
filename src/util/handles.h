@@ -8,6 +8,7 @@
 
 namespace obsr {
 
+// todo: this should be dynamically extendable!
 template<typename type_, size_t capacity_>
 class handle_table {
 public:

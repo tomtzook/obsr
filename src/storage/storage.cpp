@@ -20,9 +20,13 @@ storage_entry::storage_entry(const entry handle, const std::string_view& path)
     : m_handle(handle)
     , m_path(path)
     , m_value(value::make())
+    , m_last_update_timestamp(0)
     , m_net_id(id_not_assigned)
-    , m_flags(0)
-    , m_last_update_timestamp(0) {
+    , m_flags(0) {
+}
+
+obsr::entry storage_entry::get_handle() const {
+    return m_handle;
 }
 
 bool storage_entry::is_in(const std::string_view& path) const {
@@ -85,11 +89,15 @@ const value& storage_entry::get_value() const {
     return m_value;
 }
 
-value storage_entry::set_value(const value& value) {
+std::optional<value> storage_entry::set_value(const value& value) {
     const auto old_type = m_value.get_type();
     const auto new_type = value.get_type();
     if (old_type != value_type::empty && old_type != new_type) {
         throw entry_type_mismatch_exception(m_handle, old_type, new_type);
+    }
+
+    if (value == m_value) {
+        return std::nullopt;
     }
 
     auto old = m_value;
@@ -112,6 +120,14 @@ storage::storage(listener_storage_ptr listener_storage, clock_ptr clock)
     , m_entries()
     , m_paths()
     , m_ids() {
+}
+
+void storage::foreach_entry(const entry_view& action) {
+    std::unique_lock guard(m_mutex);
+
+    for (const auto [handle, data] : m_entries) {
+        action(data);
+    }
 }
 
 entry storage::get_or_create_entry(const std::string_view& path) {
@@ -407,7 +423,13 @@ void storage::set_entry_internal(const entry entry,
     if (clear) {
         old_value = data->clear();
     } else {
-        old_value = data->set_value(value);
+        auto opt = data->set_value(value);
+        if (!opt) {
+            // no change
+            return;
+        }
+
+        old_value = std::move(opt.value());
     }
 
     if (mark_dirty) {

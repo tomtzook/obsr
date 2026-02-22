@@ -11,6 +11,7 @@
 #include "net/client.h"
 #include "net/server.h"
 #include "util/time.h"
+#include "diagnostics/server.h"
 
 namespace obsr {
 
@@ -65,8 +66,10 @@ public:
     void start_client(std::string_view address, uint16_t server_port);
     void stop_network();
 
-private:
+    void start_diagnostics();
+    void stop_diagnostics();
 
+private:
     [[nodiscard]] object get_or_create_child(object parent, std::string_view name);
     [[nodiscard]] object get_or_create_object(std::string_view path);
 
@@ -82,9 +85,11 @@ private:
     looper::loop_holder m_loop;
     net_agent_type m_net_agent;
 
-    handle_table<object_data, 256> m_objects;
+    handle_table<object_data, 1024> m_objects;
     std::map<std::string, object, std::less<>> m_object_paths;
     object m_root;
+
+    std::unique_ptr<diagnostics::server> m_diagnostics_server;
 };
 
 }
