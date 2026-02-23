@@ -10,23 +10,10 @@
 #include <variant>
 
 #include "obsr_types.h"
-
+#include "net/serialize.h"
+#include "diagnostics/data.h"
 
 namespace obsr::diagnostics {
-
-template<typename t_, size_t size_>
-struct non_blocking_queue {
-public:
-    non_blocking_queue() = default;
-
-    void push(t_&& t);
-    std::optional<t_> pop();
-
-private:
-    std::atomic_uint64_t m_read_idx = 0;
-    std::atomic_uint64_t m_write_idx = 0;
-    std::array<t_, size_> m_data{};
-};
 
 struct storage_entry_created {
     obsr::entry handle;
@@ -53,6 +40,18 @@ struct storage_entry_net_id_changed {
     uint16_t net_id;
 };
 
+struct network_sending_message {
+    net::message_type type;
+    uint16_t client_id;
+    uint64_t message_id;
+};
+
+struct network_received_message {
+    net::message_type type;
+    uint16_t client_id;
+    uint64_t message_id;
+};
+
 struct diagnostic_event {
     diagnostic_event() = default;
 
@@ -67,7 +66,8 @@ struct diagnostic_event {
 private:
     using data_type = std::variant<
         std::monostate,
-        storage_entry_created, storage_entry_deleted, storage_entry_value_changed, storage_entry_flags_changed, storage_entry_net_id_changed>;
+        storage_entry_created, storage_entry_deleted, storage_entry_value_changed, storage_entry_flags_changed, storage_entry_net_id_changed,
+        network_sending_message, network_received_message>;
     data_type m_data;
 };
 
@@ -104,49 +104,8 @@ void notify_entry_value_set(const event_dispatcher_ptr& dispatcher, obsr::handle
 void notify_entry_value_clear(const event_dispatcher_ptr& dispatcher, obsr::handle handle);
 void notify_entry_flags_changed(const event_dispatcher_ptr& dispatcher, obsr::handle handle, uint16_t flags);
 void notify_entry_net_id_set(const event_dispatcher_ptr& dispatcher, obsr::handle handle, uint16_t id);
-
-template<typename t_, size_t size_>
-void non_blocking_queue<t_, size_>::push(t_&& t) {
-    uint64_t write_index;
-    do {
-        auto index = m_write_idx.load(std::memory_order_relaxed);
-        write_index = (index + 1) % size_;
-
-        // need to make sure we didn't reach the reader
-        if (write_index == m_read_idx.load(std::memory_order_acquire)) {
-            // no room
-            return;
-        }
-
-        if (m_write_idx.compare_exchange_weak(index, write_index)) {
-            // acquired a spot
-            break;
-        }
-    } while (true);
-
-    m_data[write_index] = std::move(t); // TODO: MAKE SURE WE ARE NOT ACCESSED BEFORE THIS IS READY
-}
-
-template<typename t_, size_t size_>
-std::optional<t_> non_blocking_queue<t_, size_>::pop() {
-    uint64_t read_index;
-    do {
-        auto index = m_read_idx.load(std::memory_order_relaxed);
-        // need to make sure we didn't reach the reader
-        if (index == m_write_idx.load(std::memory_order_acquire)) {
-            // no room
-            return std::nullopt;
-        }
-
-        read_index = (index + 1) % size_;
-        if (m_read_idx.compare_exchange_weak(index, read_index)) {
-            // acquired a spot
-            break;
-        }
-    } while (true);
-
-    return std::move(m_data[read_index]);
-}
+void notify_sending_message(const event_dispatcher_ptr& dispatcher, net::message_type type, uint16_t client_id, uint64_t message_id);
+void notify_received_message(const event_dispatcher_ptr& dispatcher, net::message_type type, uint16_t client_id, uint64_t message_id);
 
 template<typename t_>
 bool diagnostic_event::has() const {

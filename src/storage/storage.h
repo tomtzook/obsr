@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "obsr_types.h"
+#include "obsr_internal.h"
 #include "util/handles.h"
 #include "util/time.h"
 #include "listener_storage.h"
@@ -15,9 +16,6 @@ namespace obsr::storage {
 
 static constexpr uint16_t flag_internal_shift_start = 8;
 static constexpr uint16_t flag_internal_mask = static_cast<uint8_t>(-1) << flag_internal_shift_start;
-
-using entry_id = uint16_t;
-constexpr entry_id id_not_assigned = static_cast<entry_id>(-1);
 
 enum entry_internal_flag : uint16_t {
     flag_internal_dirty = (1 << flag_internal_shift_start),
@@ -72,7 +70,6 @@ public:
     void foreach_entry(const entry_view& action);
 
     void set_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr dispatcher);
-    void clear_diagnostics_dispatcher();
 
     [[nodiscard]] entry get_or_create_entry(const std::string_view& path);
     void delete_entry(entry entry);

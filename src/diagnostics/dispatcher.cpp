@@ -126,4 +126,24 @@ void notify_entry_net_id_set(const event_dispatcher_ptr& dispatcher, const obsr:
     dispatcher->notify(std::move(event));
 }
 
+void notify_sending_message(const event_dispatcher_ptr& dispatcher, const net::message_type type, const uint16_t client_id, const uint64_t message_id) {
+    if (!dispatcher) {
+        return;
+    }
+
+    diagnostic_event event;
+    event.set(network_sending_message{ type, client_id, message_id });
+    dispatcher->notify(std::move(event));
+}
+
+void notify_received_message(const event_dispatcher_ptr& dispatcher, const net::message_type type, const uint16_t client_id, const uint64_t message_id) {
+    if (!dispatcher) {
+        return;
+    }
+
+    diagnostic_event event;
+    event.set(network_received_message{ type, client_id, message_id });
+    dispatcher->notify(std::move(event));
+}
+
 }

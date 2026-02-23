@@ -1,11 +1,12 @@
 #pragma once
 
 #include <cstddef>
+#include <deque>
 
+#include "obsr_internal.h"
 #include "io/buffer.h"
 #include "io/serialize.h"
 #include "util/state.h"
-#include "storage/storage.h"
 
 namespace obsr::net {
 
@@ -17,7 +18,7 @@ struct message_header {
 
     uint8_t magic;
     uint8_t version;
-    uint32_t index;
+    uint64_t index;
     uint8_t type;
     uint32_t message_size;
 };
@@ -134,38 +135,42 @@ private:
 
 class message_queue {
 public:
-    using destination = std::function<bool(uint8_t, const uint8_t*, size_t)>;
+    using destination = std::function<bool(uint8_t, const uint8_t*, size_t, client_id, client_id, uint64_t)>;
     enum {
         flag_immediate = 1 << 0
     };
 
-    message_queue();
-
-    void attach(destination destination);
+    explicit message_queue(destination&& destination);
 
     // todo: optimize by only writing the latest message for an entry (not including publish)
     // todo: try and switch to sending only the latest state instead of queueing every change
     //      only relevant if we can't keep up with changes
-    void enqueue(const out_message& message, uint8_t flags = 0);
+    void enqueue(out_message&& message, uint64_t message_id, uint8_t flags = 0, client_id destination = -1, client_id source = -1);
     void clear();
 
     void process();
 
 private:
+    struct data {
+        client_id destination;
+        client_id source;
+        uint64_t message_id;
+        out_message message;
+    };
 
-    [[nodiscard]] bool write_message(const out_message& message);
-    [[nodiscard]] bool write_entry_created(const out_message& message);
-    [[nodiscard]] bool write_entry_updated(const out_message& message);
-    [[nodiscard]] bool write_entry_deleted(const out_message& message);
-    [[nodiscard]] bool write_entry_id_assigned(const out_message& message);
-    [[nodiscard]] bool write_time_sync_request(const out_message& message);
-    [[nodiscard]] bool write_time_sync_response(const out_message& message);
-    [[nodiscard]] bool write_basic(const out_message& message);
+    [[nodiscard]] bool write_message(const data& data);
+    [[nodiscard]] bool write_entry_created(const data& data);
+    [[nodiscard]] bool write_entry_updated(const data& data);
+    [[nodiscard]] bool write_entry_deleted(const data& data);
+    [[nodiscard]] bool write_entry_id_assigned(const data& data);
+    [[nodiscard]] bool write_time_sync_request(const data& data);
+    [[nodiscard]] bool write_time_sync_response(const data& data);
+    [[nodiscard]] bool write_basic(const data& data);
 
     destination m_destination;
 
     message_serializer m_serializer;
-    std::deque<out_message> m_outgoing;
+    std::deque<data> m_outgoing;
 };
 
 }

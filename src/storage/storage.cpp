@@ -143,15 +143,10 @@ void storage::set_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr dispa
     m_diagnostic_dispatcher = std::move(dispatcher);
 }
 
-void storage::clear_diagnostics_dispatcher() {
-    std::unique_lock guard(m_mutex);
-    m_diagnostic_dispatcher.reset();
-}
-
 entry storage::get_or_create_entry(const std::string_view& path) {
     std::unique_lock guard(m_mutex);
 
-    auto it = m_paths.find(path);
+    const auto it = m_paths.find(path);
     if (it == m_paths.end()) {
         return create_new_entry(path);
     }

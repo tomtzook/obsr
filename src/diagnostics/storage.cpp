@@ -7,24 +7,6 @@
 
 namespace obsr::diagnostics {
 
-storage_monitor::data_snapshot::data_snapshot()
-    : m_read_data(std::make_shared<const type>())
-{}
-
-std::shared_ptr<const storage_monitor::data_snapshot::type> storage_monitor::data_snapshot::read() const {
-    return m_read_data.load();
-}
-
-storage_monitor::data_snapshot::type& storage_monitor::data_snapshot::write() {
-    return m_write_data;
-}
-
-void storage_monitor::data_snapshot::swap() {
-    // create copy to update the read data
-    auto new_data = std::make_shared<const type>(m_write_data);
-    m_read_data.store(std::move(new_data));
-}
-
 storage_monitor::storage_monitor(std::shared_ptr<storage::storage> storage, event_dispatcher_ptr dispatcher)
     : m_mutex()
     , m_storage(std::move(storage))

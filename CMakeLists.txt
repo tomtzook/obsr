@@ -76,7 +76,12 @@ add_library(obsr STATIC
         src/diagnostics/storage.h
         src/diagnostics/storage.cpp
         src/diagnostics/server.h
-        src/diagnostics/server.cpp)
+        src/diagnostics/server.cpp
+        src/diagnostics/dispatcher.h
+        src/diagnostics/dispatcher.cpp
+        src/diagnostics/network.h
+        src/diagnostics/data.h
+        src/diagnostics/network.cpp)
 target_include_directories(obsr
         PUBLIC
                 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -84,6 +89,8 @@ target_include_directories(obsr
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
         )
 target_link_libraries(obsr PUBLIC Threads::Threads fmt::fmt looper::looper Crow::Crow RapidJSON)
+
+add_subdirectory(viewer)
 
 install(TARGETS obsr EXPORT obsrTargets
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"

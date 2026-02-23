@@ -1,4 +1,5 @@
 
+#include "obsr_internal.h"
 #include "io/serialize.h"
 #include "util/bits.h"
 
@@ -9,12 +10,12 @@ namespace obsr::net {
 static constexpr size_t writer_buffer_size = 512;
 
 void header_convert_net(message_header& header) {
-    header.index = obsr::bits::net32(header.index);
+    header.index = obsr::bits::net64(header.index);
     header.message_size = obsr::bits::net32(header.message_size);
 }
 
 void header_convert_host(message_header& header) {
-    header.index = obsr::bits::host32(header.index);
+    header.index = obsr::bits::host64(header.index);
     header.message_size = obsr::bits::host32(header.message_size);
 }
 
@@ -311,7 +312,7 @@ void message_serializer::reset() {
     m_buffer.reset();
 }
 
-bool message_serializer::entry_id_assign(storage::entry_id id, std::string_view name) {
+bool message_serializer::entry_id_assign(const storage::entry_id id, const std::string_view name) {
     if (!m_serializer.write16(id)) {
         return false;
     }
@@ -323,7 +324,7 @@ bool message_serializer::entry_id_assign(storage::entry_id id, std::string_view 
     return true;
 }
 
-bool message_serializer::entry_created(std::chrono::milliseconds send_time, std::string_view name, const value& value) {
+bool message_serializer::entry_created(const std::chrono::milliseconds send_time, const std::string_view name, const value& value) {
     if (!m_serializer.write64(send_time.count())) {
         return false;
     }
@@ -343,7 +344,7 @@ bool message_serializer::entry_created(std::chrono::milliseconds send_time, std:
     return true;
 }
 
-bool message_serializer::entry_updated(std::chrono::milliseconds send_time, storage::entry_id id, const value& value) {
+bool message_serializer::entry_updated(const std::chrono::milliseconds send_time, const storage::entry_id id, const value& value) {
     if (!m_serializer.write64(send_time.count())) {
         return false;
     }
@@ -363,7 +364,7 @@ bool message_serializer::entry_updated(std::chrono::milliseconds send_time, stor
     return true;
 }
 
-bool message_serializer::entry_deleted(std::chrono::milliseconds send_time, storage::entry_id id) {
+bool message_serializer::entry_deleted(const std::chrono::milliseconds send_time, const storage::entry_id id) {
     if (!m_serializer.write64(send_time.count())) {
         return false;
     }
@@ -375,7 +376,7 @@ bool message_serializer::entry_deleted(std::chrono::milliseconds send_time, stor
     return true;
 }
 
-bool message_serializer::time_sync_request(std::chrono::milliseconds send_time) {
+bool message_serializer::time_sync_request(const std::chrono::milliseconds send_time) {
     if (!m_serializer.write64(static_cast<uint64_t>(send_time.count()))) {
         return false;
     }
@@ -383,7 +384,7 @@ bool message_serializer::time_sync_request(std::chrono::milliseconds send_time) 
     return true;
 }
 
-bool message_serializer::time_sync_response(std::chrono::milliseconds send_time, std::chrono::milliseconds request_time) {
+bool message_serializer::time_sync_response(const std::chrono::milliseconds send_time, const std::chrono::milliseconds request_time) {
     if (!m_serializer.write64(static_cast<uint64_t>(send_time.count()))) {
         return false;
     }
@@ -395,26 +396,24 @@ bool message_serializer::time_sync_response(std::chrono::milliseconds send_time,
     return true;
 }
 
-message_queue::message_queue()
-    : m_destination(nullptr)
+message_queue::message_queue(destination&& destination)
+    : m_destination(std::move(destination))
     , m_serializer()
     , m_outgoing()
 {}
 
-void message_queue::attach(destination destination) {
-    m_destination = std::move(destination);
-}
-
-void message_queue::enqueue(const out_message& message, uint8_t flags) {
+void message_queue::enqueue(out_message&& message, const uint64_t message_id,
+    const uint8_t flags, const client_id destination, const client_id source) {
+    const auto to_enqueue = data{destination, source, message_id, std::move(message)};
     if ((flags & flag_immediate) != 0) {
-        if (write_message(message)) {
+        if (write_message(std::move(to_enqueue))) {
             // success!
             return;
-        } else {
-            m_outgoing.push_front(message);
         }
+
+        m_outgoing.push_front(std::move(to_enqueue));
     } else {
-        m_outgoing.push_back(message);
+        m_outgoing.push_back(std::move(to_enqueue));
     }
 }
 
@@ -425,8 +424,7 @@ void message_queue::clear() {
 void message_queue::process() {
     auto it = m_outgoing.begin();
     while (it != m_outgoing.end()) {
-        const auto success = write_message(*it);
-        if (success) {
+        if (write_message(*it)) {
             it = m_outgoing.erase(it);
         } else {
             break;
@@ -434,142 +432,163 @@ void message_queue::process() {
     }
 }
 
-bool message_queue::write_message(const out_message& message) {
-    switch (message.type()) {
+bool message_queue::write_message(const data& data) {
+    switch (data.message.type()) {
         case message_type::entry_create:
-            return write_entry_created(message);
+            return write_entry_created(data);
         case message_type::entry_update:
-            return write_entry_updated(message);
+            return write_entry_updated(data);
         case message_type::entry_delete:
-            return write_entry_deleted(message);
+            return write_entry_deleted(data);
         case message_type::entry_id_assign:
-            return write_entry_id_assigned(message);
+            return write_entry_id_assigned(data);
         case message_type::time_sync_request:
-            return write_time_sync_request(message);
+            return write_time_sync_request(data);
         case message_type::time_sync_response:
-            return write_time_sync_response(message);
+            return write_time_sync_response(data);
         case message_type::handshake_ready:
         case message_type::handshake_finished:
-            return write_basic(message);
+            return write_basic(data);
         case message_type::no_type:
         default:
             return true;
     }
 }
 
-bool message_queue::write_entry_created(const out_message& message) {
+bool message_queue::write_entry_created(const data& data) {
     m_serializer.reset();
 
-    if (!m_serializer.entry_created(message.send_time(),
-                                    message.name(),
-                                    message.value())) {
+    if (!m_serializer.entry_created(data.message.send_time(),
+                                    data.message.name(),
+                                    data.message.value())) {
         return false;
     }
 
     if (!m_destination(
             static_cast<uint8_t>(message_type::entry_create),
             m_serializer.data(),
-            m_serializer.size())) {
+            m_serializer.size(),
+            data.destination,
+            data.source,
+            data.message_id)) {
         return false;
     }
 
     return true;
 }
 
-bool message_queue::write_entry_updated(const out_message& message) {
+bool message_queue::write_entry_updated(const data& data) {
     m_serializer.reset();
 
-    if (!m_serializer.entry_updated(message.send_time(),
-                                    message.id(),
-                                    message.value())) {
+    if (!m_serializer.entry_updated(data.message.send_time(),
+                                    data.message.id(),
+                                    data.message.value())) {
         return false;
     }
 
     if (!m_destination(
             static_cast<uint8_t>(message_type::entry_update),
             m_serializer.data(),
-            m_serializer.size())) {
+            m_serializer.size(),
+            data.destination,
+            data.source,
+            data.message_id)) {
         return false;
     }
 
     return true;
 }
 
-bool message_queue::write_entry_deleted(const out_message& message) {
+bool message_queue::write_entry_deleted(const data& data) {
     m_serializer.reset();
 
-    if (!m_serializer.entry_deleted(message.send_time(),
-                                    message.id())) {
+    if (!m_serializer.entry_deleted(data.message.send_time(),
+                                    data.message.id())) {
         return false;
     }
 
     if (!m_destination(
             static_cast<uint8_t>(message_type::entry_delete),
             m_serializer.data(),
-            m_serializer.size())) {
+            m_serializer.size(),
+            data.destination,
+            data.source,
+            data.message_id)) {
         return false;
     }
 
     return true;
 }
 
-bool message_queue::write_entry_id_assigned(const out_message& message) {
+bool message_queue::write_entry_id_assigned(const data& data) {
     m_serializer.reset();
 
-    if (!m_serializer.entry_id_assign(message.id(),
-                                      message.name())) {
+    if (!m_serializer.entry_id_assign(data.message.id(),
+                                      data.message.name())) {
         return false;
     }
 
     if (!m_destination(
             static_cast<uint8_t>(message_type::entry_id_assign),
             m_serializer.data(),
-            m_serializer.size())) {
+            m_serializer.size(),
+            data.destination,
+            data.source,
+            data.message_id)) {
         return false;
     }
 
     return true;
 }
 
-bool message_queue::write_time_sync_request(const out_message& message) {
+bool message_queue::write_time_sync_request(const data& data) {
     m_serializer.reset();
 
-    if (!m_serializer.time_sync_request(message.send_time())) {
+    if (!m_serializer.time_sync_request(data.message.send_time())) {
         return false;
     }
 
     if (!m_destination(
             static_cast<uint8_t>(message_type::time_sync_request),
             m_serializer.data(),
-            m_serializer.size())) {
+            m_serializer.size(),
+            data.destination,
+            data.source,
+            data.message_id)) {
         return false;
     }
 
     return true;
 }
 
-bool message_queue::write_time_sync_response(const out_message& message) {
+bool message_queue::write_time_sync_response(const data& data) {
     m_serializer.reset();
 
-    if (!m_serializer.time_sync_response(message.send_time(), message.time_value())) {
+    if (!m_serializer.time_sync_response(data.message.send_time(), data.message.time_value())) {
         return false;
     }
 
     if (!m_destination(
             static_cast<uint8_t>(message_type::time_sync_response),
             m_serializer.data(),
-            m_serializer.size())) {
+            m_serializer.size(),
+            data.destination,
+            data.source,
+            data.message_id)) {
         return false;
     }
 
     return true;
 }
 
-bool message_queue::write_basic(const out_message& message) {
+bool message_queue::write_basic(const data& data) {
     if (!m_destination(
-            static_cast<uint8_t>(message.type()),
+            static_cast<uint8_t>(data.message.type()),
             nullptr,
-            0)) {
+            0,
+            data.destination,
+            data.source,
+            data.message_id)) {
         return false;
     }
 

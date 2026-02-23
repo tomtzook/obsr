@@ -6,6 +6,8 @@
 
 #include "server.h"
 
+#include <ranges>
+
 namespace obsr::net::server {
 
 #define LOG_MODULE "server"
@@ -17,64 +19,17 @@ server_client::server_client(
     const client_id id,
     const looper::tcp tcp,
     const clock_ptr& clock,
-    on_message_cb&& message_cb,
+    on_message_cb&& on_message_cb,
     on_error_cb&& error_cb)
     : m_id(id)
     , m_tcp(tcp)
     , m_clock(clock)
     , m_state(state::connected)
     , m_reader(1024)
-    , m_message_cb(std::move(message_cb))
-    , m_error_cb(std::move(error_cb))
     , m_write_buffer(1024)
-    , m_queue()
+    , m_on_message_cb(std::move(on_message_cb))
+    , m_error_cb(std::move(error_cb))
     , m_published_entries() {
-    m_queue.attach([this](const uint8_t type, const uint8_t* buffer, const size_t size)->bool {
-        if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
-            TRACE_DEBUG(LOG_MODULE, "write circular_buffer does not have enough space");
-            return false;
-        }
-
-        message_header header {
-                message_header::message_magic,
-                message_header::current_version,
-                0,
-                type,
-                static_cast<uint32_t>(size)
-        };
-        header_convert_net(header);
-
-        if (!m_write_buffer.write(reinterpret_cast<uint8_t*>(&header), sizeof(header))) {
-            TRACE_DEBUG(LOG_MODULE, "write failed to buffer at start");
-            return false;
-        }
-
-        if (buffer != nullptr && size > 0) {
-            if (!m_write_buffer.write(buffer, size)) {
-                // this means we have probably sent a message with a header but no data. this will seriously
-                // break down communication. as such, we will terminate connection here.
-                TRACE_ERROR(LOG_MODULE, "write attempt failed halfway, stopping");
-                invoke_func_nolock(m_error_cb, m_id);
-                return false;
-            }
-        }
-
-        auto write_callback = [this](looper::tcp, const looper::error error)->void {
-            TRACE_DEBUG(LOG_MODULE, "write finished for client=%d", m_id);
-
-            if (error != 0) {
-                TRACE_ERROR(LOG_MODULE, "write to tcp failed: code=%d", error);
-                invoke_func_nolock(m_error_cb, m_id);
-                return;
-            }
-        };
-
-        looper::write_tcp(m_tcp, {m_write_buffer.data(), m_write_buffer.pos()}, write_callback);
-        m_write_buffer.reset();
-
-        return true;
-    });
-
     auto read_callback = [this](looper::tcp, const std::span<const uint8_t> buffer, const looper::error error)->void {
         if (error != 0) {
             invoke_func_nolock(m_error_cb, m_id);
@@ -103,24 +58,55 @@ bool server_client::is_known(const storage::entry_id id) const {
     return m_published_entries.contains(id);
 }
 
-void server_client::publish(const storage::entry_id id, const std::string_view name) {
+void server_client::marked_published(const storage::entry_id id, const std::string_view name) {
     TRACE_DEBUG(LOG_MODULE, "publishing entry for server client %d, entry=%d", m_id, id);
-    enqueue(out_message::entry_id_assign(id, name));
-
     m_published_entries.insert(id);
 }
 
-void server_client::enqueue(const out_message& message, const uint8_t flags) {
-    TRACE_DEBUG(LOG_MODULE, "enqueuing message for server client %d, type=0x%x", m_id, message.type());
-    m_queue.enqueue(message, flags);
-}
+bool server_client::write_message(const uint8_t type, const uint8_t* buffer, const size_t size, const uint64_t message_id) {
+    if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
+        TRACE_DEBUG(LOG_MODULE, "write circular_buffer does not have enough space");
+        return false;
+    }
 
-void server_client::clear() {
-    m_queue.clear();
-}
+    message_header header {
+        message_header::message_magic,
+        message_header::current_version,
+        message_id,
+        type,
+        static_cast<uint32_t>(size)
+    };
+    header_convert_net(header);
 
-void server_client::update() {
-    m_queue.process();
+    if (!m_write_buffer.write(reinterpret_cast<uint8_t*>(&header), sizeof(header))) {
+        TRACE_DEBUG(LOG_MODULE, "write failed to buffer at start");
+        return false;
+    }
+
+    if (buffer != nullptr && size > 0) {
+        if (!m_write_buffer.write(buffer, size)) {
+            // this means we have probably sent a message with a header but no data. this will seriously
+            // break down communication. as such, we will terminate connection here.
+            TRACE_ERROR(LOG_MODULE, "write attempt failed halfway, stopping");
+            invoke_func_nolock(m_error_cb, m_id);
+            return false;
+        }
+    }
+
+    auto write_callback = [this](looper::tcp, const looper::error error)->void {
+        TRACE_DEBUG(LOG_MODULE, "write finished for client=%d", m_id);
+
+        if (error != 0) {
+            TRACE_ERROR(LOG_MODULE, "write to tcp failed: code=%d", error);
+            invoke_func_nolock(m_error_cb, m_id);
+            return;
+        }
+    };
+
+    looper::write_tcp(m_tcp, {m_write_buffer.data(), m_write_buffer.pos()}, write_callback);
+    m_write_buffer.reset();
+
+    return true;
 }
 
 void server_client::process_new_data() {
@@ -137,7 +123,7 @@ void server_client::process_new_data() {
             TRACE_DEBUG(LOG_MODULE, "new message processed %d", state.header.index);
 
             invoke_func_nolock<client_id, const message_header&, const uint8_t*, size_t>(
-                    m_message_cb,
+                    m_on_message_cb,
                     m_id,
                     state.header,
                     state.message_buffer,
@@ -158,10 +144,13 @@ network_server::network_server(const clock_ptr& clock)
     , m_state(state::idle)
     , m_clock(clock)
     , m_storage()
+    , m_diagnostics_dispatcher()
     , m_bind_port(0)
     , m_loop(looper::empty_handle)
     , m_tcp(looper::empty_handle)
     , m_parser()
+    , m_message_queue(std::bind_front(&network_server::write_message_to_clients, this))
+    , m_next_message_id(0)
     , m_next_client_id(0)
     , m_next_entry_id(0)
     , m_clients()
@@ -188,6 +177,11 @@ void network_server::attach_storage(const std::shared_ptr<storage::storage>& sto
     }
 
     m_storage = storage;
+}
+
+void network_server::attach_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr dispatcher) {
+    std::unique_lock lock(m_mutex);
+    m_diagnostics_dispatcher = std::move(dispatcher);
 }
 
 void network_server::start(const looper::loop loop) {
@@ -292,7 +286,7 @@ bool network_server::do_open() {
             try {
                 auto tcp = looper::accept_tcp(server);
 
-                auto id = m_next_client_id++;
+                auto id = ++m_next_client_id;
                 auto client_u = std::make_unique<server_client>(id, tcp, m_clock, message_cb, error_cb);
                 auto [it, _] = m_clients.emplace(id, std::move(client_u));
 
@@ -340,20 +334,45 @@ void network_server::process_updates() {
 
         for (auto& [client_id, client]: m_clients) {
             if (!client->is_known(id)) {
-                client->publish(id, entry.get_path());
+                auto value = entry.get_value();
+                publish_entry_for_clients(id, entry.get_path(), std::move(value), entry.get_last_update_timestamp());
             }
+        }
 
-            if (out_message.type() != message_type::no_type) {
-                client->enqueue(out_message);
-            }
+        if (out_message.type() != message_type::no_type) {
+            enqueue_message_for_clients(std::move(out_message));
         }
 
         return true;
     });
 
-    for (auto& [client_id, client] : m_clients) {
-        client->update();
+    m_message_queue.process();
+}
+
+bool network_server::write_message_to_clients(const uint8_t type, const uint8_t* buffer, const size_t size,
+    const client_id destination, const client_id source, const uint64_t message_id) {
+    if (destination != invalid_client_id) {
+        if (destination == source) {
+            return true;
+        }
+
+        const auto it = m_clients.find(destination);
+        if (it != m_clients.end()) {
+            // todo: handle error returned
+            it->second->write_message(type, buffer, size, message_id);
+        }
+    } else {
+        for (const auto& [id, client] : m_clients) {
+            // todo: handle error returned
+            if (id == source) {
+                continue;
+            }
+
+            client->write_message(type, buffer, size, message_id);
+        }
     }
+
+    return true;
 }
 
 void network_server::on_new_message(client_id id, const message_header& header, const uint8_t* buffer, size_t size) {
@@ -373,6 +392,8 @@ void network_server::on_new_message(client_id id, const message_header& header, 
     TRACE_DEBUG(LOG_MODULE, "received new message from client=%d of type=%d", id, type);
 
     auto parse_data = m_parser.data();
+    diagnostics::notify_received_message(m_diagnostics_dispatcher, type, id, header.index);
+
     switch (type) {
         case message_type::entry_create: {
             if (parse_data.id == storage::id_not_assigned) {
@@ -388,7 +409,7 @@ void network_server::on_new_message(client_id id, const message_header& header, 
                     parse_data.value,
                     parse_data.send_time);
 
-            publish_and_update_entry_for_clients(
+            publish_entry_for_clients(
                     parse_data.id,
                     parse_data.name,
                     std::move(value),
@@ -406,11 +427,7 @@ void network_server::on_new_message(client_id id, const message_header& header, 
                     parse_data.value,
                     parse_data.send_time);
 
-            auto message_to_others = out_message::entry_update(
-                    parse_data.send_time,
-                    parse_data.id,
-                    std::move(value));
-            enqueue_message_for_clients(message_to_others, id);
+            enqueue_message_for_clients(out_message::entry_update(parse_data.send_time, parse_data.id, std::move(value)), invalid_client_id, 0, id);
             break;
         }
         case message_type::entry_delete: {
@@ -419,20 +436,13 @@ void network_server::on_new_message(client_id id, const message_header& header, 
                     &storage::storage::on_entry_deleted,
                     parse_data.id,
                     parse_data.send_time);
-
-            auto message_to_others = out_message::entry_deleted(
-                    parse_data.send_time,
-                    parse_data.id);
-            enqueue_message_for_clients(message_to_others, id);
+            enqueue_message_for_clients(out_message::entry_deleted(parse_data.send_time, parse_data.id), invalid_client_id, 0, id);
             break;
         }
         case message_type::time_sync_request: {
             const auto now = m_clock->now();
-            enqueue_message_for_client(id,
-                                       out_message::time_sync_response(
-                                               now,
-                                               parse_data.send_time),
-                                       message_queue::flag_immediate);
+            enqueue_message_for_clients(
+                out_message::time_sync_response(now, parse_data.send_time), id, message_queue::flag_immediate);
             break;
         }
         case message_type::handshake_ready:
@@ -456,43 +466,32 @@ storage::entry_id network_server::assign_id_to_entry(std::string_view name) {
     return id;
 }
 
-void network_server::enqueue_message_for_clients(const out_message& message, const client_id id_to_skip) {
+void network_server::publish_entry_for_clients(
+    const storage::entry_id entry_id,
+    const std::string_view name,
+    obsr::value&& value,
+    const std::chrono::milliseconds value_time,
+    const client_id source_id) {
     for (auto& [id, client] : m_clients) {
-        if (id == id_to_skip) {
+        if (id == source_id) {
             continue;
         }
 
-        client->enqueue(message);
+        enqueue_message_for_clients(out_message::entry_id_assign(entry_id, name), id);
+        client->marked_published(id, name);
     }
+
+    enqueue_message_for_clients(out_message::entry_update(value_time, entry_id, std::move(value)), invalid_client_id, 0, source_id);
 }
 
-void network_server::enqueue_message_for_client(
-    const client_id id,
-    const out_message& message,
-    const uint8_t flags) {
-    const auto it = m_clients.find(id);
-    if (it == m_clients.end()) {
-        return;
-    }
+void network_server::enqueue_message_for_clients(
+    out_message&& message,
+    const client_id id, const uint8_t flags, const client_id source_id) {
+    const auto message_id = ++m_next_message_id;
+    m_message_queue.enqueue(std::move(message), message_id, flags, id, source_id);
 
-    it->second->enqueue(message, flags);
-}
-
-void network_server::publish_and_update_entry_for_clients(
-        const storage::entry_id entry_id,
-        const std::string& name,
-        obsr::value&& value,
-        const std::chrono::milliseconds value_time,
-        const client_id id_to_skip) {
-    const auto message = out_message::entry_update(value_time, entry_id, std::move(value));
-    for (auto& [id, client] : m_clients) {
-        if (id == id_to_skip) {
-            continue;
-        }
-
-        client->publish(id, name);
-        client->enqueue(message);
-    }
+    diagnostics::notify_sending_message(m_diagnostics_dispatcher, message.type(),
+        id == invalid_client_id ? 0 : id, message_id);
 }
 
 void network_server::handle_do_handshake_for_client(const client_id id) {
@@ -511,16 +510,13 @@ void network_server::handle_do_handshake_for_client(const client_id id) {
             continue;
         }
 
-        client->publish(entry_id, name);
-
-        auto value_opt = m_storage->get_entry_value_from_id(entry_id);
-        if (value_opt) {
-            auto& value = value_opt.value();
-            client->enqueue(out_message::entry_update(now, entry_id, std::move(value)));
+        if (auto value_opt = m_storage->get_entry_value_from_id(entry_id)) {
+            auto value = value_opt.value();
+            publish_entry_for_clients(entry_id, name, std::move(value), now);
         }
     }
 
-    client->enqueue(out_message::handshake_finished());
+    enqueue_message_for_clients(out_message::handshake_finished(), id);
     client->set_state(server_client::state::in_use);
 
     TRACE_INFO(LOG_MODULE, "finished writing handshake data to server client %d", client->get_id());

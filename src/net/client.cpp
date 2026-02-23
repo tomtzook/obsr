@@ -15,6 +15,7 @@ static constexpr auto connect_retry_time = std::chrono::milliseconds(1000);
 static constexpr auto server_sync_time = std::chrono::milliseconds(1000);
 static constexpr auto update_time = std::chrono::milliseconds(200);
 
+
 network_client::network_client(const clock_ptr& clock)
     : m_mutex()
     , m_state(state::idle)
@@ -26,11 +27,9 @@ network_client::network_client(const clock_ptr& clock)
     , m_update_timer_handle()
     , m_reader(1024)
     , m_parser()
-    , m_message_queue()
-    , m_write_buffer(1024) {
-    m_message_queue.attach([this](const uint8_t type, const uint8_t* buffer, const size_t size)->bool {
-        return write_new_message(type, buffer, size);
-    });
+    , m_message_queue(std::bind_front(&network_client::write_new_message, this))
+    , m_write_buffer(1024)
+    , m_next_message_id(0) {
 }
 
 void network_client::configure_target(connection_info info) {
@@ -51,6 +50,11 @@ void network_client::attach_storage(std::shared_ptr<storage::storage> storage) {
     }
 
     m_storage = std::move(storage);
+}
+
+void network_client::attach_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr dispatcher) {
+    std::unique_lock lock(m_mutex);
+    m_diagnostics_dispatcher = std::move(dispatcher);
 }
 
 void network_client::start(const looper::loop loop) {
@@ -109,7 +113,7 @@ void network_client::update() {
     if (m_clock_sync_timer.is_running() && m_clock_sync_timer.has_elapsed(server_sync_time)) {
         TRACE_DEBUG(LOG_MODULE, "requesting time sync from server");
         const auto now = m_clock->now();
-        m_message_queue.enqueue(out_message::time_sync_request(now), message_queue::flag_immediate);
+        enqueue_message(out_message::time_sync_request(now), message_queue::flag_immediate);
         m_clock_sync_timer.stop();
     }
 
@@ -165,7 +169,7 @@ bool network_client::do_open_and_connect() {
             m_message_queue.clear();
 
             const auto now = m_clock->now();
-            m_message_queue.enqueue(out_message::time_sync_request(now), message_queue::flag_immediate);
+            enqueue_message(out_message::time_sync_request(now), message_queue::flag_immediate);
             m_state = state::in_handshake_time_sync;
 
             auto read_callback = [this](looper::tcp, const std::span<const uint8_t> buffer, const looper::error error)->void {
@@ -201,21 +205,21 @@ void network_client::process_storage() {
         if (id == storage::id_not_assigned) {
             // entry was created
             auto value = entry.get_value();
-            m_message_queue.enqueue(out_message::entry_create(
+            enqueue_message(out_message::entry_create(
                     m_clock->now(),
                     entry.get_path(),
                     std::move(value)
             ));
         } else if (entry.has_flags(storage::flag_internal_deleted)) {
             // entry was deleted
-            m_message_queue.enqueue(out_message::entry_deleted(
+            enqueue_message(out_message::entry_deleted(
                     entry.get_last_update_timestamp(),
                     id
             ));
         } else {
             // entry value was updated
             auto value = entry.get_value();
-            m_message_queue.enqueue(out_message::entry_update(
+            enqueue_message(out_message::entry_update(
                     entry.get_last_update_timestamp(),
                     id,
                     std::move(value)
@@ -267,6 +271,8 @@ void network_client::on_new_message(const message_header& header, const uint8_t*
     }
 
     const auto parse_data = m_parser.data();
+    diagnostics::notify_received_message(m_diagnostics_dispatcher, type, 0, header.index);
+
     switch (type) {
         case message_type::entry_update:
             TRACE_DEBUG(LOG_MODULE, "ENTRY UPDATE from server: id=%d", parse_data.id);
@@ -308,7 +314,7 @@ void network_client::on_new_message(const message_header& header, const uint8_t*
 
             if (m_state == state::in_handshake_time_sync) {
                 TRACE_DEBUG(LOG_MODULE, "transitioning to handshake wait");
-                m_message_queue.enqueue(out_message::handshake_ready());
+                enqueue_message(out_message::handshake_ready());
                 m_state = state::in_handshake;
             } else {
                 m_clock_sync_timer.start();
@@ -322,7 +328,14 @@ void network_client::on_new_message(const message_header& header, const uint8_t*
     }
 }
 
-bool network_client::write_new_message(const uint8_t type, const uint8_t* buffer, const size_t size) {
+void network_client::enqueue_message(out_message&& message, const uint8_t flags) {
+    const auto message_id = ++m_next_message_id;
+    m_message_queue.enqueue(std::move(message), message_id, flags);
+    diagnostics::notify_sending_message(m_diagnostics_dispatcher, message.type(), 0, message_id);
+}
+
+bool network_client::write_new_message(const uint8_t type, const uint8_t* buffer, const size_t size,
+    const client_id, const client_id, const uint64_t message_id) {
     if (!m_write_buffer.can_write(sizeof(message_header) + size)) {
         TRACE_DEBUG(LOG_MODULE, "write circular_buffer does not have enough space");
         return false;
@@ -331,7 +344,7 @@ bool network_client::write_new_message(const uint8_t type, const uint8_t* buffer
     message_header header {
             message_header::message_magic,
             message_header::current_version,
-            0,
+            message_id,
             type,
             static_cast<uint32_t>(size)
     };

@@ -42,6 +42,44 @@ static const char* flag_str(const uint16_t flag) {
     }
 }
 
+static const char* direction_to_str(const network_monitor::direction direction) {
+    switch (direction) {
+        case network_monitor::direction::any:
+            return "any";
+        case network_monitor::direction::in:
+            return "in";
+        case network_monitor::direction::out:
+            return "out";
+        default:
+            return "";
+    }
+}
+
+static const char* message_type_str(const net::message_type type) {
+    switch (type) {
+        case net::message_type::no_type:
+            return "no_type";
+        case net::message_type::entry_create:
+            return "entry_create";
+        case net::message_type::entry_update:
+            return "entry_update";
+        case net::message_type::entry_delete:
+            return "entry_delete";
+        case net::message_type::entry_id_assign:
+            return "entry_id_assign";
+        case net::message_type::handshake_finished:
+            return "handshake_finished";
+        case net::message_type::handshake_ready:
+            return "handshake_ready";
+        case net::message_type::time_sync_request:
+            return "time_sync_request";
+        case net::message_type::time_sync_response:
+            return "time_sync_response";
+        default:
+            return "";
+    }
+}
+
 template<typename wr_t_>
 static void write_flags(rapidjson::Writer<wr_t_>& writer, const uint16_t flags) {
     writer.StartArray();
@@ -126,25 +164,24 @@ static void write_value(rapidjson::Writer<wr_t_>& writer, const value& value) {
     writer.EndObject();
 }
 
-server::server(std::shared_ptr<storage::storage> storage, const uint16_t port)
+server::server(std::shared_ptr<storage::storage> storage, event_dispatcher_ptr dispatcher, const uint16_t port)
     : m_storage(std::move(storage))
-    , m_dispatcher(std::make_shared<event_dispatcher>())
+    , m_dispatcher(std::move(dispatcher))
     , m_storage_monitor(m_storage, m_dispatcher)
+    , m_network_monitor(m_dispatcher)
     , m_app()
     , m_port(port)
     , m_thread(&server::server_main, this) {
-    m_storage->set_diagnostics_dispatcher(m_dispatcher);
 }
 
 server::~server() {
-    m_storage->set_diagnostics_dispatcher(m_dispatcher);
-
     m_app.stop();
     m_thread.join();
 }
 
 void server::server_main() {
     m_storage_monitor.start();
+    m_network_monitor.start();
 
     CROW_ROUTE(m_app, "/api/storage")([this](){
         m_storage_monitor.sync(); // todo: better place
@@ -162,12 +199,51 @@ void server::server_main() {
 
             writer.Key("path");
             writer.String(entry.path);
-            writer.Key("netId");
+            writer.Key("net_id");
             writer.Int(entry.net_id);
             writer.Key("flags");
             write_flags(writer, entry.flags);
             writer.Key("value");
             write_value(writer, entry.value);
+
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.EndObject();
+
+        return crow::response(200, "application/json", buffer.GetString());
+    });
+
+    CROW_ROUTE(m_app, "/api/net/history")([this](const crow::request& req) {
+        const auto direction_str = req.url_params.get("direction");
+        const auto limit_str = req.url_params.get("limit");
+        if (!limit_str) {
+            return crow::response(400);
+        }
+
+        const auto direction_int = direction_str != nullptr ? std::stoi(direction_str) : 0;
+        const auto direction = direction_int <= 2 ? static_cast<network_monitor::direction>(direction_int) : network_monitor::direction::any;
+        const auto limit = std::stoi(limit_str);
+
+        const auto data = m_network_monitor.get_data_snapshot(limit, direction);
+
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer writer(buffer);
+
+        writer.StartObject();
+        writer.Key("messages");
+        writer.StartArray();
+        for (const auto& entry : data) {
+            writer.StartObject();
+
+            writer.Key("direction");
+            writer.String(direction_to_str(entry.direction));
+            writer.Key("type");
+            writer.String(message_type_str(entry.type));
+            writer.Key("client_id");
+            writer.Int(entry.client_id);
+            writer.Key("message_id");
+            writer.Int(entry.message_id);
 
             writer.EndObject();
         }

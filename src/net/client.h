@@ -16,6 +16,7 @@ public:
     void configure_target(connection_info info);
 
     void attach_storage(std::shared_ptr<storage::storage> storage);
+    void attach_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr dispatcher);
     void start(looper::loop loop);
     void stop();
 
@@ -34,7 +35,8 @@ private:
     void process_storage();
     void process_new_data();
     void on_new_message(const message_header& header, const uint8_t* buffer, size_t size);
-    bool write_new_message(uint8_t type, const uint8_t* buffer, size_t size);
+    void enqueue_message(out_message&& message, uint8_t flags = 0);
+    bool write_new_message(uint8_t type, const uint8_t* buffer, size_t size, client_id destination, client_id source, uint64_t message_id);
     void close_io();
 
     std::mutex m_mutex;
@@ -42,6 +44,7 @@ private:
 
     clock_ptr m_clock;
     std::shared_ptr<storage::storage> m_storage;
+    diagnostics::event_dispatcher_ptr m_diagnostics_dispatcher;
     connection_info m_conn_info;
 
     looper::loop m_loop;
@@ -52,6 +55,7 @@ private:
     message_parser m_parser;
     message_queue m_message_queue;
     io::linear_buffer m_write_buffer;
+    uint64_t m_next_message_id;
 
     timer m_connect_retry_timer;
     timer m_clock_sync_timer;

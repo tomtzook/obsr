@@ -258,6 +258,11 @@ void instance::start_server(const uint16_t bind_port) {
     try {
         net_agent->configure_bind(bind_port);
         net_agent->attach_storage(m_storage);
+
+        if (m_diagnostics_dispatcher) {
+            net_agent->attach_diagnostics_dispatcher(m_diagnostics_dispatcher);
+        }
+
         net_agent->start(m_loop);
 
         m_net_agent = std::move(net_agent);
@@ -279,6 +284,11 @@ void instance::start_client(const std::string_view address, const uint16_t serve
     try {
         net_agent->configure_target({std::string(address), server_port});
         net_agent->attach_storage(m_storage);
+
+        if (m_diagnostics_dispatcher) {
+            net_agent->attach_diagnostics_dispatcher(m_diagnostics_dispatcher);
+        }
+
         net_agent->start(m_loop);
 
         m_net_agent = std::move(net_agent);
@@ -305,10 +315,38 @@ void instance::stop_network() {
 }
 
 void instance::start_diagnostics(const uint16_t port) {
-    m_diagnostics_server = std::make_unique<diagnostics::server>(m_storage, port);
+    std::unique_lock guard(m_mutex);
+
+    m_diagnostics_dispatcher = std::make_shared<diagnostics::event_dispatcher>();
+    m_diagnostics_server = std::make_unique<diagnostics::server>(m_storage, m_diagnostics_dispatcher, port);
+
+    m_storage->set_diagnostics_dispatcher(m_diagnostics_dispatcher);
+
+    if (!std::holds_alternative<std::monostate>(m_net_agent)) {
+        std::visit([this]<typename T0>(T0&& agent)->void {
+            using T = std::decay_t<T0>;
+            if constexpr (!std::is_same_v<T, std::monostate>) {
+                agent->attach_diagnostics_dispatcher(m_diagnostics_dispatcher);
+            }
+        }, m_net_agent);
+    }
 }
 
 void instance::stop_diagnostics() {
+    std::unique_lock guard(m_mutex); // todo: potential deadlock with diagnostics code?
+
+    m_storage->set_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr());
+
+    if (!std::holds_alternative<std::monostate>(m_net_agent)) {
+        std::visit([]<typename T0>(T0&& agent)->void {
+            using T = std::decay_t<T0>;
+            if constexpr (!std::is_same_v<T, std::monostate>) {
+                agent->attach_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr());
+            }
+        }, m_net_agent);
+    }
+
+    m_diagnostics_dispatcher.reset();
     m_diagnostics_server.reset();
 }
 

@@ -2,9 +2,9 @@
 
 #include <mutex>
 #include <map>
-#include <atomic>
 
 #include "diagnostics/dispatcher.h"
+#include "diagnostics/data.h"
 #include "storage/storage.h"
 
 namespace obsr::diagnostics {
@@ -28,26 +28,12 @@ public:
     void sync();
 
 private:
-    struct data_snapshot {
-        using type = std::map<obsr::handle, entry>;
-
-        data_snapshot();
-
-        std::shared_ptr<const type> read() const;
-        type& write();
-        void swap();
-
-    private:
-        std::atomic<std::shared_ptr<const type>> m_read_data;
-        type m_write_data;
-    };
-
     void on_event(const diagnostic_event& event);
 
     std::mutex m_mutex;
     std::shared_ptr<storage::storage> m_storage;
     event_dispatcher_ptr m_dispatcher;
-    data_snapshot m_data;
+    rw_double_buffer<std::map<obsr::handle, entry>> m_data;
     std::chrono::milliseconds m_last_sync;
 };
 

@@ -89,6 +89,7 @@ private:
     std::map<std::string, object, std::less<>> m_object_paths;
     object m_root;
 
+    diagnostics::event_dispatcher_ptr m_diagnostics_dispatcher;
     std::unique_ptr<diagnostics::server> m_diagnostics_server;
 };
 
