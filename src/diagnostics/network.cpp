@@ -13,8 +13,8 @@ network_monitor::~network_monitor() {
 
 }
 
-std::vector<network_monitor::message> network_monitor::get_data_snapshot(const size_t count, const direction direction) {
-    std::array<message, history_size> copy;
+std::vector<network_monitor::message> network_monitor::get_data_snapshot(const size_t count, filter_func&& filter) {
+    std::array<message, history_size> copy{};
     uint64_t write_index;
     size_t available_count;
     {
@@ -31,7 +31,7 @@ std::vector<network_monitor::message> network_monitor::get_data_snapshot(const s
         const auto index = (write_index - i) % history_size;
         auto& data = copy[index];
 
-        if (direction != direction::any && data.direction != direction) {
+        if (filter != nullptr && !filter(data)) {
             continue;
         }
 
@@ -39,6 +39,11 @@ std::vector<network_monitor::message> network_monitor::get_data_snapshot(const s
     }
 
     return std::move(return_data);
+}
+
+std::map<uint16_t, net::connection_info> network_monitor::get_connections() {
+    std::unique_lock lock(m_mutex);
+    return m_connections;
 }
 
 void network_monitor::start() {
@@ -51,18 +56,20 @@ void network_monitor::start() {
 }
 
 void network_monitor::on_event(const diagnostic_event& event) {
-    if (event.has<network_received_message>()) {
-        const auto& data = event.get<network_received_message>();
-        message message{direction::in, data.type, data.client_id, data.message_id};
+    if (event.has<network_message>()) {
+        const auto& data = event.get<network_message>();
+        message message{data.direction, data.type, data.client_id, data.message_id, data.timestamp, data.data};
 
         std::unique_lock lock(m_mutex);
         m_data.add(std::move(message));
-    } else if (event.has<network_sending_message>()) {
-        const auto& data = event.get<network_sending_message>();
-        message message{direction::out, data.type, data.client_id, data.message_id};
-
+    } else if (event.has<network_connection>()) {
+        const auto& data = event.get<network_connection>();
         std::unique_lock lock(m_mutex);
-        m_data.add(std::move(message));
+        m_connections.emplace(data.client_id, data.addr);
+    } else if (event.has<network_disconnection>()) {
+        const auto& data = event.get<network_disconnection>();
+        std::unique_lock lock(m_mutex);
+        m_connections.erase(data.client_id);
     }
 }
 

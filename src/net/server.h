@@ -27,12 +27,12 @@ public:
     server_client(client_id id, looper::tcp tcp, const clock_ptr& clock,
         on_message_cb&& on_message_cb, on_error_cb&& error_cb);
 
-    client_id get_id() const;
+    [[nodiscard]] client_id get_id() const;
 
-    state get_state() const;
+    [[nodiscard]] state get_state() const;
     void set_state(state state);
 
-    bool is_known(storage::entry_id id) const;
+    [[nodiscard]] bool is_known(storage::entry_id id) const;
     void marked_published(storage::entry_id id, std::string_view name);
 
     bool write_message(uint8_t type, const uint8_t* buffer, size_t size, uint64_t message_id);
@@ -86,8 +86,11 @@ private:
             std::string_view name,
             obsr::value&& value,
             std::chrono::milliseconds value_time,
-            client_id source_id = invalid_client_id);
-    void enqueue_message_for_clients(out_message&& message, client_id id = invalid_client_id, uint8_t flags = 0, client_id source_id = invalid_client_id);
+            client_id source_id = all_client_id);
+    void enqueue_message_for_clients(out_message&& message,
+        client_id id = all_client_id,
+        uint8_t flags = 0,
+        client_id source_id = invalid_client_id);
 
     void handle_do_handshake_for_client(client_id id);
     void close_io();

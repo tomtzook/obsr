@@ -11,6 +11,7 @@ namespace obsr {
 
 using client_id = uint16_t;
 static constexpr client_id invalid_client_id = static_cast<client_id>(-1);
+static constexpr client_id all_client_id = 0;
 
 namespace storage {
 using entry_id = uint16_t;

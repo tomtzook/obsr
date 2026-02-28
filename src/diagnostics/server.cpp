@@ -42,13 +42,11 @@ static const char* flag_str(const uint16_t flag) {
     }
 }
 
-static const char* direction_to_str(const network_monitor::direction direction) {
+static const char* direction_to_str(const network_message::data_direction direction) {
     switch (direction) {
-        case network_monitor::direction::any:
-            return "any";
-        case network_monitor::direction::in:
+        case network_message::data_direction::in:
             return "in";
-        case network_monitor::direction::out:
+        case network_message::data_direction::out:
             return "out";
         default:
             return "";
@@ -200,7 +198,7 @@ void server::server_main() {
             writer.Key("path");
             writer.String(entry.path);
             writer.Key("net_id");
-            writer.Int(entry.net_id);
+            writer.Uint(entry.net_id);
             writer.Key("flags");
             write_flags(writer, entry.flags);
             writer.Key("value");
@@ -215,17 +213,35 @@ void server::server_main() {
     });
 
     CROW_ROUTE(m_app, "/api/net/history")([this](const crow::request& req) {
+        const auto client_id_str = req.url_params.get("client_id");
+        const auto message_id_str = req.url_params.get("message_id");
         const auto direction_str = req.url_params.get("direction");
         const auto limit_str = req.url_params.get("limit");
         if (!limit_str) {
             return crow::response(400);
         }
 
+        const auto client_id_int = client_id_str != nullptr ? std::stoi(client_id_str) : -1;
+        const auto message_id_int = message_id_str != nullptr ? std::stoi(message_id_str) : -1;
         const auto direction_int = direction_str != nullptr ? std::stoi(direction_str) : 0;
-        const auto direction = direction_int <= 2 ? static_cast<network_monitor::direction>(direction_int) : network_monitor::direction::any;
+        const auto direction = direction_int <= 1 ? std::optional{static_cast<network_message::data_direction>(direction_int)} : std::nullopt;
         const auto limit = std::stoi(limit_str);
 
-        const auto data = m_network_monitor.get_data_snapshot(limit, direction);
+        const auto data = m_network_monitor.get_data_snapshot(limit,
+            [client_id_int, message_id_int, &direction](const auto& msg)->bool {
+                if (client_id_int > 0 && client_id_int != msg.client_id && msg.client_id != all_client_id) {
+                    return false;
+                }
+                if (message_id_int > 0 && message_id_int != msg.message_id) {
+                    return false;
+                }
+                if (direction && msg.direction != direction.value()) {
+                    return false;
+                }
+
+
+                return true;
+        });
 
         rapidjson::StringBuffer buffer;
         rapidjson::Writer writer(buffer);
@@ -241,9 +257,63 @@ void server::server_main() {
             writer.Key("type");
             writer.String(message_type_str(entry.type));
             writer.Key("client_id");
-            writer.Int(entry.client_id);
+            writer.Uint(entry.client_id);
             writer.Key("message_id");
-            writer.Int(entry.message_id);
+            writer.Uint64(entry.message_id);
+            writer.Key("timestamp");
+            writer.Int64(entry.timestamp.count());
+
+            switch (entry.type) {
+                case net::message_type::entry_create:
+                    writer.Key("entry_id");
+                    writer.Uint(entry.data.entry_create.id);
+                    break;
+                case net::message_type::entry_update:
+                    writer.Key("entry_id");
+                    writer.Uint(entry.data.entry_update.id);
+                    break;
+                case net::message_type::entry_delete:
+                    writer.Key("entry_id");
+                    writer.Uint(entry.data.entry_delete.id);
+                    break;
+                case net::message_type::entry_id_assign:
+                    writer.Key("entry_id");
+                    writer.Uint(entry.data.entry_id_assign.id);
+                    break;
+                case net::message_type::handshake_finished:
+                case net::message_type::handshake_ready:
+                case net::message_type::time_sync_request:
+                case net::message_type::time_sync_response:
+                case net::message_type::no_type:
+                    break;
+            }
+
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.EndObject();
+
+        return crow::response(200, "application/json", buffer.GetString());
+    });
+
+    CROW_ROUTE(m_app, "/api/net/connections")([this](const crow::request& req) {
+        const auto data = m_network_monitor.get_connections();
+
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer writer(buffer);
+
+        writer.StartObject();
+        writer.Key("messages");
+        writer.StartArray();
+        for (const auto& [id, addr] : data) {
+            writer.StartObject();
+
+            writer.Key("id");
+            writer.Uint(id);
+            writer.Key("address");
+            writer.String(addr.ip.c_str());
+            writer.Key("port");
+            writer.Uint(addr.port);
 
             writer.EndObject();
         }

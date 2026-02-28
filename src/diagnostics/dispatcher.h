@@ -12,6 +12,7 @@
 #include "obsr_types.h"
 #include "net/serialize.h"
 #include "diagnostics/data.h"
+#include "net/io.h"
 
 namespace obsr::diagnostics {
 
@@ -40,16 +41,53 @@ struct storage_entry_net_id_changed {
     uint16_t net_id;
 };
 
-struct network_sending_message {
+struct network_message {
+    enum class data_direction {
+        out,
+        in
+    };
+    union message_data {
+        struct {
+            storage::entry_id id;
+        } entry_create;
+        struct {
+            storage::entry_id id;
+        } entry_update;
+        struct {
+            storage::entry_id id;
+        } entry_delete;
+        struct {
+            storage::entry_id id;
+        } entry_id_assign;
+        struct {
+
+        } handshake_finished;
+        struct {
+
+        } handshake_ready;
+        struct {
+
+        } time_sync_request;
+        struct {
+
+        } time_sync_response;
+    };
+
+    data_direction direction;
     net::message_type type;
     uint16_t client_id;
     uint64_t message_id;
+    std::chrono::milliseconds timestamp;
+    message_data data;
 };
 
-struct network_received_message {
-    net::message_type type;
+struct network_connection {
     uint16_t client_id;
-    uint64_t message_id;
+    net::connection_info addr{};
+};
+
+struct network_disconnection {
+    uint16_t client_id;
 };
 
 struct diagnostic_event {
@@ -67,7 +105,7 @@ private:
     using data_type = std::variant<
         std::monostate,
         storage_entry_created, storage_entry_deleted, storage_entry_value_changed, storage_entry_flags_changed, storage_entry_net_id_changed,
-        network_sending_message, network_received_message>;
+        network_message, network_connection, network_disconnection>;
     data_type m_data;
 };
 
@@ -104,8 +142,22 @@ void notify_entry_value_set(const event_dispatcher_ptr& dispatcher, obsr::handle
 void notify_entry_value_clear(const event_dispatcher_ptr& dispatcher, obsr::handle handle);
 void notify_entry_flags_changed(const event_dispatcher_ptr& dispatcher, obsr::handle handle, uint16_t flags);
 void notify_entry_net_id_set(const event_dispatcher_ptr& dispatcher, obsr::handle handle, uint16_t id);
-void notify_sending_message(const event_dispatcher_ptr& dispatcher, net::message_type type, uint16_t client_id, uint64_t message_id);
-void notify_received_message(const event_dispatcher_ptr& dispatcher, net::message_type type, uint16_t client_id, uint64_t message_id);
+
+void notify_out_network_message(
+    const event_dispatcher_ptr& dispatcher,
+    uint16_t client_id,
+    uint64_t message_id,
+    const net::out_message& message);
+void notify_in_network_message(
+    const event_dispatcher_ptr& dispatcher,
+    uint16_t client_id,
+    uint64_t message_id,
+    net::message_type type,
+    const net::parse_data& parse_data);
+
+void notify_new_connection(const event_dispatcher_ptr& dispatcher, uint16_t client_id, net::connection_info addr);
+void notify_new_disconnection(const event_dispatcher_ptr& dispatcher, uint16_t client_id);
+
 
 template<typename t_>
 bool diagnostic_event::has() const {

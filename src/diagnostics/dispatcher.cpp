@@ -4,6 +4,8 @@
 
 #include <cstring>
 
+#include "util/time.h"
+
 
 namespace obsr::diagnostics {
 
@@ -126,23 +128,100 @@ void notify_entry_net_id_set(const event_dispatcher_ptr& dispatcher, const obsr:
     dispatcher->notify(std::move(event));
 }
 
-void notify_sending_message(const event_dispatcher_ptr& dispatcher, const net::message_type type, const uint16_t client_id, const uint64_t message_id) {
+void notify_out_network_message(
+    const event_dispatcher_ptr& dispatcher,
+    const uint16_t client_id,
+    const uint64_t message_id,
+    const net::out_message& message) {
     if (!dispatcher) {
         return;
     }
 
+    network_message data{network_message::data_direction::out, message.type(), client_id, message_id};
+    data.timestamp = time_now();
+
+    switch (data.type) {
+        case net::message_type::entry_create:
+            data.data.entry_create.id = message.id();
+            break;
+        case net::message_type::entry_update:
+            data.data.entry_update.id = message.id();
+            break;
+        case net::message_type::entry_delete:
+            data.data.entry_delete.id = message.id();
+            break;
+        case net::message_type::entry_id_assign:
+            data.data.entry_id_assign.id = message.id();
+            break;
+        case net::message_type::no_type:
+        case net::message_type::handshake_finished:
+        case net::message_type::handshake_ready:
+        case net::message_type::time_sync_request:
+        case net::message_type::time_sync_response:
+        default:
+            break;
+    }
+
     diagnostic_event event;
-    event.set(network_sending_message{ type, client_id, message_id });
+    event.set(std::move(data));
     dispatcher->notify(std::move(event));
 }
 
-void notify_received_message(const event_dispatcher_ptr& dispatcher, const net::message_type type, const uint16_t client_id, const uint64_t message_id) {
+void notify_in_network_message(
+    const event_dispatcher_ptr& dispatcher,
+    const uint16_t client_id,
+    const uint64_t message_id,
+    const net::message_type type,
+    const net::parse_data& parse_data) {
+    if (!dispatcher) {
+        return;
+    }
+
+    network_message data{network_message::data_direction::in, type, client_id, message_id};
+    switch (data.type) {
+        case net::message_type::entry_create:
+            data.data.entry_create.id = parse_data.id;
+            break;
+        case net::message_type::entry_update:
+            data.data.entry_update.id = parse_data.id;
+            break;
+        case net::message_type::entry_delete:
+            data.data.entry_delete.id = parse_data.id;
+            break;
+        case net::message_type::entry_id_assign:
+            data.data.entry_id_assign.id = parse_data.id;
+            break;
+        case net::message_type::no_type:
+        case net::message_type::handshake_finished:
+        case net::message_type::handshake_ready:
+        case net::message_type::time_sync_request:
+        case net::message_type::time_sync_response:
+        default:
+            break;
+    }
+
+    diagnostic_event event;
+    event.set(std::move(data));
+    dispatcher->notify(std::move(event));
+}
+
+void notify_new_connection(const event_dispatcher_ptr& dispatcher, const uint16_t client_id, net::connection_info addr) {
     if (!dispatcher) {
         return;
     }
 
     diagnostic_event event;
-    event.set(network_received_message{ type, client_id, message_id });
+    event.set(network_connection{client_id, std::move(addr)});
+    dispatcher->notify(std::move(event));
+}
+
+void notify_new_disconnection(const event_dispatcher_ptr& dispatcher, const uint16_t client_id) {
+    if (!dispatcher) {
+        return;
+    }
+
+    diagnostic_event event;
+    event.set(network_disconnection{client_id});
     dispatcher->notify(std::move(event));
 }
 

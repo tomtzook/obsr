@@ -60,7 +60,7 @@ bool server_client::is_known(const storage::entry_id id) const {
 
 void server_client::marked_published(const storage::entry_id id, const std::string_view name) {
     TRACE_DEBUG(LOG_MODULE, "publishing entry for server client %d, entry=%d", m_id, id);
-    m_published_entries.insert(id);
+    m_published_entries.emplace(id);
 }
 
 bool server_client::write_message(const uint8_t type, const uint8_t* buffer, const size_t size, const uint64_t message_id) {
@@ -280,6 +280,7 @@ bool network_server::do_open() {
                 const auto it = m_clients.find(id);
                 if (it != m_clients.end()) {
                     m_clients.erase(it);
+                    diagnostics::notify_new_disconnection(m_diagnostics_dispatcher, id);
                 }
             };
 
@@ -287,6 +288,9 @@ bool network_server::do_open() {
                 auto tcp = looper::accept_tcp(server);
 
                 auto id = ++m_next_client_id;
+                const auto addr = looper::get_connected_address(tcp);
+                diagnostics::notify_new_connection(m_diagnostics_dispatcher, id, {addr.ip, addr.port});
+
                 auto client_u = std::make_unique<server_client>(id, tcp, m_clock, message_cb, error_cb);
                 auto [it, _] = m_clients.emplace(id, std::move(client_u));
 
@@ -351,7 +355,7 @@ void network_server::process_updates() {
 
 bool network_server::write_message_to_clients(const uint8_t type, const uint8_t* buffer, const size_t size,
     const client_id destination, const client_id source, const uint64_t message_id) {
-    if (destination != invalid_client_id) {
+    if (destination > all_client_id) {
         if (destination == source) {
             return true;
         }
@@ -392,7 +396,12 @@ void network_server::on_new_message(client_id id, const message_header& header, 
     TRACE_DEBUG(LOG_MODULE, "received new message from client=%d of type=%d", id, type);
 
     auto parse_data = m_parser.data();
-    diagnostics::notify_received_message(m_diagnostics_dispatcher, type, id, header.index);
+
+    diagnostics::notify_in_network_message(m_diagnostics_dispatcher,
+        id,
+        header.index,
+        type,
+        parse_data);
 
     switch (type) {
         case message_type::entry_create: {
@@ -427,7 +436,7 @@ void network_server::on_new_message(client_id id, const message_header& header, 
                     parse_data.value,
                     parse_data.send_time);
 
-            enqueue_message_for_clients(out_message::entry_update(parse_data.send_time, parse_data.id, std::move(value)), invalid_client_id, 0, id);
+            enqueue_message_for_clients(out_message::entry_update(parse_data.send_time, parse_data.id, std::move(value)), all_client_id, 0, id);
             break;
         }
         case message_type::entry_delete: {
@@ -436,7 +445,7 @@ void network_server::on_new_message(client_id id, const message_header& header, 
                     &storage::storage::on_entry_deleted,
                     parse_data.id,
                     parse_data.send_time);
-            enqueue_message_for_clients(out_message::entry_deleted(parse_data.send_time, parse_data.id), invalid_client_id, 0, id);
+            enqueue_message_for_clients(out_message::entry_deleted(parse_data.send_time, parse_data.id), all_client_id, 0, id);
             break;
         }
         case message_type::time_sync_request: {
@@ -472,26 +481,32 @@ void network_server::publish_entry_for_clients(
     obsr::value&& value,
     const std::chrono::milliseconds value_time,
     const client_id source_id) {
-    for (auto& [id, client] : m_clients) {
-        if (id == source_id) {
+    for (auto& [client_id, client] : m_clients) {
+        if (client_id == source_id) {
+            continue;
+        }
+        if (client->is_known(entry_id)) {
             continue;
         }
 
-        enqueue_message_for_clients(out_message::entry_id_assign(entry_id, name), id);
-        client->marked_published(id, name);
+        enqueue_message_for_clients(out_message::entry_id_assign(entry_id, name), client_id);
+        client->marked_published(entry_id, name);
     }
 
-    enqueue_message_for_clients(out_message::entry_update(value_time, entry_id, std::move(value)), invalid_client_id, 0, source_id);
+    enqueue_message_for_clients(out_message::entry_update(value_time, entry_id, std::move(value)), all_client_id, 0, source_id);
 }
 
 void network_server::enqueue_message_for_clients(
     out_message&& message,
     const client_id id, const uint8_t flags, const client_id source_id) {
     const auto message_id = ++m_next_message_id;
-    m_message_queue.enqueue(std::move(message), message_id, flags, id, source_id);
 
-    diagnostics::notify_sending_message(m_diagnostics_dispatcher, message.type(),
-        id == invalid_client_id ? 0 : id, message_id);
+    diagnostics::notify_out_network_message(m_diagnostics_dispatcher,
+            id,
+            message_id,
+            message);
+
+    m_message_queue.enqueue(std::move(message), message_id, flags, id, source_id);
 }
 
 void network_server::handle_do_handshake_for_client(const client_id id) {
@@ -523,6 +538,10 @@ void network_server::handle_do_handshake_for_client(const client_id id) {
 }
 
 void network_server::close_io() {
+    for (const auto id : m_clients | std::views::keys) {
+        diagnostics::notify_new_disconnection(m_diagnostics_dispatcher, id);
+    }
+
     m_clients.clear();
     m_state = state::opening;
 

@@ -165,6 +165,8 @@ bool network_client::do_open_and_connect() {
                 return;
             }
 
+            diagnostics::notify_new_connection(m_diagnostics_dispatcher, 0, {m_conn_info.ip, m_conn_info.port});
+
             TRACE_DEBUG(LOG_MODULE, "connected to server, starting first time sync");
             m_message_queue.clear();
 
@@ -271,7 +273,12 @@ void network_client::on_new_message(const message_header& header, const uint8_t*
     }
 
     const auto parse_data = m_parser.data();
-    diagnostics::notify_received_message(m_diagnostics_dispatcher, type, 0, header.index);
+
+    diagnostics::notify_in_network_message(m_diagnostics_dispatcher,
+        0,
+        header.index,
+        type,
+        parse_data);
 
     switch (type) {
         case message_type::entry_update:
@@ -330,8 +337,13 @@ void network_client::on_new_message(const message_header& header, const uint8_t*
 
 void network_client::enqueue_message(out_message&& message, const uint8_t flags) {
     const auto message_id = ++m_next_message_id;
+
+    diagnostics::notify_out_network_message(m_diagnostics_dispatcher,
+                0,
+                message_id,
+                message);
+
     m_message_queue.enqueue(std::move(message), message_id, flags);
-    diagnostics::notify_sending_message(m_diagnostics_dispatcher, message.type(), 0, message_id);
 }
 
 bool network_client::write_new_message(const uint8_t type, const uint8_t* buffer, const size_t size,
@@ -379,6 +391,16 @@ bool network_client::write_new_message(const uint8_t type, const uint8_t* buffer
 }
 
 void network_client::close_io() {
+    switch (m_state) {
+        case state::in_handshake:
+        case state::in_handshake_time_sync:
+        case state::in_use:
+            diagnostics::notify_new_disconnection(m_diagnostics_dispatcher, 0);
+            break;
+        default:
+            break;
+    }
+
     m_update_timer_handle.reset();
     m_tcp.reset();
 
