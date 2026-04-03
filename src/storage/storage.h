@@ -68,6 +68,7 @@ public:
     explicit storage(listener_storage_ptr listener_storage, clock_ptr clock);
 
     void foreach_entry(const entry_view& action);
+    void foreach_entry(const std::function<void(entry)>&& callback);
 
     void set_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr dispatcher);
 

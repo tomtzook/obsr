@@ -180,6 +180,14 @@ std::string instance::get_name_for_entry(const entry entry) {
     return get_path_name(path);
 }
 
+void instance::foreach_entry(std::function<void(entry)>&& callback) {
+    std::unique_lock guard(m_mutex);
+
+    guard.unlock();
+    m_storage->foreach_entry(std::move(callback));
+    guard.lock();
+}
+
 void instance::delete_object(const object obj) {
     std::unique_lock guard(m_mutex);
 

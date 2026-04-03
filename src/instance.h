@@ -50,6 +50,8 @@ public:
     [[nodiscard]] std::string get_name_for_object(object obj);
     [[nodiscard]] std::string get_name_for_entry(entry entry);
 
+    void foreach_entry(std::function<void(entry)>&& callback);
+
     void delete_object(object obj);
     void delete_entry(entry entry);
 

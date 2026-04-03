@@ -53,6 +53,10 @@ std::string get_name_for_entry(const entry entry) {
     return global_instance().get_name_for_entry(entry);
 }
 
+void foreach_entry(std::function<void(entry)>&& callback) {
+    global_instance().foreach_entry(std::move(callback));
+}
+
 void delete_object(const object obj) {
     global_instance().delete_object(obj);
 }

@@ -138,6 +138,16 @@ void storage::foreach_entry(const entry_view& action) {
     }
 }
 
+void storage::foreach_entry(const std::function<void(entry)>&& callback) {
+    std::unique_lock guard(m_mutex);
+
+    for (const auto [handle, data] : m_entries) {
+        guard.unlock();
+        callback(handle);
+        guard.lock();
+    }
+}
+
 void storage::set_diagnostics_dispatcher(diagnostics::event_dispatcher_ptr dispatcher) {
     std::unique_lock guard(m_mutex);
     m_diagnostic_dispatcher = std::move(dispatcher);

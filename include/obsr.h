@@ -176,6 +176,8 @@ std::string get_name_for_object(object obj);
  */
 std::string get_name_for_entry(entry entry);
 
+void foreach_entry(std::function<void(entry)>&& callback);
+
 /**
  * Deletes an object, with all of its children and entries.
  *
